@@ -1,0 +1,1645 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1" />
+<title>OVERLOAD+</title>
+<meta name="description" content="プログレッシブオーバーロードに基づくトレーニング記録アプリ" />
+
+<!-- PWA -->
+<link rel="manifest" href="manifest.json" />
+<meta name="theme-color" content="#141517" />
+<link rel="apple-touch-icon" href="apple-touch-icon.png" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="OVERLOAD+" />
+<meta name="mobile-web-app-capable" content="yes" />
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;800&family=Noto+Sans+JP:wght@400;700;900&display=swap" rel="stylesheet">
+
+<style>
+  html, body { margin: 0; padding: 0; background: #141517; color: #F2F0EB; }
+  body {
+    font-family: 'Noto Sans JP', -apple-system, BlinkMacSystemFont, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    /* ホーム画面起動時のセーフエリア */
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    overscroll-behavior-y: contain;
+  }
+  * { -webkit-tap-highlight-color: transparent; }
+  #boot {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    min-height: 80vh; gap: 12px;
+  }
+  #boot .logo {
+    font-family: 'Barlow Condensed', sans-serif; font-weight: 800; font-size: 34px; letter-spacing: 1px;
+  }
+  #boot .plus { color: #E2453C; }
+  #boot .msg { color: #8E939A; font-size: 13px; }
+  .spinner {
+    width: 22px; height: 22px; border: 2px solid #2E3237; border-top-color: #E2453C;
+    border-radius: 50%; animation: spin .8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<div id="root">
+  <div id="boot">
+    <div class="logo">OVERLOAD<span class="plus">+</span></div>
+    <div class="spinner"></div>
+    <div class="msg">読み込み中…</div>
+  </div>
+</div>
+
+<!-- React / Recharts / Babel (CDN) -->
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/prop-types@15/prop-types.min.js"></script>
+<script crossorigin src="https://unpkg.com/recharts@2.12.7/umd/Recharts.js"></script>
+<script src="https://unpkg.com/@babel/standalone@7.24.7/babel.min.js"></script>
+
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useMemo } = React;
+const { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } = Recharts;
+
+
+// ================= デザイントークン =================
+const C = {
+  bg: "#141517", surface: "#1E2023", surface2: "#26292D", border: "#2E3237",
+  text: "#F2F0EB", muted: "#8E939A",
+  red: "#E2453C", blue: "#3D7BD9", yellow: "#E8B33C", green: "#4CAF6E", grey: "#5A6069",
+};
+
+const STORAGE_KEY = "workout-log-v1";
+// 保存: window.storage(この環境)優先、失敗時はブラウザのlocalStorageに退避。どちらも例外を握り潰して落ちないようにする。
+const store = {
+  async get(key) {
+    try { if (typeof window !== "undefined" && window.storage) { const r = await window.storage.get(key); if (r) return r; } } catch { /* fallthrough */ }
+    try { const v = localStorage.getItem(key); return v != null ? { value: v } : null; } catch { return null; }
+  },
+  async set(key, value) {
+    let ok = false;
+    try { if (typeof window !== "undefined" && window.storage) { await window.storage.set(key, value); ok = true; } } catch { /* fallthrough */ }
+    try { localStorage.setItem(key, value); ok = true; } catch { /* ignore */ }
+    if (!ok) throw new Error("no storage available");
+  },
+  async del(key) {
+    try { if (typeof window !== "undefined" && window.storage) await window.storage.delete(key); } catch { /* ignore */ }
+    try { localStorage.removeItem(key); } catch { /* ignore */ }
+  },
+};
+const uid = () => Math.random().toString(36).slice(2, 8);
+const num = (v) => { const n = parseFloat(v); return isNaN(n) ? 0 : n; };
+const round = (n) => Math.round(n * 2) / 2;
+// AI機能の表示切り替え。この環境ではAI呼び出しが通らないため一旦false(UIから非表示)。
+// 将来ブラウザ版や自前APIキーで復活させる際はtrueにするだけでよい(関数は残してある)。
+const AI_ENABLED = false;
+const fmtClock = (sec) => {
+  const s = Math.max(0, Math.floor(sec));
+  const m = Math.floor(s / 60), r = s % 60;
+  return `${m}:${String(r).padStart(2, "0")}`;
+};
+
+// ================= 部位分類 =================
+const MUSCLES = [
+  "胸",
+  "背中", "僧帽筋", "脊柱起立筋",
+  "三角筋前部", "三角筋中部", "三角筋後部",
+  "上腕二頭筋", "上腕三頭筋", "前腕",
+  "大腿四頭筋", "ハムストリングス", "臀部", "ふくらはぎ",
+  "腹筋", "全身",
+];
+const EQUIPMENT = ["バーベル", "ダンベル", "マシン", "ケーブル", "スミス", "自重"];
+// 旧部位名(広背筋/背中上部→背中、上部胸筋→胸)を正規化
+const normMuscle = (m) => {
+  if (m === "広背筋" || m === "背中上部") return "背中";
+  if (m === "上部胸筋") return "胸";
+  return m || "";
+};
+
+// ================= 種目マスター(約95種目) =================
+// m=部位, eq=器具, t=C/I, bw=自重(体重係数), db=ダンベル(片手重量), rom=可動域係数(集計ボリュームのみ・既定1.0)
+const EXERCISE_DB = [
+  // 胸
+  { n: "バーベルベンチプレス", m: "胸", eq: "バーベル", t: "C" },
+  { n: "ダンベルベンチプレス", m: "胸", eq: "ダンベル", t: "C", db: true },
+  { n: "ダンベルフライ", m: "胸", eq: "ダンベル", t: "I", db: true },
+  { n: "チェストプレス", m: "胸", eq: "マシン", t: "C" },
+  { n: "ペックデックフライ", m: "胸", eq: "マシン", t: "I" },
+  { n: "スミスマシンベンチプレス", m: "胸", eq: "スミス", t: "C" },
+  { n: "ケーブルフライ", m: "胸", eq: "ケーブル", t: "I" },
+  { n: "ディップス", m: "胸", eq: "自重", t: "C", bw: 0.95 },
+  { n: "プッシュアップ", m: "胸", eq: "自重", t: "C", bw: 0.65 },
+  // 胸(上部)
+  { n: "インクラインバーベルベンチプレス", m: "胸", eq: "バーベル", t: "C" },
+  { n: "インクラインダンベルプレス", m: "胸", eq: "ダンベル", t: "C", db: true },
+  { n: "インクラインチェストプレス", m: "胸", eq: "マシン", t: "C" },
+  { n: "スミスマシンインクラインプレス", m: "胸", eq: "スミス", t: "C" },
+  { n: "ロー・トゥ・ハイ・ケーブルフライ", m: "胸", eq: "ケーブル", t: "I" },
+  // 背中
+  { n: "懸垂", m: "背中", eq: "自重", t: "C", bw: 1.0 },
+  { n: "アシスト懸垂", m: "背中", eq: "マシン", t: "C" },
+  { n: "ラットプルダウン", m: "背中", eq: "マシン", t: "C" },
+  { n: "片手ラットプルダウン", m: "背中", eq: "ケーブル", t: "C" },
+  { n: "ストレートアームプルダウン", m: "背中", eq: "ケーブル", t: "I" },
+  { n: "ダンベルプルオーバー", m: "背中", eq: "ダンベル", t: "I" },
+  // 背中(ロウ系)
+  { n: "バーベルベントオーバーロウ", m: "背中", eq: "バーベル", t: "C" },
+  { n: "Tバーロウ", m: "背中", eq: "バーベル", t: "C" },
+  { n: "ワンハンドダンベルロウ", m: "背中", eq: "ダンベル", t: "C", db: true },
+  { n: "チェストサポートダンベルロウ", m: "背中", eq: "ダンベル", t: "C", db: true },
+  { n: "ケーブルシーテッドロウ", m: "背中", eq: "ケーブル", t: "C" },
+  { n: "マシンロウ", m: "背中", eq: "マシン", t: "C" },
+  { n: "インバーテッドロウ", m: "背中", eq: "自重", t: "C", bw: 0.7 },
+  // 僧帽筋
+  { n: "バーベルシュラッグ", m: "僧帽筋", eq: "バーベル", t: "I", rom: 0.5 },
+  { n: "ダンベルシュラッグ", m: "僧帽筋", eq: "ダンベル", t: "I", db: true, rom: 0.5 },
+  { n: "ケーブルシュラッグ", m: "僧帽筋", eq: "ケーブル", t: "I", rom: 0.5 },
+  // 脊柱起立筋
+  { n: "デッドリフト", m: "脊柱起立筋", eq: "バーベル", t: "C" },
+  { n: "ラックプル", m: "脊柱起立筋", eq: "バーベル", t: "C" },
+  { n: "バックエクステンション", m: "脊柱起立筋", eq: "マシン", t: "I", bw: 0.5 },
+  // 三角筋前部
+  { n: "バーベルオーバーヘッドプレス", m: "三角筋前部", eq: "バーベル", t: "C" },
+  { n: "ダンベルショルダープレス", m: "三角筋前部", eq: "ダンベル", t: "C", db: true },
+  { n: "アーノルドプレス", m: "三角筋前部", eq: "ダンベル", t: "C", db: true },
+  { n: "マシンショルダープレス", m: "三角筋前部", eq: "マシン", t: "C" },
+  { n: "スミスマシンショルダープレス", m: "三角筋前部", eq: "スミス", t: "C" },
+  { n: "フロントレイズ", m: "三角筋前部", eq: "ダンベル", t: "I", db: true },
+  // 三角筋中部
+  { n: "サイドレイズ", m: "三角筋中部", eq: "ダンベル", t: "I", db: true },
+  { n: "ケーブルサイドレイズ", m: "三角筋中部", eq: "ケーブル", t: "I" },
+  { n: "マシンサイドレイズ", m: "三角筋中部", eq: "マシン", t: "I" },
+  { n: "アップライトロウ", m: "三角筋中部", eq: "バーベル", t: "C" },
+  // 三角筋後部
+  { n: "リアデルトフライ", m: "三角筋後部", eq: "ダンベル", t: "I", db: true },
+  { n: "リバースペックデック", m: "三角筋後部", eq: "マシン", t: "I" },
+  { n: "ケーブルリアデルトフライ", m: "三角筋後部", eq: "ケーブル", t: "I" },
+  { n: "フェイスプル", m: "三角筋後部", eq: "ケーブル", t: "I" },
+  // 上腕二頭筋
+  { n: "バーベルカール", m: "上腕二頭筋", eq: "バーベル", t: "I" },
+  { n: "EZバーカール", m: "上腕二頭筋", eq: "バーベル", t: "I" },
+  { n: "ダンベルカール", m: "上腕二頭筋", eq: "ダンベル", t: "I", db: true },
+  { n: "インクラインダンベルカール", m: "上腕二頭筋", eq: "ダンベル", t: "I", db: true },
+  { n: "ハンマーカール", m: "上腕二頭筋", eq: "ダンベル", t: "I", db: true },
+  { n: "プリーチャーカール", m: "上腕二頭筋", eq: "バーベル", t: "I" },
+  { n: "ケーブルカール", m: "上腕二頭筋", eq: "ケーブル", t: "I" },
+  { n: "マシンカール", m: "上腕二頭筋", eq: "マシン", t: "I" },
+  // 上腕三頭筋
+  { n: "ナローグリップベンチプレス", m: "上腕三頭筋", eq: "バーベル", t: "C" },
+  { n: "スカルクラッシャー", m: "上腕三頭筋", eq: "バーベル", t: "I" },
+  { n: "トライセッププレスダウン", m: "上腕三頭筋", eq: "ケーブル", t: "I" },
+  { n: "オーバーヘッドケーブルエクステンション", m: "上腕三頭筋", eq: "ケーブル", t: "I" },
+  { n: "ダンベルオーバーヘッドエクステンション", m: "上腕三頭筋", eq: "ダンベル", t: "I" },
+  { n: "トライセップキックバック", m: "上腕三頭筋", eq: "ダンベル", t: "I", db: true },
+  { n: "マシントライセップエクステンション", m: "上腕三頭筋", eq: "マシン", t: "I" },
+  { n: "ベンチディップス", m: "上腕三頭筋", eq: "自重", t: "C", bw: 0.6 },
+  // 前腕
+  { n: "リストカール", m: "前腕", eq: "バーベル", t: "I", rom: 0.5 },
+  { n: "リバースリストカール", m: "前腕", eq: "バーベル", t: "I", rom: 0.5 },
+  { n: "ファーマーズウォーク", m: "前腕", eq: "ダンベル", t: "C", db: true },
+  // 大腿四頭筋
+  { n: "バーベルスクワット", m: "大腿四頭筋", eq: "バーベル", t: "C" },
+  { n: "フロントスクワット", m: "大腿四頭筋", eq: "バーベル", t: "C" },
+  { n: "レッグプレス", m: "大腿四頭筋", eq: "マシン", t: "C" },
+  { n: "ハックスクワット", m: "大腿四頭筋", eq: "マシン", t: "C" },
+  { n: "レッグエクステンション", m: "大腿四頭筋", eq: "マシン", t: "I" },
+  { n: "ブルガリアンスクワット", m: "大腿四頭筋", eq: "ダンベル", t: "C", db: true },
+  { n: "ランジ", m: "大腿四頭筋", eq: "ダンベル", t: "C", db: true },
+  { n: "ゴブレットスクワット", m: "大腿四頭筋", eq: "ダンベル", t: "C" },
+  { n: "スミスマシンスクワット", m: "大腿四頭筋", eq: "スミス", t: "C" },
+  // ハムストリングス
+  { n: "ルーマニアンデッドリフト", m: "ハムストリングス", eq: "バーベル", t: "C" },
+  { n: "ダンベルルーマニアンデッドリフト", m: "ハムストリングス", eq: "ダンベル", t: "C", db: true },
+  { n: "ライイングレッグカール", m: "ハムストリングス", eq: "マシン", t: "I" },
+  { n: "シーテッドレッグカール", m: "ハムストリングス", eq: "マシン", t: "I" },
+  { n: "グッドモーニング", m: "ハムストリングス", eq: "バーベル", t: "C" },
+  { n: "ノルディックハムカール", m: "ハムストリングス", eq: "自重", t: "I", bw: 0.6 },
+  // 臀部
+  { n: "ヒップスラスト", m: "臀部", eq: "バーベル", t: "C" },
+  { n: "ケーブルキックバック", m: "臀部", eq: "ケーブル", t: "I" },
+  { n: "ヒップアブダクション", m: "臀部", eq: "マシン", t: "I" },
+  { n: "ステップアップ", m: "臀部", eq: "ダンベル", t: "C", db: true },
+  // ふくらはぎ
+  { n: "スタンディングカーフレイズ", m: "ふくらはぎ", eq: "マシン", t: "I", rom: 0.5 },
+  { n: "シーテッドカーフレイズ", m: "ふくらはぎ", eq: "マシン", t: "I", rom: 0.5 },
+  { n: "レッグプレスカーフレイズ", m: "ふくらはぎ", eq: "マシン", t: "I", rom: 0.5 },
+  // 腹筋
+  { n: "クランチ", m: "腹筋", eq: "自重", t: "I", bw: 0.4 },
+  { n: "ケーブルクランチ", m: "腹筋", eq: "ケーブル", t: "I" },
+  { n: "レッグレイズ", m: "腹筋", eq: "自重", t: "I", bw: 0.4 },
+  { n: "ハンギングレッグレイズ", m: "腹筋", eq: "自重", t: "I", bw: 0.5 },
+  { n: "アブローラー", m: "腹筋", eq: "自重", t: "C", bw: 0.5 },
+  { n: "アブドミナルマシン", m: "腹筋", eq: "マシン", t: "I" },
+];
+const DB_BY_NAME = Object.fromEntries(EXERCISE_DB.map(e => [e.n, e]));
+const ALIASES = {
+  "ベンチプレス": "バーベルベンチプレス", "インクラインベンチ": "インクラインバーベルベンチプレス",
+  "スクワット": "バーベルスクワット", "ショルダープレス": "ダンベルショルダープレス",
+  "バーベルロウ": "バーベルベントオーバーロウ", "アームカール": "ダンベルカール",
+};
+const dbLookup = (name) => DB_BY_NAME[name] || DB_BY_NAME[ALIASES[name]] || null;
+
+// 「片手=ダンベル」判定: 種目マスターに登録があればそれを最優先(保存済みの誤フラグを上書き)
+const resolveIsDb = (name, storedIsDb) => {
+  const k = dbLookup(name);
+  return k ? !!k.db : !!storedIsDb;
+};
+// 可動域係数: 集計ボリュームのみに適用(判定・1RM・PRには影響させない)。
+// シュラッグ/カーフレイズ/リストカール=0.5、その他=1.0。保存値(ユーザー調整)があれば優先。
+const resolveRom = (name, storedRom) => {
+  if (storedRom != null && !isNaN(storedRom) && storedRom > 0) return storedRom;
+  const k = dbLookup(name);
+  return k?.rom ?? 1.0;
+};
+// 1セットの実効重量(自重換算+加重、ダンベルは両手ぶん)を返す
+// 推定1RM(Epley式): 重量 × (1 + 回数/30)。1回なら重量そのもの。
+// 高回数ほど誤差が大きくなるため、12回超は目安として扱う。
+const est1RM = (weight, reps) => {
+  if (!weight || !reps || reps < 1) return 0;
+  if (reps === 1) return weight;
+  return weight * (1 + reps / 30);
+};
+
+function effWeight(weight, isDb, bwFactor, bodyweight) {
+  let w = weight;
+  if (bwFactor > 0) w = bodyweight * bwFactor + weight; // 自重+加重
+  if (isDb) w = w * 2; // ダンベルは片手入力→両手
+  return w;
+}
+
+// ================= 分割プリセット =================
+const SPLIT_PRESETS = [
+  { name: "全身法", days: [{ name: "全身", muscles: ["全身"] }] },
+  { name: "上半身 / 下半身", days: [
+    { name: "上半身", muscles: ["胸", "背中", "三角筋中部", "上腕二頭筋", "上腕三頭筋"] },
+    { name: "下半身", muscles: ["大腿四頭筋", "ハムストリングス", "臀部", "ふくらはぎ"] },
+  ]},
+  { name: "Push / Pull / Legs", days: [
+    { name: "Push", muscles: ["胸", "三角筋前部", "三角筋中部", "上腕三頭筋"] },
+    { name: "Pull", muscles: ["背中", "三角筋後部", "上腕二頭筋"] },
+    { name: "Legs", muscles: ["大腿四頭筋", "ハムストリングス", "臀部", "ふくらはぎ"] },
+  ]},
+  { name: "5分割(胸/背中/脚/肩/腕)", days: [
+    { name: "胸", muscles: ["胸"] },
+    { name: "背中", muscles: ["背中", "僧帽筋"] },
+    { name: "脚", muscles: ["大腿四頭筋", "ハムストリングス", "臀部", "ふくらはぎ"] },
+    { name: "肩", muscles: ["三角筋前部", "三角筋中部", "三角筋後部"] },
+    { name: "腕", muscles: ["上腕二頭筋", "上腕三頭筋", "前腕"] },
+  ]},
+];
+
+// ================= 判定タイプ =================
+const JUDGE = {
+  weight_increase:  { label: "増量", color: C.red },
+  reps_increase:    { label: "回数UP", color: C.blue },
+  maintain:         { label: "維持", color: C.grey },
+  technique_focus:  { label: "フォーム重視", color: C.yellow },
+  load_reduction:   { label: "減量", color: C.green },
+  volume_reduction: { label: "セット減", color: C.green },
+  deload_candidate: { label: "デロード", color: C.green },
+  exercise_review:  { label: "種目見直し", color: C.yellow },
+  pain_warning:     { label: "痛み警告", color: "#FF5A4E" },
+  insufficient_data:{ label: "データ不足", color: C.grey },
+  new_start:        { label: "初回", color: C.blue },
+};
+
+// ================= ルールエンジン =================
+function analyzeExercise(name, workouts) {
+  const sessions = workouts.map(w => w.exercises.find(e => e.name === name)).filter(Boolean);
+  if (sessions.length === 0) return { type: "insufficient_data", reason: "履歴がありません。" };
+  const latest = sessions[sessions.length - 1];
+  const cfg = {
+    repLow: latest.repLow ?? 8, repHigh: latest.repHigh ?? 12,
+    rirLow: latest.targetRirLow ?? 1, rirHigh: latest.targetRirHigh ?? 2, inc: latest.increment ?? 2.5,
+  };
+  // ワーキングセットのみを対象(ウォームアップは判定・ボリュームから除外)
+  const sets = (latest.sets || []).filter(s => !s.warmup);
+  if (sets.length === 0) return { type: "insufficient_data", reason: "ワーキングセットの記録がありません。" };
+  const topWeight = Math.max(...sets.map(s => s.weight));
+  const reps = sets.map(s => s.reps);
+  const totalReps = reps.reduce((a, b) => a + b, 0);
+  const rirs = sets.map(s => s.rir).filter(r => r != null && !isNaN(r));
+  const avgRir = rirs.length ? rirs.reduce((a, b) => a + b, 0) / rirs.length : null;
+  const db = dbLookup(name);
+  const inc = cfg.inc > 0 ? cfg.inc : 2.5;
+  // 重量は増加幅(increment)の単位に丸める(2.5kg刻みのジムで62.3kg等が出ないように)
+  const snap = (w) => Math.max(0, Math.round(w / inc) * inc);
+
+  // targetReps は「セットごとの目標回数の配列」。UI側もこれを使う。
+  const presc = (type, weight, targetReps, reason) => ({
+    type, reason, prescription: {
+      name, muscle: latest.muscle ?? db?.m ?? "", bwFactor: latest.bwFactor ?? db?.bw ?? 0,
+      isDb: resolveIsDb(name, latest.isDb), rom: resolveRom(name, latest.rom),
+      weight: snap(weight), targetReps, sets: targetReps.length,
+      repLow: cfg.repLow, repHigh: cfg.repHigh, targetRirLow: cfg.rirLow, targetRirHigh: cfg.rirHigh, increment: inc,
+    },
+  });
+  const fill = (n) => reps.map(() => n);            // 全セット同じ目標回数
+  const keep = () => [...reps];                     // 前回と同じ回数を維持
+
+  if (latest.pain) return presc("pain_warning", topWeight, keep(), "痛みの記録あり。負荷は上げず、必要なら種目を中止して専門家に相談を。");
+
+  let stall = 0;
+  for (let i = sessions.length - 1; i > 0; i--) {
+    const cs = (sessions[i].sets || []).filter(s => !s.warmup), ps = (sessions[i - 1].sets || []).filter(s => !s.warmup);
+    if (cs.length === 0 || ps.length === 0) break;
+    const curTop = Math.max(...cs.map(s => s.weight)), prevTop = Math.max(...ps.map(s => s.weight));
+    const curReps = cs.reduce((a, s) => a + s.reps, 0), prevReps = ps.reduce((a, s) => a + s.reps, 0);
+    if (curTop === prevTop && curReps <= prevReps) stall++; else break;
+  }
+  const highFatigue = avgRir != null && avgRir <= 0.5;
+  if (stall >= 2 || (stall >= 1 && highFatigue))
+    return presc("deload_candidate", topWeight * 0.9, fill(cfg.repLow), `${stall + 1}回連続で停滞${highFatigue ? "・疲労も高い" : ""}。重量を約10%下げて仕切り直し。`);
+
+  if (sessions.length >= 2) {
+    const ps = (sessions[sessions.length - 2].sets || []).filter(s => !s.warmup);
+    if (ps.length > 0) {
+      const prevTop = Math.max(...ps.map(s => s.weight)), prevTotal = ps.reduce((a, s) => a + s.reps, 0);
+      if (topWeight >= prevTop && totalReps < prevTotal - 1)
+        return presc("maintain", topWeight, keep(), "前回よりパフォーマンス低下。睡眠・疲労・食事を確認し、同重量で再挑戦。");
+    }
+  }
+
+  const belowRir = rirs.length > 0 && rirs.some(r => r < cfg.rirLow);
+  if (latest.formBroke || belowRir)
+    return presc("technique_focus", topWeight, keep(),
+      latest.formBroke ? "フォームが崩れた。重量は据え置き、可動域とテンポの再現性を優先。" : `余力が目標(あと${cfg.rirLow}回)を下回った。同重量でフォームを固める。`);
+
+  // ルール1: 全セットで上限達成 → 増量し、下限回数から再スタート
+  if (reps.every(r => r >= cfg.repHigh))
+    return presc("weight_increase", topWeight + inc, fill(cfg.repLow), `全セットで${cfg.repHigh}回達成・余力とフォーム良好。+${inc}kgで${cfg.repLow}回から再スタート。`);
+
+  // ルール2: 上限未達 → 重量維持のまま「合計+1回」。上限に届いていない最初のセットだけ+1する。
+  const next = [...reps];
+  const idx = next.findIndex(r => r < cfg.repHigh);
+  if (idx >= 0) next[idx] = next[idx] + 1;
+  return presc("reps_increase", topWeight, next,
+    `回数範囲の上限(${cfg.repHigh}回)に未到達。重量は維持し、${idx + 1}セット目を1回増やして合計+1回。`);
+}
+
+// ================= 共通スタイル =================
+const btn = (bg, color = "#fff") => ({
+  background: bg, color, border: "none", borderRadius: 10, padding: "12px 16px",
+  fontSize: 15, fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
+});
+const numInput = {
+  width: "100%", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10,
+  padding: "10px 4px", color: C.text, textAlign: "center",
+  fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 600, fontSize: 22,
+};
+const fieldLabel = { fontSize: 10, color: C.muted, textAlign: "center" };
+const cfgInput = {
+  width: 46, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8,
+  padding: "5px 2px", color: C.text, textAlign: "center", fontSize: 14, fontFamily: "inherit",
+};
+const chip = (active, activeColor = C.blue) => ({
+  padding: "6px 12px", borderRadius: 999, fontSize: 12, cursor: "pointer", fontFamily: "inherit",
+  border: `1px solid ${active ? activeColor : C.border}`, background: active ? activeColor : C.surface2,
+  color: active ? "#fff" : C.muted, fontWeight: active ? 800 : 400,
+});
+// 目標回数の表示: 全セット同じなら「10回×3」、違えば「10/9/9回」
+const repsLabel = (arr) => {
+  if (!Array.isArray(arr)) return `${arr}回`;
+  const uniq = [...new Set(arr)];
+  return uniq.length === 1 ? `${uniq[0]}回 × ${arr.length}セット` : `${arr.join("/")}回`;
+};
+// タップで全選択(既存文字を消す手間を省く)
+const selectOnFocus = (e) => e.target.select();
+
+function JudgeBadge({ type }) {
+  const j = JUDGE[type] || JUDGE.insufficient_data;
+  return <span style={{ background: j.color, color: "#fff", borderRadius: 999, padding: "3px 11px", fontSize: 12, fontWeight: 800, whiteSpace: "nowrap" }}>{j.label}</span>;
+}
+
+function RirSelect({ value, onChange }) {
+  return (
+    <div style={{ display: "flex", gap: 3 }}>
+      {[0, 1, 2, 3, 4].map(o => {
+        const active = value === o;
+        return (
+          <button key={o} onClick={() => onChange(active ? "" : o)} aria-label={`あと${o === 4 ? "4回以上" : `${o}回`}`}
+            style={{ flex: 1, minWidth: 0, padding: "8px 0", borderRadius: 8, cursor: "pointer",
+              border: `1px solid ${active ? C.yellow : C.border}`, background: active ? C.yellow : C.bg,
+              color: active ? "#141517" : C.muted, fontWeight: active ? 800 : 500, fontSize: 14, fontFamily: "inherit" }}>
+            {o === 4 ? "4+" : o}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ================= アプリ本体 =================
+function App() {
+  const [view, setView] = useState("log");
+  const [workouts, setWorkouts] = useState([]);
+  const [split, setSplit] = useState(null);
+  const [profile, setProfile] = useState({ bodyweight: 70, aiMode: true });
+  const [recentNames, setRecentNames] = useState([]); // 選択履歴順
+  const [customExercises, setCustomExercises] = useState([]); // 永続保存するカスタム種目 [{n,m,eq,t,db,bw}]
+  const [exerciseNotes, setExerciseNotes] = useState({}); // 種目ごとの固定メモ {種目名: "メモ"}
+  const [today, setToday] = useState([]);
+  const [search, setSearch] = useState("");
+  const [pickerMuscle, setPickerMuscle] = useState(null);
+  const [customDraft, setCustomDraft] = useState({ muscle: "", eq: "ダンベル" });
+  const [result, setResult] = useState(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [loaded, setLoaded] = useState(false);
+  const [chartExercise, setChartExercise] = useState("");
+  const [volMode, setVolMode] = useState("total"); // total | muscle
+  const [volMuscle, setVolMuscle] = useState("");
+  const [openCfg, setOpenCfg] = useState({});
+  const [openNote, setOpenNote] = useState({}); // 種目メモの開閉
+  const [editDay, setEditDay] = useState(null);
+  const [pickingSplit, setPickingSplit] = useState(false); // trueで分割選択(プリセット/新規作成)画面を表示
+  const [backupMsg, setBackupMsg] = useState("");
+  const [filterToday, setFilterToday] = useState(true);
+
+  // タイマー
+  const [startAt, setStartAt] = useState(null);   // セッション開始(ms)
+  const [elapsed, setElapsed] = useState(0);
+  const [restStartAt, setRestStartAt] = useState(null); // インターバル開始(ms)。null=停止中
+  const [restElapsed, setRestElapsed] = useState(0);
+
+  // AIモーダル
+  const [aiModal, setAiModal] = useState(null); // {title, body, loading}
+
+  // ---- 読み込み ----
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await store.get(STORAGE_KEY);
+        if (res?.value) {
+          const p = JSON.parse(res.value);
+          // 旧部位名(広背筋/背中上部)を「背中」に正規化
+          const migW = (ws) => (ws || []).map(w => ({ ...w, exercises: (w.exercises || []).map(ex => ({ ...ex, muscle: normMuscle(ex.muscle) })) }));
+          const migSplit = (sp) => sp ? { ...sp, days: sp.days.map(d => ({ ...d, muscles: [...new Set((d.muscles || []).map(normMuscle))] })) } : null;
+          if (Array.isArray(p)) setWorkouts(migW(p));
+          else {
+            setWorkouts(migW(p.workouts));
+            setSplit(migSplit(p.split));
+            setProfile({ bodyweight: p.profile?.bodyweight ?? 70, aiMode: p.profile?.aiMode ?? true });
+            setRecentNames(p.recentNames || []);
+            setCustomExercises(p.customExercises || []);
+            setExerciseNotes(p.exerciseNotes || {});
+          }
+        }
+      } catch { /* データなし */ }
+      setLoaded(true);
+    })();
+  }, []);
+
+  const persist = async (patch) => {
+    const next = {
+      workouts: patch.workouts ?? workouts,
+      split: patch.split === undefined ? split : patch.split,
+      profile: patch.profile ?? profile,
+      recentNames: patch.recentNames ?? recentNames,
+      customExercises: patch.customExercises ?? customExercises,
+      exerciseNotes: patch.exerciseNotes ?? exerciseNotes,
+    };
+    if (patch.workouts !== undefined) setWorkouts(next.workouts);
+    if (patch.split !== undefined) setSplit(next.split);
+    if (patch.profile !== undefined) setProfile(next.profile);
+    if (patch.recentNames !== undefined) setRecentNames(next.recentNames);
+    if (patch.customExercises !== undefined) setCustomExercises(next.customExercises);
+    if (patch.exerciseNotes !== undefined) setExerciseNotes(next.exerciseNotes);
+    try { await store.set(STORAGE_KEY, JSON.stringify(next)); }
+    catch { setError("保存に失敗しました。通信環境を確認してください。"); }
+  };
+
+  // ---- 経過タイマー ----
+  useEffect(() => {
+    if (!startAt) return;
+    const id = setInterval(() => setElapsed(Math.floor((Date.now() - startAt) / 1000)), 1000);
+    return () => clearInterval(id);
+  }, [startAt]);
+
+  // ---- インターバルタイマー(カウントアップ・自動スタート) ----
+  useEffect(() => {
+    if (restStartAt == null) return;
+    const id = setInterval(() => setRestElapsed(Math.floor((Date.now() - restStartAt) / 1000)), 1000);
+    return () => clearInterval(id);
+  }, [restStartAt]);
+
+  const startRest = () => { setRestStartAt(Date.now()); setRestElapsed(0); }; // 記録入力のたびに0から再スタート
+  const stopRest = () => { setRestStartAt(null); setRestElapsed(0); };
+
+  // 記録開始時にセッションタイマー始動
+  const ensureStarted = () => { if (!startAt) { setStartAt(Date.now()); setElapsed(0); } };
+
+  // ---- 集計 ----
+  const daysSince = (iso) => Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
+  const lastTrained = (muscle) => {
+    for (let i = workouts.length - 1; i >= 0; i--)
+      if (workouts[i].exercises.some(e => e.muscle === muscle || e.muscle === "全身")) return daysSince(workouts[i].date);
+    return null;
+  };
+  // 集計用ボリューム: 実効重量 × 回数 × 可動域係数(1RM/PR/判定には係数を掛けない)
+  const setVolume = (ex, s) => effWeight(s.weight, resolveIsDb(ex.name, ex.isDb), ex.bwFactor ?? 0, ex.bwAtLog ?? profile.bodyweight) * s.reps * resolveRom(ex.name, ex.rom);
+  // ボリューム・セット数はワーキングセットのみ(ウォームアップは除外)
+  const workingSets = (ex) => (ex.sets || []).filter(s => !s.warmup);
+  const exVolume = (ex) => workingSets(ex).reduce((a, s) => a + setVolume(ex, s), 0);
+
+  // ---- PR(自己ベスト)と推定1RM ----
+  // 実効重量(ダンベルは両手・自重は体重換算)ベースで比較する
+  const setEff = (ex, s) => effWeight(s.weight, resolveIsDb(ex.name, ex.isDb), ex.bwFactor ?? 0, ex.bwAtLog ?? profile.bodyweight);
+  // 種目ごとの自己ベスト: {best1RM, bestWeight, best1RMDate}
+  const prMap = useMemo(() => {
+    const m = {};
+    workouts.forEach(w => w.exercises.forEach(ex => {
+      workingSets(ex).forEach(s => {
+        const eff = setEff(ex, s);
+        const rm = est1RM(eff, s.reps);
+        const cur = m[ex.name] || { best1RM: 0, bestWeight: 0, date: null };
+        if (rm > cur.best1RM) { cur.best1RM = rm; cur.date = w.date; }
+        if (eff > cur.bestWeight) cur.bestWeight = eff;
+        m[ex.name] = cur;
+      });
+    }));
+    return m;
+  }, [workouts, profile.bodyweight]);
+
+  // 記録中の種目の現在の最高推定1RM(PR更新判定に使う)
+  const liveBest1RM = (ex) => {
+    const isDb = resolveIsDb(ex.name, ex.isDb);
+    return ex.sets.filter(s => !s.warmup).reduce((max, s) => {
+      const eff = effWeight(num(s.weight), isDb, ex.bwFactor || 0, profile.bodyweight);
+      return Math.max(max, est1RM(eff, Math.round(num(s.reps))));
+    }, 0);
+  };
+
+  // 直近7日 部位別 セット数+ボリューム
+  const weekly = useMemo(() => {
+    const acc = {}; const cutoff = Date.now() - 7 * 86400000;
+    workouts.forEach(w => {
+      if (new Date(w.date).getTime() < cutoff) return;
+      w.exercises.forEach(ex => {
+        if (!ex.muscle) return;
+        if (!acc[ex.muscle]) acc[ex.muscle] = { sets: 0, vol: 0 };
+        acc[ex.muscle].sets += workingSets(ex).length;
+        acc[ex.muscle].vol += exVolume(ex);
+      });
+    });
+    return acc;
+  }, [workouts, profile.bodyweight]);
+
+  const todayDay = split ? split.days[split.cursor % split.days.length] : null;
+  const muscleMatchesDay = (muscle, day) => !!day && (day.muscles.includes("全身") || muscle === "全身" || day.muscles.includes(muscle));
+
+  // 今日の暫定ボリューム(記録中・ウォームアップ除外・可動域係数あり)
+  const liveVolume = useMemo(() => today.reduce((a, ex) => {
+    const isDb = resolveIsDb(ex.name, ex.isDb);
+    const rom = resolveRom(ex.name, ex.rom);
+    return a + ex.sets.filter(s => !s.warmup).reduce((b, s) => b + effWeight(num(s.weight), isDb, ex.bwFactor || 0, profile.bodyweight) * Math.round(num(s.reps)) * rom, 0);
+  }, 0), [today, profile.bodyweight]);
+
+  // 比較基準は「同じセッション」の前回。分割中はPush同士・Pull同士で比べる(無ければ直近セッション)。
+  const compareBase = useMemo(() => {
+    if (workouts.length === 0) return null;
+    const sameName = todayDay ? [...workouts].reverse().find(w => w.session === todayDay.name) : null;
+    const w = sameName ?? workouts[workouts.length - 1];
+    return {
+      label: sameName ? `前回の${todayDay.name}` : "前回",
+      volume: w.totalVolume ?? w.exercises.reduce((a, ex) => a + exVolume(ex), 0),
+    };
+  }, [workouts, split, profile.bodyweight]);
+
+  // ---- 種目リスト(内蔵 + 保存済みカスタム) ----
+  const allExercises = useMemo(() => [...EXERCISE_DB, ...customExercises], [customExercises]);
+  const findExercise = (name) => allExercises.find(e => e.n === name) || dbLookup(name);
+  const pickerList = useMemo(() => {
+    const q = search.trim();
+    if (q) return allExercises.filter(e => e.n.includes(q) || e.m.includes(q) || e.eq.includes(q));
+    if (pickerMuscle) return allExercises.filter(e => e.m === pickerMuscle);
+    // 既定: 最近使った順 → 今日の部位 → 残り
+    const rank = (e) => {
+      const r = recentNames.indexOf(e.n);
+      if (r >= 0) return r;                       // 0..n 最近ほど小
+      if (todayDay && muscleMatchesDay(e.m, todayDay)) return 1000;
+      return 2000;
+    };
+    return [...allExercises].sort((a, b) => rank(a) - rank(b));
+  }, [search, pickerMuscle, todayDay, recentNames, allExercises]);
+
+  // ---- 種目設定の引き継ぎ ----
+  const lastConfig = (name) => {
+    for (let i = workouts.length - 1; i >= 0; i--) {
+      const ex = workouts[i].exercises.find(e => e.name === name);
+      if (ex) return {
+        repLow: ex.repLow ?? 8, repHigh: ex.repHigh ?? 12, targetRirLow: ex.targetRirLow ?? 1, targetRirHigh: ex.targetRirHigh ?? 2,
+        increment: ex.increment ?? 2.5, muscle: ex.muscle ?? dbLookup(name)?.m ?? "",
+        bwFactor: ex.bwFactor ?? dbLookup(name)?.bw ?? 0, isDb: resolveIsDb(name, ex.isDb), rom: resolveRom(name, ex.rom),
+        lastWeight: Math.max(...ex.sets.map(s => s.weight)),
+      };
+    }
+    const db = findExercise(name);
+    return {
+      repLow: 8, repHigh: 12,
+      targetRirLow: db ? (db.t === "C" ? 1 : 0) : 1, targetRirHigh: db ? (db.t === "C" ? 3 : 2) : 2,
+      increment: 2.5, muscle: db?.m ?? customDraft.muscle ?? "", bwFactor: db?.bw ?? 0,
+      isDb: db ? !!db.db : (customDraft.eq === "ダンベル"), rom: db?.rom ?? 1.0,
+      lastWeight: null,
+    };
+  };
+
+  // 種目名 → メニュー1項目(履歴があればルール判定、無ければ初回の既定値)
+  const buildMenuItem = (name) => {
+    const res = analyzeExercise(name, workouts);
+    if (res.type !== "insufficient_data") return { type: res.type, reason: res.reason, prescription: res.prescription };
+    const cfg = lastConfig(name);
+    return {
+      type: "new_start", reason: "初回。軽めの重量で動作を確認しましょう。",
+      prescription: {
+        name, muscle: cfg.muscle, bwFactor: cfg.bwFactor, isDb: cfg.isDb, rom: cfg.rom ?? 1.0,
+        weight: cfg.lastWeight != null ? cfg.lastWeight : 0, targetReps: [cfg.repHigh, cfg.repHigh, cfg.repHigh], sets: 3,
+        repLow: cfg.repLow, repHigh: cfg.repHigh, targetRirLow: cfg.targetRirLow, targetRirHigh: cfg.targetRirHigh, increment: cfg.increment,
+      },
+    };
+  };
+
+  // 今日のセッションの自動メニュー(分割に登録した種目 > 前回同セッション > 部位一致の履歴)
+  const autoMenu = useMemo(() => {
+    if (!todayDay) return [];
+    let names = [];
+    if (todayDay.exercises && todayDay.exercises.length) {
+      names = [...todayDay.exercises];
+    } else {
+      const lastSame = [...workouts].reverse().find(w => w.session === todayDay.name);
+      if (lastSame) names = lastSame.exercises.map(e => e.name);
+      else {
+        const seen = new Set();
+        [...workouts].reverse().forEach(w => w.exercises.forEach(ex => {
+          if (!seen.has(ex.name) && muscleMatchesDay(ex.muscle, todayDay)) seen.add(ex.name);
+        }));
+        names = [...seen];
+      }
+    }
+    return names.map(buildMenuItem);
+  }, [split, workouts]);
+
+  const startAutoMenu = () => {
+    ensureStarted();
+    setToday(autoMenu.map(it => {
+      const p = it.prescription;
+      return { id: uid(), name: p.name, muscle: p.muscle, bwFactor: p.bwFactor, isDb: p.isDb, rom: p.rom ?? 1.0,
+        repLow: p.repLow, repHigh: p.repHigh, targetRirLow: p.targetRirLow, targetRirHigh: p.targetRirHigh, increment: p.increment,
+        formBroke: false, pain: false, sets: p.targetReps.map(r => ({ weight: String(p.weight), reps: String(r), rir: "", warmup: false })) };
+    }));
+  };
+
+  // ---- 記録操作 ----
+  const addExercise = (name, meta) => {
+    const n = (name || "").trim(); if (!n) return;
+    ensureStarted();
+    const cfg = meta ? { ...lastConfig(n), ...meta } : lastConfig(n);
+    const w = cfg.lastWeight != null ? String(cfg.lastWeight) : "0";
+    // 内蔵にもカスタムにも無い種目は、カスタム種目として永続登録(次回以降も一覧に出る)
+    const known = allExercises.some(e => e.n === n);
+    const nextCustom = known ? customExercises : [...customExercises, {
+      n, m: cfg.muscle || "", eq: meta?.eq || customDraft.eq || "その他",
+      t: "C", db: !!cfg.isDb, bw: cfg.bwFactor || 0, custom: true,
+    }];
+    setToday(t => [...t, {
+      id: uid(), name: n, repLow: cfg.repLow, repHigh: cfg.repHigh,
+      targetRirLow: cfg.targetRirLow, targetRirHigh: cfg.targetRirHigh, increment: cfg.increment,
+      muscle: cfg.muscle, bwFactor: cfg.bwFactor, isDb: cfg.isDb, rom: cfg.rom ?? 1.0, formBroke: false, pain: false,
+      sets: [{ weight: w, reps: String(cfg.repHigh), rir: "", warmup: false }],
+    }]);
+    const nextRecent = [n, ...recentNames.filter(x => x !== n)].slice(0, 40);
+    persist({ recentNames: nextRecent, ...(known ? {} : { customExercises: nextCustom }) });
+    setSearch(""); setCustomDraft({ muscle: "", eq: "ダンベル" });
+  };
+  const updEx = (id, patch) => setToday(today.map(ex => ex.id === id ? { ...ex, ...patch } : ex));
+  const updateSet = (id, i, field, value) => setToday(today.map(ex => ex.id !== id ? ex : { ...ex, sets: ex.sets.map((s, j) => j === i ? { ...s, [field]: value } : s) }));
+  const addSet = (id) => setToday(today.map(ex => ex.id !== id ? ex : { ...ex, sets: [...ex.sets, { ...ex.sets[ex.sets.length - 1], rir: "", warmup: false }] }));
+  const removeSet = (id, i) => setToday(today.map(ex => ex.id !== id ? ex : { ...ex, sets: ex.sets.filter((_, j) => j !== i) }).filter(ex => ex.sets.length > 0));
+  const removeExercise = (id) => setToday(today.filter(ex => ex.id !== id));
+
+  // カロリー(METs×体重×時間, 目安)
+  const estimateKcal = (min) => Math.round(5.0 * profile.bodyweight * (min / 60));
+
+  const saveWorkout = async () => {
+    if (today.length === 0) return;
+    setSaving(true);
+    const end = Date.now();
+    const start = startAt ?? end;
+    const durationMin = Math.max(1, Math.round((end - start) / 60000));
+    const exercises = today.map(ex => ({
+      name: ex.name, muscle: ex.muscle || "", bwFactor: ex.bwFactor || 0, isDb: resolveIsDb(ex.name, ex.isDb), rom: resolveRom(ex.name, ex.rom), bwAtLog: profile.bodyweight,
+      repLow: num(ex.repLow) || 8, repHigh: num(ex.repHigh) || 12,
+      targetRirLow: num(ex.targetRirLow), targetRirHigh: num(ex.targetRirHigh), increment: num(ex.increment) || 2.5,
+      formBroke: !!ex.formBroke, pain: !!ex.pain,
+      // 回数が未入力(0)のセットは保存しない。空セットが「1回」として履歴に残り判定を汚すのを防ぐ。
+      sets: ex.sets
+        .filter(s => Math.round(num(s.reps)) > 0)
+        .map(s => ({
+          weight: num(s.weight), reps: Math.round(num(s.reps)), warmup: !!s.warmup,
+          ...(s.rir !== "" && s.rir != null ? { rir: num(s.rir) } : {}),
+        })),
+    })).filter(ex => ex.sets.length > 0); // 有効なセットが1つも無い種目は記録しない
+    if (exercises.length === 0) {
+      setError("回数が入力されたセットがありません。回数を入力してから保存してください。");
+      setSaving(false);
+      return;
+    }
+    const totalVolume = exercises.reduce((a, ex) => a + exVolume(ex), 0);
+    const entry = {
+      date: new Date(end).toISOString(), session: todayDay ? todayDay.name : undefined,
+      startAt: new Date(start).toISOString(), endAt: new Date(end).toISOString(),
+      durationMin, totalVolume, kcal: estimateKcal(durationMin), exercises,
+    };
+    const nextSplit = split ? { ...split, cursor: (split.cursor + 1) % split.days.length } : split;
+    await persist({ workouts: [...workouts, entry], split: nextSplit });
+    // 終了コメント
+    if (AI_ENABLED) endCoachComment(entry);
+    setToday([]); setSaving(false); setResult(null);
+    setStartAt(null); setElapsed(0); stopRest();
+    setView("history");
+  };
+
+  // ---- AI呼び出し(共通) ----
+  const callAI = async (prompt, maxTokens = 400) => {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 25000); // 25秒でタイムアウト
+    try {
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: maxTokens, messages: [{ role: "user", content: prompt }] }),
+        signal: ctrl.signal,
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      return (data.content || []).map(i => i.text || "").join("").trim();
+    } finally { clearTimeout(timer); }
+  };
+
+  const openAI = async (title, prompt, maxTokens) => {
+    setAiModal({ title, body: "", loading: true });
+    try {
+      const t = await callAI(prompt, maxTokens);
+      setAiModal({ title, body: t || "回答が空でした。もう一度お試しください。", loading: false });
+    } catch (e) {
+      const msg = e?.name === "AbortError"
+        ? "AIの応答が時間内に返りませんでした。この環境ではAI機能が利用できない可能性があります(下記参照)。"
+        : `AIの呼び出しに失敗しました(${e?.message || "不明なエラー"})。この環境ではAI機能が利用できない可能性があります。`;
+      setAiModal({ title, body: msg + "\n\n※AI機能はブラウザ版(claude.ai)のアーティファクトで最も安定して動作します。アプリで動かない場合は、同じチャットをPCのブラウザで開いてお試しください。", loading: false });
+    }
+  };
+
+  const startCoach = () => {
+    const day = todayDay ? `今日は「${todayDay.name}」(${todayDay.muscles.join("、")})の日です。` : "";
+    const last = workouts.length ? `前回のトレーニングは${daysSince(workouts[workouts.length - 1].date)}日前です。` : "初回のトレーニングです。";
+    openAI("開始コーチ", `あなたは親しみやすいトレーニングコーチです。${day}${last}これから始めるユーザーへ、ウォームアップの一言と今日の心構えを、80字以内の日本語で1〜2文、前向きに声かけしてください。本文のみ。`);
+  };
+  const endCoachComment = (entry) => {
+    const summary = entry.exercises.map(e => `${e.name}:${e.sets.map(s => `${s.weight}×${s.reps}`).join(",")}`).join(" / ");
+    openAI("お疲れさま", `あなたは親しみやすいトレーニングコーチです。ユーザーが今日のトレーニングを完了しました。所要${entry.durationMin}分、総ボリューム${Math.round(entry.totalVolume).toLocaleString()}kg。内容: ${summary}。良かった点を1つ具体的に褒め、次回への一言を添えて、100字以内の日本語で温かくコメントしてください。数値の指示や新しいメニュー提案はしないこと。本文のみ。`);
+  };
+  const howToDo = (exName) => {
+    const db = dbLookup(exName);
+    openAI(`${exName} のやり方`, `トレーニング種目「${exName}」${db ? `(${db.m}・${db.eq})` : ""}のやり方を、初心者にもわかるように日本語で説明してください。①セットアップ ②動作 ③よくある間違い ④効かせるコツ の4点を、各1〜2文で簡潔に。合計250字以内。本文のみ。`, 500);
+  };
+  // YouTubeで種目のやり方動画を検索(APIキー不要・新しいタブで開く)
+  const openYouTube = (exName) => {
+    const q = encodeURIComponent(`${exName} やり方 フォーム`);
+    window.open(`https://www.youtube.com/results?search_query=${q}`, "_blank", "noopener,noreferrer");
+  };
+  const askCoach = () => {
+    const ctx = todayDay ? `今日は「${todayDay.name}」の日。` : "";
+    const vol = liveVolume > 0 ? `現在の記録中ボリュームは${Math.round(liveVolume).toLocaleString()}kg。` : "";
+    openAI("AIコーチ", `あなたは親しみやすいトレーニングコーチです。${ctx}${vol}ユーザーがトレーニング中に気軽に相談できるよう、今の状況に合わせた励ましと、あれば一般的なワンポイントアドバイスを、120字以内の日本語で返してください。本文のみ。`);
+  };
+
+  // ---- 提案 ----
+  const generate = async () => {
+    const names = [...new Set(workouts.flatMap(w => w.exercises.map(e => e.name)))];
+    let items = names.map(n => analyzeExercise(n, workouts)).filter(r => r.type !== "insufficient_data");
+    if (split && filterToday) { const f = items.filter(it => muscleMatchesDay(it.prescription.muscle, todayDay)); if (f.length) items = f; }
+    if (items.length === 0) { setError("判定できる種目がありません。まず記録してください。"); return; }
+    setError(""); setResult({ advice: "", items });
+    if (!AI_ENABLED) return;
+    setAiLoading(true);
+    try {
+      const summary = items.map(it => ({ name: it.prescription.name, judgment: it.type, next: `${it.prescription.weight}kg × ${repsLabel(it.prescription.targetReps)}` }));
+      const text = await callAI(`あなたはストレングスコーチです。次回メニューの数値判定は既にルールエンジンで確定しています(下記)。数値を変えず、全体への短い総括を書くことだけが役割です。\n判定結果: ${JSON.stringify(summary)}\n${todayDay ? `今日のセッション: ${todayDay.name}` : ""}\n80字以内の日本語で総括を1文だけ。数値・種目の増減提案はしない。本文のみ。`, 300);
+      if (text) setResult(prev => prev ? { ...prev, advice: text } : prev);
+    } catch { /* コード判定のみ */ }
+    setAiLoading(false);
+  };
+  const loadPrescription = () => {
+    ensureStarted();
+    setToday(result.items.map(it => {
+      const p = it.prescription;
+      return { id: uid(), name: p.name, muscle: p.muscle, bwFactor: p.bwFactor, isDb: p.isDb, rom: p.rom ?? 1.0,
+        repLow: p.repLow, repHigh: p.repHigh, targetRirLow: p.targetRirLow, targetRirHigh: p.targetRirHigh, increment: p.increment,
+        formBroke: false, pain: false, sets: p.targetReps.map(r => ({ weight: String(p.weight), reps: String(r), rir: "", warmup: false })) };
+    }));
+    setView("log");
+  };
+
+  // ---- 分割操作 ----
+  const applyPreset = (preset) => {
+    if (split && !window.confirm(`現在の分割「${split.name}」を「${preset.name}」に置き換えます。よろしいですか?(登録した種目・進行状況はリセットされます。記録履歴は残ります)`)) return;
+    persist({ split: { name: preset.name, days: preset.days.map(d => ({ name: d.name, muscles: [...d.muscles] })), cursor: 0 } });
+    setEditDay(null); setPickingSplit(false);
+  };
+  const newCustomSplit = () => {
+    if (split && !window.confirm(`現在の分割「${split.name}」を破棄して、新しくゼロから作成します。よろしいですか?(記録履歴は残ります)`)) return;
+    persist({ split: { name: "カスタム分割", days: [{ name: "Day 1", muscles: [] }], cursor: 0 } });
+    setEditDay(0); setPickingSplit(false);
+  };
+  const updSplit = (patch) => persist({ split: { ...split, ...patch } });
+  const updDay = (i, patch) => updSplit({ days: split.days.map((d, j) => j === i ? { ...d, ...patch } : d) });
+  const toggleDayMuscle = (i, m) => { const d = split.days[i]; updDay(i, { muscles: d.muscles.includes(m) ? d.muscles.filter(x => x !== m) : [...d.muscles, m] }); };
+  const toggleDayExercise = (i, name) => { const d = split.days[i]; const ex = d.exercises || []; updDay(i, { exercises: ex.includes(name) ? ex.filter(x => x !== name) : [...ex, name] }); };
+  const addDay = () => updSplit({ days: [...split.days, { name: `Day ${split.days.length + 1}`, muscles: [] }] });
+  const removeDay = (i) => { const days = split.days.filter((_, j) => j !== i); if (!days.length) { persist({ split: null }); setEditDay(null); return; } updSplit({ days, cursor: Math.min(split.cursor, days.length - 1) }); setEditDay(null); };
+  const deleteSplit = () => { if (!window.confirm("分割設定を削除します。よろしいですか?(履歴は残ります)")) return; persist({ split: null }); setEditDay(null); };
+
+  const clearAll = async () => {
+    if (!window.confirm("すべての履歴を削除します。よろしいですか?")) return;
+    try { await store.del(STORAGE_KEY); } catch { /* noop */ }
+    setWorkouts([]); setSplit(null); setResult(null); setChartExercise(""); setRecentNames([]); setCustomExercises([]); setExerciseNotes({});
+  };
+
+  // ---- バックアップ(書き出し / 復元) ----
+  const downloadFile = (filename, text, type = "application/json") => {
+    const blob = new Blob([text], { type: `${type};charset=utf-8` });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
+  const exportBackup = () => {
+    const payload = {
+      app: "OVERLOAD+", version: 1, exportedAt: new Date().toISOString(),
+      workouts, split, profile, recentNames, customExercises, exerciseNotes,
+    };
+    const d = new Date();
+    const stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
+    downloadFile(`overload-backup-${stamp}.json`, JSON.stringify(payload, null, 2));
+    setBackupMsg(`バックアップを書き出しました(記録 ${workouts.length}件)。`);
+  };
+
+  const exportCSV = () => {
+    const rows = [["日付", "セッション", "種目", "部位", "セット", "種別", "重量kg", "回数", "あと何回"]];
+    workouts.forEach(w => {
+      const d = new Date(w.date);
+      const date = `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`;
+      w.exercises.forEach(ex => ex.sets.forEach((s, i) => {
+        rows.push([date, w.session || "", ex.name, ex.muscle || "", i + 1, s.warmup ? "W" : "ワーキング", s.weight, s.reps, s.rir ?? ""]);
+      }));
+    });
+    const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
+    downloadFile(`overload-log-${Date.now()}.csv`, "\uFEFF" + csv, "text/csv");
+    setBackupMsg("CSVを書き出しました(Excel等で開けます)。");
+  };
+
+  const importBackup = async (file) => {
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const p = JSON.parse(text);
+      const ws = p.workouts ?? (Array.isArray(p) ? p : null);
+      if (!Array.isArray(ws)) throw new Error("形式が違います");
+      if (!window.confirm(`バックアップを復元します(記録 ${ws.length}件)。\n現在のデータはすべて置き換わります。よろしいですか?`)) return;
+      const migW = (arr) => arr.map(w => ({ ...w, exercises: (w.exercises || []).map(ex => ({ ...ex, muscle: normMuscle(ex.muscle) })) }));
+      const next = {
+        workouts: migW(ws),
+        split: p.split ? { ...p.split, days: p.split.days.map(d => ({ ...d, muscles: [...new Set((d.muscles || []).map(normMuscle))] })) } : null,
+        profile: { bodyweight: p.profile?.bodyweight ?? 70, aiMode: false },
+        recentNames: p.recentNames || [],
+        customExercises: p.customExercises || [],
+        exerciseNotes: p.exerciseNotes || {},
+      };
+      await persist(next);
+      setBackupMsg(`復元しました(記録 ${next.workouts.length}件)。`);
+      setError("");
+    } catch (e) {
+      setBackupMsg("");
+      setError(`復元に失敗しました(${e?.message || "ファイルを確認してください"})。`);
+    }
+  };
+
+  const fmtDate = (iso) => { const d = new Date(iso); return `${d.getMonth() + 1}/${d.getDate()} (${"日月火水木金土"[d.getDay()]})`; };
+  const fmtTime = (iso) => { const d = new Date(iso); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
+
+  // ---- グラフ ----
+  const exerciseNames = useMemo(() => { const s = new Set(); workouts.forEach(w => w.exercises.forEach(ex => s.add(ex.name))); return [...s]; }, [workouts]);
+  const chartData = useMemo(() => {
+    if (!chartExercise) return [];
+    return workouts.map(w => {
+      const ex = w.exercises.find(e => e.name === chartExercise); if (!ex) return null;
+      const ws = workingSets(ex); if (ws.length === 0) return null;
+      const d = new Date(w.date);
+      const best = ws.reduce((max, s) => Math.max(max, est1RM(setEff(ex, s), s.reps)), 0);
+      return {
+        date: `${d.getMonth() + 1}/${d.getDate()}`,
+        最大重量: Math.max(...ws.map(s => s.weight)),
+        推定1RM: Math.round(best * 10) / 10,
+      };
+    }).filter(Boolean);
+  }, [workouts, chartExercise, profile.bodyweight]);
+  const volumeTrend = useMemo(() => workouts.map(w => {
+    const d = new Date(w.date);
+    return { date: `${d.getMonth() + 1}/${d.getDate()}`, 総ボリューム: Math.round(w.totalVolume ?? w.exercises.reduce((a, ex) => a + exVolume(ex), 0)) };
+  }), [workouts, profile.bodyweight]);
+  const trainedMuscles = useMemo(() => {
+    const s = new Set(); workouts.forEach(w => w.exercises.forEach(ex => { if (ex.muscle) s.add(ex.muscle); })); return [...s];
+  }, [workouts]);
+  const muscleVolumeTrend = useMemo(() => {
+    if (!volMuscle) return [];
+    return workouts.map(w => {
+      const exs = w.exercises.filter(ex => ex.muscle === volMuscle);
+      if (exs.length === 0) return null;
+      const d = new Date(w.date);
+      return { date: `${d.getMonth() + 1}/${d.getDate()}`, ボリューム: Math.round(exs.reduce((a, ex) => a + exVolume(ex), 0)) };
+    }).filter(Boolean);
+  }, [workouts, volMuscle, profile.bodyweight]);
+  useEffect(() => { if (!volMuscle && trainedMuscles.length) setVolMuscle(trainedMuscles[0]); }, [trainedMuscles, volMuscle]);
+  useEffect(() => { if (!chartExercise && exerciseNames.length) setChartExercise(exerciseNames[0]); }, [exerciseNames, chartExercise]);
+
+  const volDelta = compareBase ? liveVolume - compareBase.volume : null;
+
+  // ================= 画面 =================
+  const showBar = view === "log" && (startAt || today.length > 0);
+
+  return (
+    <div style={{ minHeight: "100vh", background: C.bg, color: C.text, fontFamily: "'Noto Sans JP', -apple-system, sans-serif", maxWidth: 520, margin: "0 auto", paddingBottom: 90 }}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;800&family=Noto+Sans+JP:wght@400;700;900&display=swap');
+        input:focus, button:focus-visible, select:focus { outline: 2px solid ${C.yellow}; outline-offset: 2px; }
+        * { box-sizing: border-box; }
+        input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; }
+      `}</style>
+
+      {/* ===== 固定バー(タイマー+ボリューム) ===== */}
+      {showBar && (
+        <div style={{ position: "sticky", top: 0, zIndex: 20, background: C.surface2, borderBottom: `1px solid ${C.border}`, padding: "8px 12px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, maxWidth: 520, margin: "0 auto" }}>
+            <div style={{ textAlign: "center" }}>
+              <div style={{ fontSize: 9, color: C.muted }}>経過</div>
+              <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: 20, lineHeight: 1 }}>{fmtClock(elapsed)}</div>
+            </div>
+            <div style={{ flex: 1, textAlign: "center", borderLeft: `1px solid ${C.border}`, borderRight: `1px solid ${C.border}` }}>
+              <div style={{ fontSize: 9, color: C.muted }}>ボリューム{compareBase && liveVolume > 0 ? `(vs ${compareBase.label})` : ""}</div>
+              <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: 20, lineHeight: 1 }}>
+                {Math.round(liveVolume).toLocaleString()}<span style={{ fontSize: 11, color: C.muted }}>kg</span>
+                {volDelta != null && liveVolume > 0 && (
+                  <span style={{ fontSize: 11, marginLeft: 6, color: volDelta >= 0 ? C.green : C.red }}>
+                    {volDelta >= 0 ? "▲" : "▼"}{Math.abs(Math.round(volDelta)).toLocaleString()}
+                  </span>
+                )}
+              </div>
+            </div>
+            {restStartAt != null ? (
+              <div style={{ textAlign: "center", cursor: "pointer" }} onClick={stopRest}>
+                <div style={{ fontSize: 9, color: C.yellow }}>インターバル(タップで停止)</div>
+                <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: 20, lineHeight: 1, color: C.yellow }}>
+                  {fmtClock(restElapsed)}
+                </div>
+              </div>
+            ) : (
+              <button onClick={startRest} style={{ ...btn(C.surface, C.muted), padding: "6px 10px", fontSize: 11 }}>インターバル<br />開始</button>
+            )}
+          </div>
+        </div>
+      )}
+
+      <header style={{ padding: "16px 16px 12px", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+        <div>
+          <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: 32, letterSpacing: 1, lineHeight: 1 }}>
+            OVERLOAD<span style={{ color: C.red }}>+</span>
+            <span style={{ fontFamily: "'Noto Sans JP', sans-serif", fontSize: 11, fontWeight: 700, color: C.green, marginLeft: 8, verticalAlign: "middle" }}>v14</span>
+          </div>
+        </div>
+        {AI_ENABLED && (
+          <button onClick={askCoach} style={{ ...btn(C.blue), padding: "8px 12px", fontSize: 13 }}>AIコーチ</button>
+        )}
+      </header>
+
+      {error && <div style={{ margin: "0 16px 12px", padding: 12, borderRadius: 10, background: "#3A2224", color: "#F5B8B3", fontSize: 13 }}>{error}</div>}
+
+      {/* ===== 記録タブ ===== */}
+      {view === "log" && (
+        <div style={{ padding: "0 16px" }}>
+          {todayDay && (
+            <div style={{ background: C.surface, border: `1px solid ${C.blue}`, borderRadius: 14, padding: 14, marginBottom: 14 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div style={{ fontSize: 11, color: C.blue, fontWeight: 800 }}>今日のセッション(Day {split.cursor % split.days.length + 1}/{split.days.length}・{split.name})</div>
+                {AI_ENABLED && <button onClick={startCoach} style={{ ...btn(C.surface2, C.muted), padding: "4px 10px", fontSize: 11 }}>開始コメント</button>}
+              </div>
+              <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 26, fontWeight: 800, margin: "4px 0 8px" }}>{todayDay.name}</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                {todayDay.muscles.map(m => { const d = lastTrained(m); return (
+                  <span key={m} style={{ ...chip(false), cursor: "default", background: C.bg }}>{m}{d != null && <span style={{ color: C.yellow }}> ・{d === 0 ? "今日" : `${d}日前`}</span>}</span>
+                ); })}
+              </div>
+            </div>
+          )}
+
+          {/* 今日の自動メニュー(分割があるとき、記録開始前に表示) */}
+          {todayDay && today.length === 0 && autoMenu.length > 0 && (
+            <div style={{ background: C.surface, borderRadius: 14, padding: 14, marginBottom: 14, border: `1px solid ${C.border}` }}>
+              <div style={{ fontSize: 13, fontWeight: 900, marginBottom: 2 }}>今日のメニュー(自動)</div>
+              <div style={{ fontSize: 11, color: C.muted, marginBottom: 10 }}>
+                {todayDay.exercises && todayDay.exercises.length ? "マイ分割に登録した種目" : "前回までの記録"}をもとに、次回の重量・回数をルールで調整しました。
+              </div>
+              {autoMenu.map((it, i) => {
+                const p = it.prescription;
+                return (
+                  <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                    <span style={{ fontSize: 13, minWidth: 0 }}>{p.name}<span style={{ color: C.muted, fontSize: 11, marginLeft: 6 }}>{p.muscle}</span></span>
+                    <span style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+                      <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 18, fontWeight: 600 }}>
+                        {p.weight}<span style={{ fontSize: 11, color: C.muted }}>{p.bwFactor > 0 ? "kg加重" : p.isDb ? "kg片手" : "kg"}</span>{" × "}<span style={{ fontSize: 14 }}>{repsLabel(p.targetReps)}</span>
+                      </span>
+                      <JudgeBadge type={it.type} />
+                    </span>
+                  </div>
+                );
+              })}
+              <button onClick={startAutoMenu} style={{ ...btn(C.red), width: "100%", padding: 14, fontSize: 15, marginTop: 6 }}>この内容で記録を開始</button>
+            </div>
+          )}
+
+          <h2 style={{ fontSize: 16, fontWeight: 900, margin: "8px 0 12px" }}>今日の記録</h2>
+
+          {today.length === 0 && (
+            <div style={{ border: `1px dashed ${C.border}`, borderRadius: 14, padding: 20, color: C.muted, fontSize: 14, textAlign: "center", marginBottom: 16 }}>
+              {todayDay && autoMenu.length > 0 ? "上の「今日のメニュー」から開始するか、下の一覧で種目を追加できます。" : "下の一覧から種目を追加して開始しましょう。"}
+              {!split && <><br />「分割」タブでマイ分割法を作ると、今日のメニューが自動で提案されます。</>}
+            </div>
+          )}
+
+          {today.map(ex => (
+            <div key={ex.id} style={{ background: C.surface, borderRadius: 14, padding: 14, marginBottom: 12, border: `1px solid ${C.border}` }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, gap: 6 }}>
+                <strong style={{ fontSize: 14, lineHeight: 1.4 }}>
+                  {ex.name}
+                  {ex.muscle && <span style={{ color: C.muted, fontSize: 11, fontWeight: 400, marginLeft: 6 }}>{ex.muscle}</span>}
+                  {resolveIsDb(ex.name, ex.isDb) && <span style={{ color: C.muted, fontSize: 11, marginLeft: 4 }}>片手</span>}
+                  {resolveRom(ex.name, ex.rom) < 1 && <span style={{ color: C.blue, fontSize: 10, marginLeft: 4 }}>ROM×{resolveRom(ex.name, ex.rom)}</span>}
+                  {todayDay && ex.muscle && !muscleMatchesDay(ex.muscle, todayDay) && <span style={{ color: C.yellow, fontSize: 11, marginLeft: 6 }}>今日の部位外</span>}
+                </strong>
+                <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                  {AI_ENABLED && <button onClick={() => howToDo(ex.name)} style={{ ...btn(C.surface2, C.blue), padding: "4px 8px", fontSize: 12 }}>やり方</button>}
+                  <button onClick={() => openYouTube(ex.name)} style={{ ...btn(C.surface2, C.red), padding: "4px 8px", fontSize: 12 }}>▶ 動画</button>
+                  <button onClick={() => setOpenCfg({ ...openCfg, [ex.id]: !openCfg[ex.id] })} style={{ ...btn(C.surface2, C.muted), padding: "4px 8px", fontSize: 12 }}>⚙</button>
+                  <button onClick={() => removeExercise(ex.id)} aria-label="種目を削除" style={{ ...btn("transparent", C.muted), padding: 4, fontSize: 13 }}>削除</button>
+                </div>
+              </div>
+
+              {/* 推定1RM と PR(自己ベスト) */}
+              {(() => {
+                const pr = prMap[ex.name];
+                const live = liveBest1RM(ex);
+                const best = pr?.best1RM || 0;
+                const isPR = live > 0 && live > best + 0.01;
+                if (live === 0 && best === 0) return null;
+                return (
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", background: C.bg, borderRadius: 8, padding: "6px 10px", marginBottom: 10 }}>
+                    {live > 0 && (
+                      <span style={{ fontSize: 11, color: C.muted }}>
+                        推定1RM <strong style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 16, color: isPR ? C.green : C.text, marginLeft: 2 }}>{live.toFixed(1)}</strong>kg
+                      </span>
+                    )}
+                    {best > 0 && (
+                      <span style={{ fontSize: 11, color: C.muted }}>
+                        PR <strong style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 16, color: C.yellow, marginLeft: 2 }}>{best.toFixed(1)}</strong>kg
+                      </span>
+                    )}
+                    {isPR && (
+                      <span style={{ background: C.green, color: "#fff", borderRadius: 999, padding: "2px 10px", fontSize: 11, fontWeight: 800 }}>
+                        🏆 PR更新 +{(live - best).toFixed(1)}kg
+                      </span>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {openCfg[ex.id] && (
+                <div style={{ background: C.bg, borderRadius: 10, padding: 10, marginBottom: 10, display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center" }}>
+                  <label style={{ fontSize: 12, color: C.muted }}>回数範囲 <input type="number" value={ex.repLow} style={cfgInput} onFocus={selectOnFocus} onChange={e => updEx(ex.id, { repLow: e.target.value })} /><span style={{ margin: "0 4px" }}>–</span><input type="number" value={ex.repHigh} style={cfgInput} onFocus={selectOnFocus} onChange={e => updEx(ex.id, { repHigh: e.target.value })} /></label>
+                  <label style={{ fontSize: 12, color: C.muted }}>目標(あと)回 <input type="number" value={ex.targetRirLow} style={cfgInput} onFocus={selectOnFocus} onChange={e => updEx(ex.id, { targetRirLow: e.target.value })} /><span style={{ margin: "0 4px" }}>–</span><input type="number" value={ex.targetRirHigh} style={cfgInput} onFocus={selectOnFocus} onChange={e => updEx(ex.id, { targetRirHigh: e.target.value })} /></label>
+                  <label style={{ fontSize: 12, color: C.muted }}>増加幅 <input type="number" step="0.5" value={ex.increment} style={cfgInput} onFocus={selectOnFocus} onChange={e => updEx(ex.id, { increment: e.target.value })} />kg</label>
+                  <label style={{ fontSize: 12, color: C.muted }}>部位 <select value={ex.muscle} onChange={e => updEx(ex.id, { muscle: e.target.value })} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: "5px 6px", fontSize: 13, fontFamily: "inherit" }}><option value="">未設定</option>{MUSCLES.map(m => <option key={m} value={m}>{m}</option>)}</select></label>
+                  <label style={{ fontSize: 12, color: C.muted, display: "flex", alignItems: "center", gap: 4 }}><input type="checkbox" checked={ex.bwFactor > 0} onChange={e => updEx(ex.id, { bwFactor: e.target.checked ? 0.7 : 0 })} />自重(体重換算)</label>
+                  {ex.bwFactor > 0 && <label style={{ fontSize: 12, color: C.muted }}>体重係数 <input type="number" step="0.05" value={ex.bwFactor} style={cfgInput} onFocus={selectOnFocus} onChange={e => updEx(ex.id, { bwFactor: num(e.target.value) })} /></label>}
+                  <label style={{ fontSize: 12, color: C.muted }}>
+                    可動域係数 <input type="number" step="0.1" min="0.1" max="1" value={ex.rom ?? 1} style={cfgInput} onFocus={selectOnFocus} onChange={e => updEx(ex.id, { rom: num(e.target.value) || 1 })} />
+                    <span style={{ fontSize: 10, marginLeft: 4 }}>(集計ボリュームのみ)</span>
+                  </label>
+                </div>
+              )}
+
+              <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 4 }}>
+                <span style={{ width: 20 }} />
+                <span style={{ flex: 1.3, ...fieldLabel }}>{ex.bwFactor > 0 ? "加重 kg" : resolveIsDb(ex.name, ex.isDb) ? "重量 kg/片手" : "重量 kg"}</span>
+                <span style={{ flex: 1, ...fieldLabel }}>回数</span>
+                <span style={{ flex: 2.4, ...fieldLabel }}>あと何回できた?</span>
+                <span style={{ width: 26 }} />
+              </div>
+
+              {ex.sets.map((s, i) => {
+                const wsIndex = ex.sets.slice(0, i + 1).filter(x => !x.warmup).length; // ワーキング通し番号
+                return (
+                <div key={i} style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
+                  <button onClick={() => updateSet(ex.id, i, "warmup", !s.warmup)}
+                    title="タップでウォームアップ/ワーキング切替"
+                    aria-label={`セット${i + 1}を${s.warmup ? "ワーキング" : "ウォームアップ"}にする`}
+                    style={{ width: 22, height: 22, borderRadius: 6, flexShrink: 0, cursor: "pointer", fontSize: 11, fontWeight: 800, fontFamily: "inherit",
+                      border: `1px solid ${s.warmup ? C.yellow : C.border}`, background: s.warmup ? C.yellow : "transparent", color: s.warmup ? "#141517" : C.muted }}>
+                    {s.warmup ? "W" : wsIndex}
+                  </button>
+                  <input type="number" inputMode="decimal" step="0.5" min="0" value={s.weight} placeholder="0" onFocus={selectOnFocus}
+                    onBlur={() => { if (num(s.weight) > 0 || num(s.reps) > 0) startRest(); }}
+                    onChange={e => updateSet(ex.id, i, "weight", e.target.value)} aria-label={`セット${i + 1}の重量`} style={{ ...numInput, flex: 1.3, opacity: s.warmup ? 0.6 : 1 }} />
+                  <input type="number" inputMode="numeric" step="1" min="1" value={s.reps} placeholder="0" onFocus={selectOnFocus}
+                    onBlur={() => { if (num(s.weight) > 0 || num(s.reps) > 0) startRest(); }}
+                    onChange={e => updateSet(ex.id, i, "reps", e.target.value)} aria-label={`セット${i + 1}の回数`} style={{ ...numInput, flex: 1, opacity: s.warmup ? 0.6 : 1 }} />
+                  <div style={{ flex: 2.4, opacity: s.warmup ? 0.35 : 1, pointerEvents: s.warmup ? "none" : "auto" }}>
+                    <RirSelect value={s.rir === "" ? null : num(s.rir)} onChange={v => { updateSet(ex.id, i, "rir", v === "" ? "" : v); if (v !== "") startRest(); }} />
+                  </div>
+                  <button onClick={() => removeSet(ex.id, i)} aria-label="セットを削除" style={{ width: 26, height: 26, borderRadius: 8, border: `1px solid ${C.border}`, background: C.surface2, color: C.muted, fontSize: 12, cursor: "pointer", flexShrink: 0 }}>✕</button>
+                </div>
+                );
+              })}
+              <div style={{ fontSize: 10, color: C.muted, marginBottom: 8 }}>※ 左の番号をタップするとウォームアップ(W)になり、判定・ボリュームから除外されます。</div>
+
+              <button onClick={() => { addSet(ex.id); }} style={{ ...btn(C.surface2, C.text), width: "100%", padding: 10, fontSize: 13, marginBottom: 8 }}>＋ セットを追加</button>
+
+              {/* フォーム崩れ / 痛み・違和感 / メモ */}
+              <div style={{ display: "flex", gap: 8 }}>
+                {[["formBroke", "フォーム崩れ", C.yellow], ["pain", "痛み・違和感", "#FF5A4E"]].map(([k, label, col]) => (
+                  <button key={k} onClick={() => updEx(ex.id, { [k]: !ex[k] })} style={{ flex: 1, padding: "8px 0", borderRadius: 8, cursor: "pointer", fontSize: 13, fontFamily: "inherit", border: `1px solid ${ex[k] ? col : C.border}`, background: ex[k] ? col : C.bg, color: ex[k] ? "#141517" : C.muted, fontWeight: ex[k] ? 800 : 500 }}>{ex[k] ? "✓ " : ""}{label}</button>
+                ))}
+                <button onClick={() => setOpenNote({ ...openNote, [ex.id]: !openNote[ex.id] })}
+                  aria-label="種目メモ"
+                  style={{ flex: 1, padding: "8px 0", borderRadius: 8, cursor: "pointer", fontSize: 13, fontFamily: "inherit",
+                    border: `1px solid ${exerciseNotes[ex.name] ? C.yellow : C.border}`, background: C.bg,
+                    color: exerciseNotes[ex.name] ? C.yellow : C.muted, fontWeight: exerciseNotes[ex.name] ? 800 : 500 }}>
+                  📌 メモ{exerciseNotes[ex.name] ? "有" : ""}
+                </button>
+              </div>
+
+              {/* 固定メモ(展開時に編集、保存済みなら常に内容を表示) */}
+              {openNote[ex.id] ? (
+                <div style={{ marginTop: 8 }}>
+                  <div style={{ fontSize: 10, color: C.muted, marginBottom: 4 }}>この種目の固定メモ(次回も表示されます)</div>
+                  <textarea
+                    value={exerciseNotes[ex.name] || ""}
+                    onChange={e => persist({ exerciseNotes: { ...exerciseNotes, [ex.name]: e.target.value } })}
+                    placeholder="例:シート高さ4、肩甲骨を寄せる、グリップは肩幅より拳1つ外"
+                    rows={2}
+                    style={{ width: "100%", background: C.bg, border: `1px solid ${C.yellow}`, borderRadius: 8, color: C.text, padding: "8px 10px", fontSize: 13, fontFamily: "inherit", resize: "vertical", lineHeight: 1.6 }} />
+                </div>
+              ) : exerciseNotes[ex.name] ? (
+                <div onClick={() => setOpenNote({ ...openNote, [ex.id]: true })}
+                  style={{ display: "flex", gap: 6, marginTop: 8, background: C.bg, borderLeft: `3px solid ${C.yellow}`, borderRadius: 6, padding: "8px 10px", fontSize: 12, color: C.text, lineHeight: 1.6, whiteSpace: "pre-wrap", cursor: "pointer" }}>
+                  <span style={{ flexShrink: 0 }}>📌</span>
+                  <span style={{ minWidth: 0 }}>{exerciseNotes[ex.name]}</span>
+                </div>
+              ) : null}
+            </div>
+          ))}
+
+          {/* 種目選択 */}
+          <div style={{ background: C.surface, borderRadius: 14, padding: 14, border: `1px solid ${C.border}` }}>
+            <input value={search} onChange={e => setSearch(e.target.value)} onFocus={selectOnFocus}
+              onKeyDown={e => e.key === "Enter" && search.trim() && addExercise(search, findExercise(search.trim()) ? undefined : { muscle: customDraft.muscle, eq: customDraft.eq, isDb: customDraft.eq === "ダンベル", bwFactor: customDraft.eq === "自重" ? 0.7 : 0 })}
+              placeholder="種目を検索(なければカスタム追加)"
+              style={{ width: "100%", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 12px", color: C.text, fontSize: 14, fontFamily: "inherit", marginBottom: 10 }} />
+
+            {/* カスタム追加時の部位・器具設定 */}
+            {search.trim() && !findExercise(search.trim()) && (
+              <div style={{ background: C.bg, borderRadius: 10, padding: 10, marginBottom: 10 }}>
+                <div style={{ fontSize: 12, color: C.muted, marginBottom: 8 }}>「{search.trim()}」をカスタム種目として追加</div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 10 }}>
+                  <select value={customDraft.muscle} onChange={e => setCustomDraft({ ...customDraft, muscle: e.target.value })} style={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: "6px 8px", fontSize: 13, fontFamily: "inherit" }}>
+                    <option value="">部位を選択</option>{MUSCLES.map(m => <option key={m} value={m}>{m}</option>)}
+                  </select>
+                  <select value={customDraft.eq} onChange={e => setCustomDraft({ ...customDraft, eq: e.target.value })} style={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: "6px 8px", fontSize: 13, fontFamily: "inherit" }}>
+                    {EQUIPMENT.map(q => <option key={q} value={q}>{q}</option>)}
+                  </select>
+                </div>
+                <button onClick={() => addExercise(search, { muscle: customDraft.muscle, eq: customDraft.eq, isDb: customDraft.eq === "ダンベル", bwFactor: customDraft.eq === "自重" ? 0.7 : 0 })} style={{ ...btn(C.red), width: "100%", padding: 10, fontSize: 14 }}>この設定で追加</button>
+              </div>
+            )}
+
+            {!search.trim() && (
+              <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 6, marginBottom: 8 }}>
+                <button onClick={() => setPickerMuscle(null)} style={{ ...chip(!pickerMuscle), flexShrink: 0 }}>{recentNames.length ? "最近使った順" : todayDay ? `今日(${todayDay.name})` : "すべて"}</button>
+                {MUSCLES.filter(m => EXERCISE_DB.some(e => e.m === m)).map(m => (
+                  <button key={m} onClick={() => setPickerMuscle(pickerMuscle === m ? null : m)} style={{ ...chip(pickerMuscle === m), flexShrink: 0 }}>{m}</button>
+                ))}
+              </div>
+            )}
+
+            {!(search.trim() && !findExercise(search.trim())) && (
+              <div style={{ maxHeight: 240, overflowY: "auto" }}>
+                {pickerList.map(e => (
+                  <button key={e.n} onClick={() => addExercise(e.n)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, width: "100%", textAlign: "left", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 12px", marginBottom: 6, cursor: "pointer", color: C.text, fontSize: 13, fontFamily: "inherit" }}>
+                    <span style={{ minWidth: 0 }}>{e.n}{recentNames.includes(e.n) && <span style={{ color: C.blue, fontSize: 10, marginLeft: 6 }}>最近</span>}</span>
+                    <span style={{ color: C.muted, fontSize: 11, flexShrink: 0 }}>{e.m}・{e.eq}</span>
+                  </button>
+                ))}
+                {pickerList.length === 0 && <div style={{ color: C.muted, fontSize: 13, textAlign: "center", padding: 12 }}>該当なし。上の検索欄に入力してカスタム追加できます。</div>}
+              </div>
+            )}
+          </div>
+
+          {today.length > 0 && (
+            <button onClick={saveWorkout} disabled={saving} style={{ ...btn(C.red), width: "100%", marginTop: 16, padding: 16, fontSize: 16 }}>
+              {saving ? "保存中…" : `ワークアウトを保存${split ? "(次のDayへ)" : ""}`}
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* ===== 提案タブ ===== */}
+      {view === "suggest" && (
+        <div style={{ padding: "0 16px" }}>
+          <h2 style={{ fontSize: 16, fontWeight: 900, margin: "8px 0 4px" }}>次回メニュー</h2>
+          <p style={{ color: C.muted, fontSize: 12, margin: "0 0 12px" }}>重量・回数はルールエンジンが決定します。</p>
+          {workouts.length === 0 ? (
+            <div style={{ border: `1px dashed ${C.border}`, borderRadius: 14, padding: 20, color: C.muted, fontSize: 14, textAlign: "center" }}>まず1回分のトレーニングを記録すると、次回メニューを判定できます。</div>
+          ) : (
+            <>
+              {split && <button onClick={() => setFilterToday(!filterToday)} style={{ ...chip(filterToday), marginBottom: 10 }}>{filterToday ? "✓ " : ""}今日のセッション({todayDay.name})の種目に絞る</button>}
+              <button onClick={generate} style={{ ...btn(C.blue), width: "100%", padding: 16, fontSize: 16 }}>次回メニューを判定する</button>
+              {result && (
+                <div style={{ marginTop: 14 }}>
+                  {(result.advice || aiLoading) && AI_ENABLED && (
+                    <div style={{ background: C.surface, borderLeft: `4px solid ${C.yellow}`, borderRadius: 10, padding: 14, fontSize: 14, marginBottom: 14, lineHeight: 1.7, color: result.advice ? C.text : C.muted }}>{result.advice || "AIが総括を作成中…"}</div>
+                  )}
+                  {result.items.map((it, i) => {
+                    const p = it.prescription;
+                    return (
+                      <div key={i} style={{ background: C.surface, borderRadius: 14, padding: 14, marginBottom: 10, border: `1px solid ${C.border}` }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                          <strong style={{ fontSize: 14, lineHeight: 1.4 }}>{p.name}{p.muscle && <span style={{ color: C.muted, fontSize: 11, fontWeight: 400, marginLeft: 6 }}>{p.muscle}</span>}</strong>
+                          <JudgeBadge type={it.type} />
+                        </div>
+                        <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 26, fontWeight: 600, margin: "8px 0 4px" }}>
+                          {p.weight}<span style={{ fontSize: 13, color: C.muted }}>{p.bwFactor > 0 ? "kg加重" : p.isDb ? "kg片手" : "kg"}</span>{" × "}<span style={{ fontSize: 20 }}>{repsLabel(p.targetReps)}</span>
+                        </div>
+                        <div style={{ color: C.muted, fontSize: 12, lineHeight: 1.6 }}>{it.reason}</div>
+                      </div>
+                    );
+                  })}
+                  <button onClick={loadPrescription} style={{ ...btn(C.red), width: "100%", padding: 16, fontSize: 16, marginTop: 6 }}>このメニューを今日の記録に読み込む</button>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ===== 分割タブ ===== */}
+      {view === "split" && (
+        <div style={{ padding: "0 16px" }}>
+          <h2 style={{ fontSize: 16, fontWeight: 900, margin: "8px 0 4px" }}>分割法</h2>
+          <p style={{ color: C.muted, fontSize: 12, margin: "0 0 12px" }}>ローテーション方式:保存するたびに次のDayへ進みます。</p>
+          {(!split || pickingSplit) ? (
+            <>
+              {pickingSplit && split && (
+                <button onClick={() => setPickingSplit(false)} style={{ ...btn(C.surface2, C.muted), fontSize: 13, padding: "8px 12px", marginBottom: 12 }}>← 今の分割({split.name})に戻る</button>
+              )}
+              <p style={{ color: C.muted, fontSize: 12, margin: "0 0 10px" }}>パターンを選ぶか、ゼロから作成できます。{split && "(選ぶと今の分割は置き換わります)"}</p>
+              {SPLIT_PRESETS.map(p => (
+                <button key={p.name} onClick={() => applyPreset(p)} style={{ ...btn(C.surface, C.text), width: "100%", textAlign: "left", padding: 14, marginBottom: 8, border: `1px solid ${C.border}` }}>
+                  <div style={{ fontWeight: 900, fontSize: 15, marginBottom: 4 }}>{p.name}</div>
+                  <div style={{ color: C.muted, fontSize: 12, fontWeight: 400 }}>{p.days.map(d => d.name).join(" → ")}</div>
+                </button>
+              ))}
+              <button onClick={newCustomSplit} style={{ ...btn(C.surface2, C.text), width: "100%", padding: 14, border: `1px dashed ${C.border}` }}>＋ カスタム分割をゼロから作る</button>
+            </>
+          ) : (
+            <>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, gap: 8 }}>
+                <input value={split.name} onChange={e => updSplit({ name: e.target.value })} onFocus={selectOnFocus} aria-label="分割名" style={{ background: "transparent", border: "none", color: C.text, fontSize: 16, fontWeight: 900, fontFamily: "inherit", flex: 1, minWidth: 0 }} />
+                <button onClick={() => setPickingSplit(true)} style={{ ...btn(C.blue), fontSize: 12, padding: "6px 10px", flexShrink: 0 }}>変更 / 作り直す</button>
+              </div>
+              <button onClick={deleteSplit} style={{ ...btn("transparent", C.muted), fontSize: 12, padding: "0 0 10px" }}>分割を削除</button>
+              {split.days.map((d, i) => {
+                const isNext = i === split.cursor % split.days.length; const editing = editDay === i;
+                return (
+                  <div key={i} style={{ background: C.surface, borderRadius: 14, padding: 14, marginBottom: 8, border: `1px solid ${isNext ? C.blue : C.border}` }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, minWidth: 0 }}>
+                        <span style={{ color: C.muted, fontSize: 12, flexShrink: 0 }}>Day {i + 1}</span>
+                        {editing ? <input value={d.name} onChange={e => updDay(i, { name: e.target.value })} onFocus={selectOnFocus} aria-label="Day名" style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: "4px 8px", fontSize: 14, fontFamily: "inherit", width: "100%" }} /> : <strong style={{ fontSize: 15 }}>{d.name}</strong>}
+                        {isNext && <span style={{ background: C.blue, color: "#fff", borderRadius: 999, padding: "2px 8px", fontSize: 10, fontWeight: 800, flexShrink: 0 }}>次回</span>}
+                      </div>
+                      <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                        {!isNext && <button onClick={() => updSplit({ cursor: i })} style={{ ...btn(C.surface2, C.muted), padding: "4px 10px", fontSize: 12 }}>次回にする</button>}
+                        <button onClick={() => setEditDay(editing ? null : i)} style={{ ...btn(C.surface2, C.muted), padding: "4px 10px", fontSize: 12 }}>{editing ? "完了" : "編集"}</button>
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 10 }}>
+                      {editing ? MUSCLES.map(m => <button key={m} onClick={() => toggleDayMuscle(i, m)} style={chip(d.muscles.includes(m))}>{m}</button>)
+                        : d.muscles.length ? d.muscles.map(m => <span key={m} style={{ ...chip(false), cursor: "default" }}>{m}</span>)
+                          : <span style={{ color: C.muted, fontSize: 12 }}>部位未設定(「編集」から選択)</span>}
+                    </div>
+
+                    {/* 種目の登録(この日の固定メニュー) */}
+                    {editing ? (
+                      <div style={{ marginTop: 12, background: C.bg, borderRadius: 10, padding: 10 }}>
+                        <div style={{ fontSize: 12, color: C.muted, marginBottom: 8 }}>この日にやる種目(登録すると自動メニューになります)</div>
+                        {(d.exercises && d.exercises.length > 0) && (
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
+                            {d.exercises.map(n => (
+                              <button key={n} onClick={() => toggleDayExercise(i, n)} style={{ ...chip(true, C.red) }}>{n} ✕</button>
+                            ))}
+                          </div>
+                        )}
+                        <div style={{ maxHeight: 160, overflowY: "auto" }}>
+                          {EXERCISE_DB.filter(e => d.muscles.length === 0 || muscleMatchesDay(e.m, d)).map(e => {
+                            const on = (d.exercises || []).includes(e.n);
+                            return (
+                              <button key={e.n} onClick={() => toggleDayExercise(i, e.n)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, width: "100%", textAlign: "left", background: on ? C.surface2 : "transparent", border: `1px solid ${on ? C.blue : C.border}`, borderRadius: 8, padding: "8px 10px", marginBottom: 5, cursor: "pointer", color: C.text, fontSize: 13, fontFamily: "inherit" }}>
+                                <span style={{ minWidth: 0 }}>{on ? "✓ " : ""}{e.n}</span>
+                                <span style={{ color: C.muted, fontSize: 11, flexShrink: 0 }}>{e.m}・{e.eq}</span>
+                              </button>
+                            );
+                          })}
+                          {d.muscles.length > 0 && EXERCISE_DB.filter(e => muscleMatchesDay(e.m, d)).length === 0 && (
+                            <div style={{ color: C.muted, fontSize: 12, textAlign: "center", padding: 8 }}>この部位の内蔵種目がありません。</div>
+                          )}
+                        </div>
+                      </div>
+                    ) : (d.exercises && d.exercises.length > 0) && (
+                      <div style={{ marginTop: 8, fontSize: 12, color: C.muted }}>
+                        種目: {d.exercises.join("、")}
+                      </div>
+                    )}
+
+                    {editing && <button onClick={() => removeDay(i)} style={{ ...btn("transparent", "#FF5A4E"), fontSize: 12, padding: "8px 0 0" }}>このDayを削除</button>}
+                  </div>
+                );
+              })}
+              <button onClick={addDay} style={{ ...btn(C.surface2, C.text), width: "100%", padding: 12, fontSize: 13, border: `1px dashed ${C.border}` }}>＋ Dayを追加</button>
+
+              <div style={{ background: C.surface, borderRadius: 14, padding: 14, border: `1px solid ${C.border}`, marginTop: 16 }}>
+                <h3 style={{ fontSize: 14, fontWeight: 900, margin: "0 0 10px" }}>直近7日間の部位別</h3>
+                {Object.keys(weekly).length === 0 ? <div style={{ color: C.muted, fontSize: 13 }}>種目に部位を設定して記録すると集計されます。</div>
+                  : Object.entries(weekly).sort((a, b) => b[1].vol - a[1].vol).map(([m, v]) => { const d = lastTrained(m); return (
+                    <div key={m} style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 6, gap: 8 }}>
+                      <span>{m}</span>
+                      <span style={{ color: C.muted, textAlign: "right" }}>
+                        <span style={{ color: C.yellow, fontWeight: 700 }}>{v.sets}セット</span>
+                        <span style={{ marginLeft: 8 }}>{Math.round(v.vol).toLocaleString()}kg</span>
+                        {d != null && <span style={{ marginLeft: 8 }}>最終{d === 0 ? "今日" : `${d}日前`}</span>}
+                      </span>
+                    </div>
+                  ); })}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ===== 履歴タブ ===== */}
+      {view === "history" && (
+        <div style={{ padding: "0 16px" }}>
+          {workouts.length > 0 && (
+            <>
+              {/* ボリューム推移(トータル / 部位別) */}
+              <div style={{ background: C.surface, borderRadius: 14, padding: 14, border: `1px solid ${C.border}`, marginBottom: 12 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, gap: 8 }}>
+                  <h2 style={{ fontSize: 14, fontWeight: 900, margin: 0 }}>ボリューム推移</h2>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <button onClick={() => setVolMode("total")} style={chip(volMode === "total")}>トータル</button>
+                    <button onClick={() => setVolMode("muscle")} style={chip(volMode === "muscle")}>部位別</button>
+                  </div>
+                </div>
+
+                {volMode === "total" ? (
+                  volumeTrend.length >= 2 ? (
+                    <ResponsiveContainer width="100%" height={170}>
+                      <LineChart data={volumeTrend} margin={{ top: 8, right: 8, left: -6, bottom: 0 }}>
+                        <CartesianGrid stroke={C.border} strokeDasharray="3 3" />
+                        <XAxis dataKey="date" stroke={C.muted} fontSize={11} tickLine={false} />
+                        <YAxis stroke={C.muted} fontSize={11} tickLine={false} width={44} />
+                        <Tooltip contentStyle={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 12, color: C.text }} formatter={v => [`${v.toLocaleString()}kg`, "総ボリューム"]} />
+                        <Line type="monotone" dataKey="総ボリューム" stroke={C.green} strokeWidth={2.5} dot={{ r: 3, fill: C.green }} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  ) : <div style={{ color: C.muted, fontSize: 13, textAlign: "center", padding: "20px 0" }}>2回以上記録すると推移が表示されます。</div>
+                ) : trainedMuscles.length === 0 ? (
+                  <div style={{ color: C.muted, fontSize: 13, textAlign: "center", padding: "20px 0" }}>種目に部位を設定して記録すると部位別で表示されます。</div>
+                ) : (
+                  <>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
+                      {trainedMuscles.map(m => <button key={m} onClick={() => setVolMuscle(m)} style={chip(volMuscle === m)}>{m}</button>)}
+                    </div>
+                    {muscleVolumeTrend.length >= 2 ? (
+                      <ResponsiveContainer width="100%" height={170}>
+                        <LineChart data={muscleVolumeTrend} margin={{ top: 8, right: 8, left: -6, bottom: 0 }}>
+                          <CartesianGrid stroke={C.border} strokeDasharray="3 3" />
+                          <XAxis dataKey="date" stroke={C.muted} fontSize={11} tickLine={false} />
+                          <YAxis stroke={C.muted} fontSize={11} tickLine={false} width={44} />
+                          <Tooltip contentStyle={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 12, color: C.text }} formatter={v => [`${v.toLocaleString()}kg`, volMuscle]} />
+                          <Line type="monotone" dataKey="ボリューム" stroke={C.blue} strokeWidth={2.5} dot={{ r: 3, fill: C.blue }} />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    ) : <div style={{ color: C.muted, fontSize: 13, textAlign: "center", padding: "20px 0" }}>「{volMuscle}」を2回以上記録すると推移が表示されます。</div>}
+                  </>
+                )}
+              </div>
+
+              {/* 種目別 重量推移 */}
+              <div style={{ background: C.surface, borderRadius: 14, padding: 14, border: `1px solid ${C.border}`, marginBottom: 16 }}>
+                <h2 style={{ fontSize: 14, fontWeight: 900, margin: "0 0 10px" }}>種目別の重量推移</h2>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
+                  {exerciseNames.map(name => <button key={name} onClick={() => setChartExercise(name)} style={chip(chartExercise === name)}>{name}</button>)}
+                </div>
+                {chartData.length >= 2 ? (
+                  <ResponsiveContainer width="100%" height={200}>
+                    <LineChart data={chartData} margin={{ top: 8, right: 8, left: -14, bottom: 0 }}>
+                      <CartesianGrid stroke={C.border} strokeDasharray="3 3" />
+                      <XAxis dataKey="date" stroke={C.muted} fontSize={11} tickLine={false} />
+                      <YAxis stroke={C.muted} fontSize={11} tickLine={false} domain={["dataMin - 2", "dataMax + 2"]} />
+                      <Tooltip contentStyle={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 12, color: C.text }} formatter={(v, n) => [n === "最大重量" ? `${v}kg` : `${v.toLocaleString()}kg`, n]} />
+                      <Legend wrapperStyle={{ fontSize: 11, color: C.muted }} />
+                      <Line type="monotone" dataKey="最大重量" stroke={C.red} strokeWidth={2.5} dot={{ r: 4, fill: C.red }} />
+                      <Line type="monotone" dataKey="推定1RM" stroke={C.yellow} strokeWidth={2} strokeDasharray="4 3" dot={{ r: 3, fill: C.yellow }} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                ) : <div style={{ color: C.muted, fontSize: 13, textAlign: "center", padding: "24px 0" }}>この種目を2回以上記録するとグラフが表示されます。</div>}
+              </div>
+            </>
+          )}
+
+          {/* PR(自己ベスト)一覧 */}
+          {Object.keys(prMap).length > 0 && (
+            <div style={{ background: C.surface, borderRadius: 14, padding: 14, border: `1px solid ${C.border}`, marginBottom: 16 }}>
+              <h2 style={{ fontSize: 14, fontWeight: 900, margin: "0 0 4px" }}>🏆 PR(自己ベスト)</h2>
+              <p style={{ color: C.muted, fontSize: 11, margin: "0 0 10px" }}>推定1RM = 重量×(1+回数/30)。高回数ほど誤差が出るため目安です。</p>
+              <div style={{ display: "flex", fontSize: 10, color: C.muted, marginBottom: 6 }}>
+                <span style={{ flex: 1 }}>種目</span>
+                <span style={{ width: 76, textAlign: "right" }}>推定1RM</span>
+                <span style={{ width: 68, textAlign: "right" }}>最大重量</span>
+              </div>
+              {Object.entries(prMap).sort((a, b) => b[1].best1RM - a[1].best1RM).map(([name, pr]) => (
+                <div key={name} style={{ display: "flex", alignItems: "center", fontSize: 13, marginBottom: 6 }}>
+                  <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</span>
+                  <span style={{ width: 76, textAlign: "right", fontFamily: "'Barlow Condensed', sans-serif", fontSize: 17, fontWeight: 600, color: C.yellow }}>
+                    {pr.best1RM.toFixed(1)}<span style={{ fontSize: 10, color: C.muted }}>kg</span>
+                  </span>
+                  <span style={{ width: 68, textAlign: "right", fontFamily: "'Barlow Condensed', sans-serif", fontSize: 15, color: C.muted }}>
+                    {pr.bestWeight.toFixed(1)}<span style={{ fontSize: 10 }}>kg</span>
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <h2 style={{ fontSize: 16, fontWeight: 900, margin: "8px 0 12px" }}>履歴 <span style={{ color: C.muted, fontWeight: 400, fontSize: 13 }}>{workouts.length}回</span></h2>
+          {!loaded && <div style={{ color: C.muted, fontSize: 14 }}>読み込み中…</div>}
+          {loaded && workouts.length === 0 && <div style={{ border: `1px dashed ${C.border}`, borderRadius: 14, padding: 20, color: C.muted, fontSize: 14, textAlign: "center" }}>まだ記録がありません。</div>}
+          {[...workouts].reverse().map((w, i) => (
+            <div key={i} style={{ background: C.surface, borderRadius: 14, padding: 14, marginBottom: 10, border: `1px solid ${C.border}` }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
+                <div style={{ fontWeight: 900, fontSize: 14 }}>{fmtDate(w.date)}{w.session && <span style={{ color: C.blue, marginLeft: 8, fontSize: 12 }}>{w.session}</span>}</div>
+              </div>
+              {(() => {
+                const parts = [...new Set(w.exercises.map(ex => ex.muscle).filter(Boolean))];
+                return parts.length > 0 ? (
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
+                    {parts.map(m => (
+                      <span key={m} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 999, padding: "3px 10px", fontSize: 11, color: C.text }}>{m}</span>
+                    ))}
+                  </div>
+                ) : null;
+              })()}
+              {(w.startAt || w.durationMin) && (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 10, fontSize: 11, color: C.muted, marginBottom: 8 }}>
+                  {w.startAt && <span>{fmtTime(w.startAt)}〜{w.endAt ? fmtTime(w.endAt) : ""}</span>}
+                  {w.durationMin != null && <span>{w.durationMin}分</span>}
+                  {w.totalVolume != null && <span style={{ color: C.yellow }}>{Math.round(w.totalVolume).toLocaleString()}kg</span>}
+                  {w.kcal != null && <span>約{w.kcal}kcal</span>}
+                </div>
+              )}
+              {w.exercises.map((ex, j) => (
+                <div key={j} style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 4, gap: 8 }}>
+                  <span style={{ minWidth: 0 }}>{ex.name}{ex.pain && <span style={{ color: "#FF5A4E", marginLeft: 4 }}>⚠</span>}{ex.formBroke && <span style={{ color: C.yellow, marginLeft: 4 }}>△</span>}</span>
+                  <span style={{ color: C.muted, textAlign: "right", flexShrink: 0 }}>{ex.sets.map(s => `${s.warmup ? "W:" : ""}${s.weight}×${s.reps}${s.rir != null ? `(残${s.rir})` : ""}`).join(" / ")}</span>
+                </div>
+              ))}
+            </div>
+          ))}
+          {workouts.length > 0 && <button onClick={clearAll} style={{ ...btn("transparent", C.muted), fontSize: 12, padding: 8 }}>すべての履歴を削除</button>}
+        </div>
+      )}
+
+      {/* ===== 設定タブ ===== */}
+      {view === "settings" && (
+        <div style={{ padding: "0 16px" }}>
+          <h2 style={{ fontSize: 16, fontWeight: 900, margin: "8px 0 12px" }}>設定</h2>
+          <div style={{ background: C.surface, borderRadius: 14, padding: 16, border: `1px solid ${C.border}`, marginBottom: 12 }}>
+            <label style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 14 }}>
+              体重(自重換算・カロリー計算に使用)
+              <span><input type="number" step="0.5" value={profile.bodyweight} onFocus={selectOnFocus} onChange={e => persist({ profile: { ...profile, bodyweight: num(e.target.value) } })} style={{ ...cfgInput, width: 70, fontSize: 16 }} /> kg</span>
+            </label>
+          </div>
+
+          {/* バックアップ */}
+          <div style={{ background: C.surface, borderRadius: 14, padding: 16, border: `1px solid ${C.border}`, marginBottom: 12 }}>
+            <div style={{ fontSize: 14, fontWeight: 900, marginBottom: 4 }}>バックアップ</div>
+            <p style={{ color: C.muted, fontSize: 12, margin: "0 0 12px", lineHeight: 1.6 }}>
+              記録・分割・カスタム種目・体重をまとめてファイルに保存できます。機種変更や、データが消えたときの復元に使えます。
+            </p>
+            {backupMsg && (
+              <div style={{ background: "#1E3226", color: "#A8E6BC", borderRadius: 8, padding: 10, fontSize: 12, marginBottom: 10 }}>{backupMsg}</div>
+            )}
+            <button onClick={exportBackup} disabled={workouts.length === 0}
+              style={{ ...btn(workouts.length === 0 ? C.surface2 : C.blue, workouts.length === 0 ? C.muted : "#fff"), width: "100%", padding: 14, fontSize: 14, marginBottom: 8 }}>
+              ⬇ バックアップを書き出す(JSON)
+            </button>
+
+            <label style={{ ...btn(C.surface2, C.text), width: "100%", padding: 14, fontSize: 14, display: "block", textAlign: "center", marginBottom: 8, border: `1px solid ${C.border}` }}>
+              ⬆ バックアップから復元する
+              <input type="file" accept="application/json,.json" style={{ display: "none" }}
+                onChange={e => { const f = e.target.files?.[0]; importBackup(f); e.target.value = ""; }} />
+            </label>
+
+            <button onClick={exportCSV} disabled={workouts.length === 0}
+              style={{ ...btn("transparent", workouts.length === 0 ? C.border : C.muted), width: "100%", padding: 10, fontSize: 12, border: `1px solid ${C.border}` }}>
+              CSVで書き出す(Excel等で開く用)
+            </button>
+            <p style={{ color: C.muted, fontSize: 11, margin: "10px 0 0", lineHeight: 1.6 }}>
+              ※復元すると現在のデータはすべて置き換わります。復元前に念のため書き出しておくと安全です。
+            </p>
+          </div>
+
+          <p style={{ color: C.muted, fontSize: 11, lineHeight: 1.6 }}>
+            ※カロリーはMETs×体重×時間による概算の目安で、医療・栄養管理用の正確な値ではありません。自重種目のボリュームは体重×係数+加重で換算しています。
+            シュラッグ・カーフレイズ・リストカールは可動域が小さいため、集計ボリュームを0.5倍で換算しています(推定1RM・PR・次回メニューの判定には影響しません)。種目ごとに⚙から調整できます。
+          </p>
+        </div>
+      )}
+
+      {/* ===== AIモーダル ===== */}
+      {aiModal && (
+        <div onClick={() => setAiModal(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.6)", zIndex: 50, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: C.surface, borderTop: `3px solid ${C.blue}`, borderRadius: "16px 16px 0 0", padding: 20, width: "100%", maxWidth: 520, maxHeight: "70vh", overflowY: "auto" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <strong style={{ fontSize: 15 }}>🏋 {aiModal.title}</strong>
+              <button onClick={() => setAiModal(null)} style={{ ...btn(C.surface2, C.muted), padding: "4px 12px", fontSize: 13 }}>閉じる</button>
+            </div>
+            <div style={{ fontSize: 14, lineHeight: 1.8, color: aiModal.loading ? C.muted : C.text, whiteSpace: "pre-wrap" }}>
+              {aiModal.loading ? "AIが考えています…" : aiModal.body}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* タブバー */}
+      <nav style={{ position: "fixed", bottom: 0, left: 0, right: 0, maxWidth: 520, margin: "0 auto", display: "flex", background: C.surface, borderTop: `1px solid ${C.border}` }}>
+        {[["log", "記録"], ["suggest", "提案"], ["split", "分割"], ["history", "履歴"], ["settings", "設定"]].map(([k, label]) => (
+          <button key={k} onClick={() => setView(k)} style={{ flex: 1, padding: "14px 0 18px", background: "none", border: "none", color: view === k ? C.red : C.muted, fontWeight: view === k ? 900 : 400, fontSize: 13, cursor: "pointer", fontFamily: "inherit", borderTop: view === k ? `2px solid ${C.red}` : "2px solid transparent" }}>{label}</button>
+        ))}
+      </nav>
+    </div>
+  );
+}
+
+
+// ---- マウント ----
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(<App />);
+
+</script>
+
+<script>
+  // Service Worker(オフライン起動用)
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function () {
+      navigator.serviceWorker.register('sw.js').catch(function () { /* 失敗しても通常動作 */ });
+    });
+  }
+  // 読み込み失敗時のフォールバック表示
+  setTimeout(function () {
+    var boot = document.getElementById('boot');
+    if (boot && document.body.contains(boot)) {
+      var m = boot.querySelector('.msg');
+      if (m) m.textContent = '読み込みに時間がかかっています。通信環境を確認して再読み込みしてください。';
+    }
+  }, 12000);
+</script>
+
+</body>
+</html>
