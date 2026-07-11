@@ -461,6 +461,7 @@ function App() {
   const [editDay, setEditDay] = useState(null);
   const [pickingSplit, setPickingSplit] = useState(false); // trueで分割選択(プリセット/新規作成)画面を表示
   const [backupMsg, setBackupMsg] = useState("");
+  const [editWorkout, setEditWorkout] = useState(null); // 編集中の記録 {index, draft}
   const [filterToday, setFilterToday] = useState(true);
 
   // タイマー
@@ -871,6 +872,91 @@ function App() {
     setWorkouts([]); setSplit(null); setResult(null); setChartExercise(""); setRecentNames([]); setCustomExercises([]); setExerciseNotes({});
   };
 
+  // ---- 履歴の編集・削除 ----
+  const startEditWorkout = (index) => {
+    const w = workouts[index];
+    // 文字列にして編集しやすくする
+    setEditWorkout({
+      index,
+      draft: {
+        ...w,
+        exercises: w.exercises.map(ex => ({
+          ...ex,
+          sets: ex.sets.map(s => ({
+            weight: String(s.weight), reps: String(s.reps),
+            rir: s.rir != null ? s.rir : "", warmup: !!s.warmup,
+          })),
+        })),
+      },
+    });
+  };
+  const cancelEditWorkout = () => setEditWorkout(null);
+
+  const editSet = (exIdx, setIdx, field, value) => {
+    setEditWorkout(ew => ({
+      ...ew,
+      draft: {
+        ...ew.draft,
+        exercises: ew.draft.exercises.map((ex, i) => i !== exIdx ? ex : {
+          ...ex, sets: ex.sets.map((s, j) => j !== setIdx ? s : { ...s, [field]: value }),
+        }),
+      },
+    }));
+  };
+  const editRemoveSet = (exIdx, setIdx) => {
+    setEditWorkout(ew => ({
+      ...ew,
+      draft: {
+        ...ew.draft,
+        exercises: ew.draft.exercises
+          .map((ex, i) => i !== exIdx ? ex : { ...ex, sets: ex.sets.filter((_, j) => j !== setIdx) })
+          .filter(ex => ex.sets.length > 0),
+      },
+    }));
+  };
+  const editRemoveExercise = (exIdx) => {
+    setEditWorkout(ew => ({
+      ...ew,
+      draft: { ...ew.draft, exercises: ew.draft.exercises.filter((_, i) => i !== exIdx) },
+    }));
+  };
+
+  const saveEditWorkout = async () => {
+    const { index, draft } = editWorkout;
+    // 数値化し、回数0のセットと空の種目は除去
+    const exercises = draft.exercises.map(ex => ({
+      ...ex,
+      sets: ex.sets
+        .filter(s => Math.round(num(s.reps)) > 0)
+        .map(s => ({
+          weight: num(s.weight), reps: Math.round(num(s.reps)), warmup: !!s.warmup,
+          ...(s.rir !== "" && s.rir != null ? { rir: num(s.rir) } : {}),
+        })),
+    })).filter(ex => ex.sets.length > 0);
+
+    if (exercises.length === 0) {
+      if (!window.confirm("有効なセットがありません。この記録を削除しますか?")) return;
+      const next = workouts.filter((_, i) => i !== index);
+      await persist({ workouts: next });
+      setEditWorkout(null);
+      return;
+    }
+    const updated = { ...draft, exercises };
+    // 総ボリュームを再計算(ウォームアップ・可動域係数を反映)
+    updated.totalVolume = exercises.reduce((a, ex) => a + exVolume(ex), 0);
+    const next = workouts.map((w, i) => i === index ? updated : w);
+    await persist({ workouts: next });
+    setEditWorkout(null);
+  };
+
+  const deleteWorkout = async (index) => {
+    const w = workouts[index];
+    if (!window.confirm(`${fmtDate(w.date)}の記録を削除します。よろしいですか?`)) return;
+    const next = workouts.filter((_, i) => i !== index);
+    await persist({ workouts: next });
+    setEditWorkout(null);
+  };
+
   // ---- バックアップ(書き出し / 復元) ----
   const downloadFile = (filename, text, type = "application/json") => {
     const blob = new Blob([text], { type: `${type};charset=utf-8` });
@@ -1021,7 +1107,7 @@ function App() {
         <div>
           <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: 32, letterSpacing: 1, lineHeight: 1 }}>
             OVERLOAD<span style={{ color: C.red }}>+</span>
-            <span style={{ fontFamily: "'Noto Sans JP', sans-serif", fontSize: 11, fontWeight: 700, color: C.green, marginLeft: 8, verticalAlign: "middle" }}>v14</span>
+            <span style={{ fontFamily: "'Noto Sans JP', sans-serif", fontSize: 11, fontWeight: 700, color: C.green, marginLeft: 8, verticalAlign: "middle" }}>v15</span>
           </div>
         </div>
         {AI_ENABLED && (
@@ -1510,12 +1596,29 @@ function App() {
           <h2 style={{ fontSize: 16, fontWeight: 900, margin: "8px 0 12px" }}>履歴 <span style={{ color: C.muted, fontWeight: 400, fontSize: 13 }}>{workouts.length}回</span></h2>
           {!loaded && <div style={{ color: C.muted, fontSize: 14 }}>読み込み中…</div>}
           {loaded && workouts.length === 0 && <div style={{ border: `1px dashed ${C.border}`, borderRadius: 14, padding: 20, color: C.muted, fontSize: 14, textAlign: "center" }}>まだ記録がありません。</div>}
-          {[...workouts].reverse().map((w, i) => (
-            <div key={i} style={{ background: C.surface, borderRadius: 14, padding: 14, marginBottom: 10, border: `1px solid ${C.border}` }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
-                <div style={{ fontWeight: 900, fontSize: 14 }}>{fmtDate(w.date)}{w.session && <span style={{ color: C.blue, marginLeft: 8, fontSize: 12 }}>{w.session}</span>}</div>
+          {[...workouts].map((w, revIdx) => ({ w, idx: revIdx })).reverse().map(({ w, idx }) => {
+            const editing = editWorkout && editWorkout.index === idx;
+            const d = editing ? editWorkout.draft : w;
+            return (
+            <div key={idx} style={{ background: C.surface, borderRadius: 14, padding: 14, marginBottom: 10, border: `1px solid ${editing ? C.blue : C.border}` }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4, gap: 8 }}>
+                <div style={{ fontWeight: 900, fontSize: 14, minWidth: 0 }}>{fmtDate(w.date)}{w.session && <span style={{ color: C.blue, marginLeft: 8, fontSize: 12 }}>{w.session}</span>}</div>
+                <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                  {editing ? (
+                    <>
+                      <button onClick={saveEditWorkout} style={{ ...btn(C.red), padding: "5px 12px", fontSize: 12 }}>保存</button>
+                      <button onClick={cancelEditWorkout} style={{ ...btn(C.surface2, C.muted), padding: "5px 10px", fontSize: 12 }}>取消</button>
+                    </>
+                  ) : (
+                    <>
+                      <button onClick={() => startEditWorkout(idx)} style={{ ...btn(C.surface2, C.muted), padding: "5px 10px", fontSize: 12 }}>編集</button>
+                      <button onClick={() => deleteWorkout(idx)} aria-label="この記録を削除" style={{ ...btn("transparent", C.muted), padding: "5px 6px", fontSize: 12 }}>🗑</button>
+                    </>
+                  )}
+                </div>
               </div>
-              {(() => {
+
+              {!editing && (() => {
                 const parts = [...new Set(w.exercises.map(ex => ex.muscle).filter(Boolean))];
                 return parts.length > 0 ? (
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
@@ -1525,7 +1628,8 @@ function App() {
                   </div>
                 ) : null;
               })()}
-              {(w.startAt || w.durationMin) && (
+
+              {!editing && (w.startAt || w.durationMin) && (
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 10, fontSize: 11, color: C.muted, marginBottom: 8 }}>
                   {w.startAt && <span>{fmtTime(w.startAt)}〜{w.endAt ? fmtTime(w.endAt) : ""}</span>}
                   {w.durationMin != null && <span>{w.durationMin}分</span>}
@@ -1533,14 +1637,65 @@ function App() {
                   {w.kcal != null && <span>約{w.kcal}kcal</span>}
                 </div>
               )}
-              {w.exercises.map((ex, j) => (
+
+              {/* 表示モード */}
+              {!editing && w.exercises.map((ex, j) => (
                 <div key={j} style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 4, gap: 8 }}>
                   <span style={{ minWidth: 0 }}>{ex.name}{ex.pain && <span style={{ color: "#FF5A4E", marginLeft: 4 }}>⚠</span>}{ex.formBroke && <span style={{ color: C.yellow, marginLeft: 4 }}>△</span>}</span>
                   <span style={{ color: C.muted, textAlign: "right", flexShrink: 0 }}>{ex.sets.map(s => `${s.warmup ? "W:" : ""}${s.weight}×${s.reps}${s.rir != null ? `(残${s.rir})` : ""}`).join(" / ")}</span>
                 </div>
               ))}
+
+              {/* 編集モード */}
+              {editing && (
+                <div style={{ marginTop: 8 }}>
+                  <div style={{ fontSize: 11, color: C.muted, marginBottom: 10 }}>
+                    数値をタップして修正できます。回数を0にすると、そのセットは削除されます。
+                  </div>
+                  {d.exercises.map((ex, exIdx) => (
+                    <div key={exIdx} style={{ background: C.bg, borderRadius: 10, padding: 10, marginBottom: 10 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, gap: 8 }}>
+                        <strong style={{ fontSize: 13, minWidth: 0 }}>{ex.name}</strong>
+                        <button onClick={() => editRemoveExercise(exIdx)} style={{ ...btn("transparent", C.muted), padding: 2, fontSize: 11, flexShrink: 0 }}>種目を削除</button>
+                      </div>
+                      <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 4 }}>
+                        <span style={{ width: 22 }} />
+                        <span style={{ flex: 1.3, ...fieldLabel }}>重量</span>
+                        <span style={{ flex: 1, ...fieldLabel }}>回数</span>
+                        <span style={{ flex: 1, ...fieldLabel }}>余力</span>
+                        <span style={{ width: 24 }} />
+                      </div>
+                      {ex.sets.map((s, setIdx) => (
+                        <div key={setIdx} style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 6 }}>
+                          <button onClick={() => editSet(exIdx, setIdx, "warmup", !s.warmup)}
+                            aria-label="ウォームアップ切替"
+                            style={{ width: 22, height: 22, borderRadius: 6, flexShrink: 0, cursor: "pointer", fontSize: 10, fontWeight: 800, fontFamily: "inherit",
+                              border: `1px solid ${s.warmup ? C.yellow : C.border}`, background: s.warmup ? C.yellow : "transparent", color: s.warmup ? "#141517" : C.muted }}>
+                            {s.warmup ? "W" : setIdx + 1}
+                          </button>
+                          <input type="number" inputMode="decimal" step="0.5" min="0" value={s.weight} onFocus={selectOnFocus}
+                            onChange={e => editSet(exIdx, setIdx, "weight", e.target.value)} aria-label="重量"
+                            style={{ ...numInput, flex: 1.3, fontSize: 18, padding: "7px 2px" }} />
+                          <input type="number" inputMode="numeric" step="1" min="0" value={s.reps} onFocus={selectOnFocus}
+                            onChange={e => editSet(exIdx, setIdx, "reps", e.target.value)} aria-label="回数"
+                            style={{ ...numInput, flex: 1, fontSize: 18, padding: "7px 2px" }} />
+                          <input type="number" inputMode="numeric" step="1" min="0" max="4" value={s.rir} placeholder="–" onFocus={selectOnFocus}
+                            onChange={e => editSet(exIdx, setIdx, "rir", e.target.value)} aria-label="余力"
+                            style={{ ...numInput, flex: 1, fontSize: 18, padding: "7px 2px", color: C.yellow }} />
+                          <button onClick={() => editRemoveSet(exIdx, setIdx)} aria-label="セットを削除"
+                            style={{ width: 24, height: 24, borderRadius: 6, border: `1px solid ${C.border}`, background: C.surface2, color: C.muted, fontSize: 11, cursor: "pointer", flexShrink: 0 }}>✕</button>
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                  <button onClick={() => deleteWorkout(idx)} style={{ ...btn("transparent", "#FF5A4E"), width: "100%", fontSize: 12, padding: 8, border: `1px solid ${C.border}`, borderRadius: 8 }}>
+                    この日の記録をまるごと削除
+                  </button>
+                </div>
+              )}
             </div>
-          ))}
+            );
+          })}
           {workouts.length > 0 && <button onClick={clearAll} style={{ ...btn("transparent", C.muted), fontSize: 12, padding: 8 }}>すべての履歴を削除</button>}
         </div>
       )}
