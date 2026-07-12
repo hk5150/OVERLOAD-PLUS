@@ -6,7 +6,6 @@
 <title>OVERLOAD+</title>
 <meta name="description" content="プログレッシブオーバーロードに基づくトレーニング記録アプリ" />
 
-<!-- PWA -->
 <link rel="manifest" href="manifest.json" />
 <meta name="theme-color" content="#141517" />
 <link rel="apple-touch-icon" href="apple-touch-icon.png" />
@@ -15,8 +14,6 @@
 <meta name="apple-mobile-web-app-title" content="OVERLOAD+" />
 <meta name="mobile-web-app-capable" content="yes" />
 
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;800&family=Noto+Sans+JP:wght@400;700;900&display=swap" rel="stylesheet">
 
 <style>
@@ -24,25 +21,18 @@
   body {
     font-family: 'Noto Sans JP', -apple-system, BlinkMacSystemFont, sans-serif;
     -webkit-font-smoothing: antialiased;
-    /* ホーム画面起動時のセーフエリア */
     padding-top: env(safe-area-inset-top);
     padding-bottom: env(safe-area-inset-bottom);
     overscroll-behavior-y: contain;
   }
   * { -webkit-tap-highlight-color: transparent; }
-  #boot {
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
-    min-height: 80vh; gap: 12px;
-  }
-  #boot .logo {
-    font-family: 'Barlow Condensed', sans-serif; font-weight: 800; font-size: 34px; letter-spacing: 1px;
-  }
+  #boot { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 70vh; gap: 14px; padding: 24px; text-align: center; }
+  #boot .logo { font-family: 'Barlow Condensed', sans-serif; font-weight: 800; font-size: 34px; letter-spacing: 1px; }
   #boot .plus { color: #E2453C; }
-  #boot .msg { color: #8E939A; font-size: 13px; }
-  .spinner {
-    width: 22px; height: 22px; border: 2px solid #2E3237; border-top-color: #E2453C;
-    border-radius: 50%; animation: spin .8s linear infinite;
-  }
+  #boot .msg { color: #8E939A; font-size: 13px; line-height: 1.7; }
+  #boot .err { color: #F5B8B3; background: #3A2224; border-radius: 10px; padding: 12px; font-size: 12px; text-align: left; max-width: 420px; word-break: break-all; line-height: 1.7; }
+  #boot button { background: #E2453C; color: #fff; border: none; border-radius: 10px; padding: 12px 20px; font-size: 14px; font-weight: 700; font-family: inherit; cursor: pointer; }
+  .spinner { width: 22px; height: 22px; border: 2px solid #2E3237; border-top-color: #E2453C; border-radius: 50%; animation: spin .8s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
 </style>
 </head>
@@ -51,20 +41,81 @@
 <div id="root">
   <div id="boot">
     <div class="logo">OVERLOAD<span class="plus">+</span></div>
-    <div class="spinner"></div>
-    <div class="msg">読み込み中…</div>
+    <div class="spinner" id="spin"></div>
+    <div class="msg" id="bootmsg">読み込み中…</div>
+    <div class="err" id="booterr" style="display:none"></div>
+    <button id="retry" style="display:none" onclick="location.reload(true)">再読み込み</button>
   </div>
 </div>
 
-<!-- React / Recharts / Babel (CDN) -->
-<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-<script crossorigin src="https://unpkg.com/prop-types@15/prop-types.min.js"></script>
-<script crossorigin src="https://unpkg.com/recharts@2.12.7/umd/Recharts.js"></script>
-<script src="https://unpkg.com/@babel/standalone@7.24.7/babel.min.js"></script>
+<script>
+  // ---- 起動診断 ----
+  window.__boot = { react:false, recharts:false, babel:false, error:null };
+  function bootMsg(t){ var e=document.getElementById('bootmsg'); if(e) e.textContent=t; }
+  function bootFail(title, detail){
+    var s=document.getElementById('spin'); if(s) s.style.display='none';
+    bootMsg(title);
+    var e=document.getElementById('booterr');
+    if(e && detail){ e.style.display='block'; e.textContent=detail; }
+    var r=document.getElementById('retry'); if(r) r.style.display='block';
+  }
+  window.addEventListener('error', function(ev){
+    if (!document.getElementById('boot')) return;
+    var m = ev.message || (ev.error && ev.error.message) || String(ev);
+    bootFail('起動時にエラーが発生しました', m + (ev.filename ? ('\n' + ev.filename + ':' + ev.lineno) : ''));
+  });
 
-<script type="text/babel" data-presets="react">
-const { useState, useEffect, useMemo } = React;
+  // ---- ライブラリ読み込み(unpkg → 失敗時 jsdelivr) ----
+  var LIBS = [
+    { key:'react',    urls:['https://unpkg.com/react@18/umd/react.production.min.js',
+                            'https://cdn.jsdelivr.net/npm/react@18/umd/react.production.min.js'] },
+    { key:'reactdom', urls:['https://unpkg.com/react-dom@18/umd/react-dom.production.min.js',
+                            'https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.production.min.js'] },
+    { key:'proptypes',urls:['https://unpkg.com/prop-types@15/prop-types.min.js',
+                            'https://cdn.jsdelivr.net/npm/prop-types@15/prop-types.min.js'] },
+    { key:'recharts', urls:['https://unpkg.com/recharts@2.12.7/umd/Recharts.js',
+                            'https://cdn.jsdelivr.net/npm/recharts@2.12.7/umd/Recharts.js'] },
+    { key:'babel',    urls:['https://unpkg.com/@babel/standalone@7.24.7/babel.min.js',
+                            'https://cdn.jsdelivr.net/npm/@babel/standalone@7.24.7/babel.min.js'] }
+  ];
+
+  function loadOne(urls, i){
+    return new Promise(function(resolve, reject){
+      if (i >= urls.length) return reject(new Error('全ての配信元から読み込めません: ' + urls[0]));
+      var s = document.createElement('script');
+      s.src = urls[i];
+      s.crossOrigin = 'anonymous';
+      s.onload = resolve;
+      s.onerror = function(){ loadOne(urls, i+1).then(resolve, reject); };
+      document.head.appendChild(s);
+    });
+  }
+
+  (async function(){
+    try {
+      bootMsg('ライブラリを読み込み中…');
+      for (var k=0; k<LIBS.length; k++) { await loadOne(LIBS[k].urls, 0); }
+
+      if (typeof React === 'undefined')     throw new Error('React を読み込めませんでした');
+      if (typeof ReactDOM === 'undefined')  throw new Error('ReactDOM を読み込めませんでした');
+      if (typeof Recharts === 'undefined')  throw new Error('Recharts を読み込めませんでした');
+      if (typeof Babel === 'undefined')     throw new Error('Babel を読み込めませんでした');
+
+      bootMsg('アプリを準備中…');
+      var src = document.getElementById('appsrc').textContent;
+      var out = Babel.transform(src, { presets: ['react'] }).code;
+      // 実行
+      (0, eval)(out);
+    } catch (e) {
+      bootFail('起動できませんでした', (e && e.message ? e.message : String(e)) +
+        '\n\n※このページを Claude のプレビュー内で開いている場合、外部ライブラリが読み込めないため起動できません。GitHub Pages の URL から開いてください。');
+    }
+  })();
+</script>
+
+<!-- アプリ本体(Babelで変換して実行する。ここは直接実行されない) -->
+<script type="text/plain" id="appsrc">
+const { useState, useEffect, useMemo, useRef } = React;
 const { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } = Recharts;
 
 
@@ -96,6 +147,7 @@ const store = {
 const uid = () => Math.random().toString(36).slice(2, 8);
 const num = (v) => { const n = parseFloat(v); return isNaN(n) ? 0 : n; };
 const round = (n) => Math.round(n * 2) / 2;
+const DEFAULT_REPS = 10; // 種目追加時の初期回数
 // AI機能の表示切り替え。この環境ではAI呼び出しが通らないため一旦false(UIから非表示)。
 // 将来ブラウザ版や自前APIキーで復活させる際はtrueにするだけでよい(関数は残してある)。
 const AI_ENABLED = false;
@@ -440,7 +492,7 @@ function App() {
   const [view, setView] = useState("log");
   const [workouts, setWorkouts] = useState([]);
   const [split, setSplit] = useState(null);
-  const [profile, setProfile] = useState({ bodyweight: 70, aiMode: true });
+  const [profile, setProfile] = useState({ bodyweight: 70, aiMode: true, soundOn: true });
   const [recentNames, setRecentNames] = useState([]); // 選択履歴順
   const [customExercises, setCustomExercises] = useState([]); // 永続保存するカスタム種目 [{n,m,eq,t,db,bw}]
   const [exerciseNotes, setExerciseNotes] = useState({}); // 種目ごとの固定メモ {種目名: "メモ"}
@@ -487,7 +539,7 @@ function App() {
           else {
             setWorkouts(migW(p.workouts));
             setSplit(migSplit(p.split));
-            setProfile({ bodyweight: p.profile?.bodyweight ?? 70, aiMode: p.profile?.aiMode ?? true });
+            setProfile({ bodyweight: p.profile?.bodyweight ?? 70, aiMode: false, soundOn: p.profile?.soundOn ?? true });
             setRecentNames(p.recentNames || []);
             setCustomExercises(p.customExercises || []);
             setExerciseNotes(p.exerciseNotes || {});
@@ -524,12 +576,47 @@ function App() {
     return () => clearInterval(id);
   }, [startAt]);
 
-  // ---- インターバルタイマー(カウントアップ・自動スタート) ----
+  // ---- 通知音(Web Audio。iOSは初回タップで解錠される) ----
+  const soundOn = profile.soundOn !== false;
+  const audioRef = useRef(null);
+  const beep = (times = 1) => {
+    if (!soundOn) return;
+    try {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return;
+      if (!audioRef.current) audioRef.current = new Ctx();
+      const ctx = audioRef.current;
+      if (ctx.state === "suspended") ctx.resume();
+      for (let i = 0; i < times; i++) {
+        const t = ctx.currentTime + i * 0.28;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(880, t);
+        gain.gain.setValueAtTime(0.0001, t);
+        gain.gain.exponentialRampToValueAtTime(0.35, t + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.start(t); osc.stop(t + 0.24);
+      }
+    } catch { /* 音が出せない環境では無視 */ }
+  };
+
+  // ---- インターバルタイマー(カウントアップ・自動スタート・1分ごとに通知音) ----
   useEffect(() => {
     if (restStartAt == null) return;
-    const id = setInterval(() => setRestElapsed(Math.floor((Date.now() - restStartAt) / 1000)), 1000);
+    let lastMin = 0;
+    const id = setInterval(() => {
+      const sec = Math.floor((Date.now() - restStartAt) / 1000);
+      setRestElapsed(sec);
+      const min = Math.floor(sec / 60);
+      if (min > lastMin) { // 1分, 2分, 3分… の到達時に鳴らす
+        lastMin = min;
+        beep(min === 1 ? 1 : Math.min(min, 3)); // 経過が長いほど回数を増やす
+      }
+    }, 1000);
     return () => clearInterval(id);
-  }, [restStartAt]);
+  }, [restStartAt, soundOn]);
 
   const startRest = () => { setRestStartAt(Date.now()); setRestElapsed(0); }; // 記録入力のたびに0から再スタート
   const stopRest = () => { setRestStartAt(null); setRestElapsed(0); };
@@ -610,7 +697,7 @@ function App() {
     const w = sameName ?? workouts[workouts.length - 1];
     return {
       label: sameName ? `前回の${todayDay.name}` : "前回",
-      volume: w.totalVolume ?? w.exercises.reduce((a, ex) => a + exVolume(ex), 0),
+      volume: w.exercises.reduce((a, ex) => a + exVolume(ex), 0), // 保存値ではなく常に再計算
     };
   }, [workouts, split, profile.bodyweight]);
 
@@ -661,7 +748,7 @@ function App() {
       type: "new_start", reason: "初回。軽めの重量で動作を確認しましょう。",
       prescription: {
         name, muscle: cfg.muscle, bwFactor: cfg.bwFactor, isDb: cfg.isDb, rom: cfg.rom ?? 1.0,
-        weight: cfg.lastWeight != null ? cfg.lastWeight : 0, targetReps: [cfg.repHigh, cfg.repHigh, cfg.repHigh], sets: 3,
+        weight: cfg.lastWeight != null ? cfg.lastWeight : 0, targetReps: [DEFAULT_REPS, DEFAULT_REPS, DEFAULT_REPS], sets: 3,
         repLow: cfg.repLow, repHigh: cfg.repHigh, targetRirLow: cfg.targetRirLow, targetRirHigh: cfg.targetRirHigh, increment: cfg.increment,
       },
     };
@@ -713,7 +800,7 @@ function App() {
       id: uid(), name: n, repLow: cfg.repLow, repHigh: cfg.repHigh,
       targetRirLow: cfg.targetRirLow, targetRirHigh: cfg.targetRirHigh, increment: cfg.increment,
       muscle: cfg.muscle, bwFactor: cfg.bwFactor, isDb: cfg.isDb, rom: cfg.rom ?? 1.0, formBroke: false, pain: false,
-      sets: [{ weight: w, reps: String(cfg.repHigh), rir: "", warmup: false }],
+      sets: [{ weight: w, reps: String(DEFAULT_REPS), rir: "", warmup: false }],
     }]);
     const nextRecent = [n, ...recentNames.filter(x => x !== n)].slice(0, 40);
     persist({ recentNames: nextRecent, ...(known ? {} : { customExercises: nextCustom }) });
@@ -724,6 +811,15 @@ function App() {
   const addSet = (id) => setToday(today.map(ex => ex.id !== id ? ex : { ...ex, sets: [...ex.sets, { ...ex.sets[ex.sets.length - 1], rir: "", warmup: false }] }));
   const removeSet = (id, i) => setToday(today.map(ex => ex.id !== id ? ex : { ...ex, sets: ex.sets.filter((_, j) => j !== i) }).filter(ex => ex.sets.length > 0));
   const removeExercise = (id) => setToday(today.filter(ex => ex.id !== id));
+  // 種目の並べ替え(dir: -1=上へ, +1=下へ)
+  const moveExercise = (id, dir) => setToday(t => {
+    const i = t.findIndex(ex => ex.id === id);
+    const j = i + dir;
+    if (i < 0 || j < 0 || j >= t.length) return t;
+    const next = [...t];
+    [next[i], next[j]] = [next[j], next[i]];
+    return next;
+  });
 
   // カロリー(METs×体重×時間, 目安)
   const estimateKcal = (min) => Math.round(5.0 * profile.bodyweight * (min / 60));
@@ -1004,7 +1100,7 @@ function App() {
       const next = {
         workouts: migW(ws),
         split: p.split ? { ...p.split, days: p.split.days.map(d => ({ ...d, muscles: [...new Set((d.muscles || []).map(normMuscle))] })) } : null,
-        profile: { bodyweight: p.profile?.bodyweight ?? 70, aiMode: false },
+        profile: { bodyweight: p.profile?.bodyweight ?? 70, aiMode: false, soundOn: p.profile?.soundOn ?? true },
         recentNames: p.recentNames || [],
         customExercises: p.customExercises || [],
         exerciseNotes: p.exerciseNotes || {},
@@ -1039,7 +1135,7 @@ function App() {
   }, [workouts, chartExercise, profile.bodyweight]);
   const volumeTrend = useMemo(() => workouts.map(w => {
     const d = new Date(w.date);
-    return { date: `${d.getMonth() + 1}/${d.getDate()}`, 総ボリューム: Math.round(w.totalVolume ?? w.exercises.reduce((a, ex) => a + exVolume(ex), 0)) };
+    return { date: `${d.getMonth() + 1}/${d.getDate()}`, 総ボリューム: Math.round(w.exercises.reduce((a, ex) => a + exVolume(ex), 0)) };
   }), [workouts, profile.bodyweight]);
   const trainedMuscles = useMemo(() => {
     const s = new Set(); workouts.forEach(w => w.exercises.forEach(ex => { if (ex.muscle) s.add(ex.muscle); })); return [...s];
@@ -1059,7 +1155,7 @@ function App() {
   const volDelta = compareBase ? liveVolume - compareBase.volume : null;
 
   // ================= 画面 =================
-  const showBar = view === "log" && (startAt || today.length > 0);
+  const showBar = true; // 経過・ボリューム・インターバルは常時表示
 
   return (
     <div style={{ minHeight: "100vh", background: C.bg, color: C.text, fontFamily: "'Noto Sans JP', -apple-system, sans-serif", maxWidth: 520, margin: "0 auto", paddingBottom: 90 }}>
@@ -1107,7 +1203,7 @@ function App() {
         <div>
           <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: 32, letterSpacing: 1, lineHeight: 1 }}>
             OVERLOAD<span style={{ color: C.red }}>+</span>
-            <span style={{ fontFamily: "'Noto Sans JP', sans-serif", fontSize: 11, fontWeight: 700, color: C.green, marginLeft: 8, verticalAlign: "middle" }}>v15</span>
+            <span style={{ fontFamily: "'Noto Sans JP', sans-serif", fontSize: 11, fontWeight: 700, color: C.green, marginLeft: 8, verticalAlign: "middle" }}>v16</span>
           </div>
         </div>
         {AI_ENABLED && (
@@ -1169,7 +1265,7 @@ function App() {
             </div>
           )}
 
-          {today.map(ex => (
+          {today.map((ex, exIdx) => (
             <div key={ex.id} style={{ background: C.surface, borderRadius: 14, padding: 14, marginBottom: 12, border: `1px solid ${C.border}` }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, gap: 6 }}>
                 <strong style={{ fontSize: 14, lineHeight: 1.4 }}>
@@ -1179,11 +1275,15 @@ function App() {
                   {resolveRom(ex.name, ex.rom) < 1 && <span style={{ color: C.blue, fontSize: 10, marginLeft: 4 }}>ROM×{resolveRom(ex.name, ex.rom)}</span>}
                   {todayDay && ex.muscle && !muscleMatchesDay(ex.muscle, todayDay) && <span style={{ color: C.yellow, fontSize: 11, marginLeft: 6 }}>今日の部位外</span>}
                 </strong>
-                <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                <div style={{ display: "flex", gap: 4, flexShrink: 0, alignItems: "center" }}>
+                  <button onClick={() => moveExercise(ex.id, -1)} disabled={exIdx === 0} aria-label="上へ移動"
+                    style={{ ...btn(C.surface2, exIdx === 0 ? C.border : C.muted), padding: "4px 7px", fontSize: 12, cursor: exIdx === 0 ? "default" : "pointer" }}>▲</button>
+                  <button onClick={() => moveExercise(ex.id, 1)} disabled={exIdx === today.length - 1} aria-label="下へ移動"
+                    style={{ ...btn(C.surface2, exIdx === today.length - 1 ? C.border : C.muted), padding: "4px 7px", fontSize: 12, cursor: exIdx === today.length - 1 ? "default" : "pointer" }}>▼</button>
                   {AI_ENABLED && <button onClick={() => howToDo(ex.name)} style={{ ...btn(C.surface2, C.blue), padding: "4px 8px", fontSize: 12 }}>やり方</button>}
-                  <button onClick={() => openYouTube(ex.name)} style={{ ...btn(C.surface2, C.red), padding: "4px 8px", fontSize: 12 }}>▶ 動画</button>
-                  <button onClick={() => setOpenCfg({ ...openCfg, [ex.id]: !openCfg[ex.id] })} style={{ ...btn(C.surface2, C.muted), padding: "4px 8px", fontSize: 12 }}>⚙</button>
-                  <button onClick={() => removeExercise(ex.id)} aria-label="種目を削除" style={{ ...btn("transparent", C.muted), padding: 4, fontSize: 13 }}>削除</button>
+                  <button onClick={() => openYouTube(ex.name)} style={{ ...btn(C.surface2, C.red), padding: "4px 7px", fontSize: 12 }}>▶</button>
+                  <button onClick={() => setOpenCfg({ ...openCfg, [ex.id]: !openCfg[ex.id] })} style={{ ...btn(C.surface2, C.muted), padding: "4px 7px", fontSize: 12 }}>⚙</button>
+                  <button onClick={() => removeExercise(ex.id)} aria-label="種目を削除" style={{ ...btn("transparent", C.muted), padding: "4px 2px", fontSize: 12 }}>✕</button>
                 </div>
               </div>
 
@@ -1633,7 +1733,7 @@ function App() {
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 10, fontSize: 11, color: C.muted, marginBottom: 8 }}>
                   {w.startAt && <span>{fmtTime(w.startAt)}〜{w.endAt ? fmtTime(w.endAt) : ""}</span>}
                   {w.durationMin != null && <span>{w.durationMin}分</span>}
-                  {w.totalVolume != null && <span style={{ color: C.yellow }}>{Math.round(w.totalVolume).toLocaleString()}kg</span>}
+                  <span style={{ color: C.yellow }}>{Math.round(w.exercises.reduce((a, ex) => a + exVolume(ex), 0)).toLocaleString()}kg</span>
                   {w.kcal != null && <span>約{w.kcal}kcal</span>}
                 </div>
               )}
@@ -1711,6 +1811,21 @@ function App() {
             </label>
           </div>
 
+          {/* 通知音 */}
+          <div style={{ background: C.surface, borderRadius: 14, padding: 16, border: `1px solid ${C.border}`, marginBottom: 12 }}>
+            <label style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 14 }}>
+              インターバルの通知音
+              <button onClick={() => { const next = !soundOn; persist({ profile: { ...profile, soundOn: next } }); if (next) setTimeout(() => beep(1), 60); }}
+                style={{ width: 52, height: 30, borderRadius: 999, border: "none", cursor: "pointer", background: soundOn ? C.green : C.grey, position: "relative" }}>
+                <span style={{ position: "absolute", top: 3, left: soundOn ? 25 : 3, width: 24, height: 24, borderRadius: "50%", background: "#fff", transition: "left .15s" }} />
+              </button>
+            </label>
+            <p style={{ color: C.muted, fontSize: 12, margin: "10px 0 0", lineHeight: 1.6 }}>
+              インターバル中、1分・2分・3分…の経過時に音が鳴ります(経過が長いほど回数が増えます)。
+              iPhoneでは本体のサイレントスイッチがオンだと鳴りません。
+            </p>
+          </div>
+
           {/* バックアップ */}
           <div style={{ background: C.surface, borderRadius: 14, padding: 16, border: `1px solid ${C.border}`, marginBottom: 12 }}>
             <div style={{ fontSize: 14, fontWeight: 900, marginBottom: 4 }}>バックアップ</div>
@@ -1780,20 +1895,11 @@ root.render(<App />);
 </script>
 
 <script>
-  // Service Worker(オフライン起動用)
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', function () {
-      navigator.serviceWorker.register('sw.js').catch(function () { /* 失敗しても通常動作 */ });
+      navigator.serviceWorker.register('sw.js').catch(function () {});
     });
   }
-  // 読み込み失敗時のフォールバック表示
-  setTimeout(function () {
-    var boot = document.getElementById('boot');
-    if (boot && document.body.contains(boot)) {
-      var m = boot.querySelector('.msg');
-      if (m) m.textContent = '読み込みに時間がかかっています。通信環境を確認して再読み込みしてください。';
-    }
-  }, 12000);
 </script>
 
 </body>
