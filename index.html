@@ -21,12 +21,10 @@
   body {
     font-family: 'Noto Sans JP', -apple-system, BlinkMacSystemFont, sans-serif;
     -webkit-font-smoothing: antialiased;
-    padding-top: env(safe-area-inset-top);
-    padding-bottom: env(safe-area-inset-bottom);
     overscroll-behavior-y: contain;
   }
   * { -webkit-tap-highlight-color: transparent; }
-  #boot { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 70vh; gap: 14px; padding: 24px; text-align: center; }
+  #boot { padding-top: calc(24px + env(safe-area-inset-top)); display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 70vh; gap: 14px; padding: 24px; text-align: center; }
   #boot .logo { font-family: 'Barlow Condensed', sans-serif; font-weight: 800; font-size: 34px; letter-spacing: 1px; }
   #boot .plus { color: #E2453C; }
   #boot .msg { color: #8E939A; font-size: 13px; line-height: 1.7; }
@@ -1168,32 +1166,42 @@ function App() {
 
       {/* ===== 固定バー(タイマー+ボリューム) ===== */}
       {showBar && (
-        <div style={{ position: "sticky", top: 0, zIndex: 20, background: C.surface2, borderBottom: `1px solid ${C.border}`, padding: "8px 12px" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, maxWidth: 520, margin: "0 auto" }}>
-            <div style={{ textAlign: "center" }}>
+        <div style={{
+          position: "sticky", top: 0, zIndex: 20, background: C.surface2, borderBottom: `1px solid ${C.border}`,
+          padding: "8px 10px", paddingTop: "calc(8px + env(safe-area-inset-top))",
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, maxWidth: 520, margin: "0 auto" }}>
+            <div style={{ textAlign: "center", flexShrink: 0, minWidth: 46 }}>
               <div style={{ fontSize: 9, color: C.muted }}>経過</div>
-              <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: 20, lineHeight: 1 }}>{fmtClock(elapsed)}</div>
+              <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: 19, lineHeight: 1 }}>{fmtClock(elapsed)}</div>
             </div>
-            <div style={{ flex: 1, textAlign: "center", borderLeft: `1px solid ${C.border}`, borderRight: `1px solid ${C.border}` }}>
-              <div style={{ fontSize: 9, color: C.muted }}>ボリューム{compareBase && liveVolume > 0 ? `(vs ${compareBase.label})` : ""}</div>
-              <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: 20, lineHeight: 1 }}>
-                {Math.round(liveVolume).toLocaleString()}<span style={{ fontSize: 11, color: C.muted }}>kg</span>
+            <div style={{ flex: 1, minWidth: 0, textAlign: "center", borderLeft: `1px solid ${C.border}`, borderRight: `1px solid ${C.border}`, padding: "0 4px" }}>
+              <div style={{ fontSize: 9, color: C.muted, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                ボリューム{compareBase && liveVolume > 0 ? `(vs ${compareBase.label})` : ""}
+              </div>
+              <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: 19, lineHeight: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                {Math.round(liveVolume).toLocaleString()}<span style={{ fontSize: 10, color: C.muted }}>kg</span>
                 {volDelta != null && liveVolume > 0 && (
-                  <span style={{ fontSize: 11, marginLeft: 6, color: volDelta >= 0 ? C.green : C.red }}>
+                  <span style={{ fontSize: 10, marginLeft: 5, color: volDelta >= 0 ? C.green : C.red }}>
                     {volDelta >= 0 ? "▲" : "▼"}{Math.abs(Math.round(volDelta)).toLocaleString()}
                   </span>
                 )}
               </div>
             </div>
             {restStartAt != null ? (
-              <div style={{ textAlign: "center", cursor: "pointer" }} onClick={stopRest}>
-                <div style={{ fontSize: 9, color: C.yellow }}>インターバル(タップで停止)</div>
-                <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: 20, lineHeight: 1, color: C.yellow }}>
+              <div onClick={stopRest} style={{ textAlign: "center", cursor: "pointer", flexShrink: 0, minWidth: 58 }}>
+                <div style={{ fontSize: 9, color: C.yellow }}>インターバル</div>
+                <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: 19, lineHeight: 1, color: C.yellow }}>
                   {fmtClock(restElapsed)}
                 </div>
               </div>
             ) : (
-              <button onClick={startRest} style={{ ...btn(C.surface, C.muted), padding: "6px 10px", fontSize: 11 }}>インターバル<br />開始</button>
+              <button onClick={startRest} style={{
+                ...btn(C.surface, C.muted), padding: "6px 8px", fontSize: 10, lineHeight: 1.3,
+                flexShrink: 0, whiteSpace: "nowrap",
+              }}>
+                インターバル<br />開始
+              </button>
             )}
           </div>
         </div>
@@ -1203,7 +1211,7 @@ function App() {
         <div>
           <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: 32, letterSpacing: 1, lineHeight: 1 }}>
             OVERLOAD<span style={{ color: C.red }}>+</span>
-            <span style={{ fontFamily: "'Noto Sans JP', sans-serif", fontSize: 11, fontWeight: 700, color: C.green, marginLeft: 8, verticalAlign: "middle" }}>v16</span>
+            <span style={{ fontFamily: "'Noto Sans JP', sans-serif", fontSize: 11, fontWeight: 700, color: C.green, marginLeft: 8, verticalAlign: "middle" }}>v17</span>
           </div>
         </div>
         {AI_ENABLED && (
@@ -1241,14 +1249,17 @@ function App() {
               {autoMenu.map((it, i) => {
                 const p = it.prescription;
                 return (
-                  <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 8 }}>
-                    <span style={{ fontSize: 13, minWidth: 0 }}>{p.name}<span style={{ color: C.muted, fontSize: 11, marginLeft: 6 }}>{p.muscle}</span></span>
-                    <span style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-                      <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 18, fontWeight: 600 }}>
-                        {p.weight}<span style={{ fontSize: 11, color: C.muted }}>{p.bwFactor > 0 ? "kg加重" : p.isDb ? "kg片手" : "kg"}</span>{" × "}<span style={{ fontSize: 14 }}>{repsLabel(p.targetReps)}</span>
+                  <div key={i} style={{ marginBottom: 10, paddingBottom: 8, borderBottom: i < autoMenu.length - 1 ? `1px solid ${C.border}` : "none" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, marginBottom: 2 }}>
+                      <span style={{ fontSize: 13, minWidth: 0, lineHeight: 1.4 }}>
+                        {p.name}<span style={{ color: C.muted, fontSize: 11, marginLeft: 6 }}>{p.muscle}</span>
                       </span>
-                      <JudgeBadge type={it.type} />
-                    </span>
+                      <span style={{ flexShrink: 0 }}><JudgeBadge type={it.type} /></span>
+                    </div>
+                    <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 18, fontWeight: 600 }}>
+                      {p.weight}<span style={{ fontSize: 11, color: C.muted }}>{p.bwFactor > 0 ? "kg加重" : p.isDb ? "kg片手" : "kg"}</span>
+                      {" × "}<span style={{ fontSize: 15 }}>{repsLabel(p.targetReps)}</span>
+                    </div>
                   </div>
                 );
               })}
@@ -1267,23 +1278,24 @@ function App() {
 
           {today.map((ex, exIdx) => (
             <div key={ex.id} style={{ background: C.surface, borderRadius: 14, padding: 14, marginBottom: 12, border: `1px solid ${C.border}` }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, gap: 6 }}>
-                <strong style={{ fontSize: 14, lineHeight: 1.4 }}>
+              <div style={{ marginBottom: 8 }}>
+                <div style={{ fontSize: 14, fontWeight: 700, lineHeight: 1.4, marginBottom: 6 }}>
                   {ex.name}
                   {ex.muscle && <span style={{ color: C.muted, fontSize: 11, fontWeight: 400, marginLeft: 6 }}>{ex.muscle}</span>}
                   {resolveIsDb(ex.name, ex.isDb) && <span style={{ color: C.muted, fontSize: 11, marginLeft: 4 }}>片手</span>}
                   {resolveRom(ex.name, ex.rom) < 1 && <span style={{ color: C.blue, fontSize: 10, marginLeft: 4 }}>ROM×{resolveRom(ex.name, ex.rom)}</span>}
                   {todayDay && ex.muscle && !muscleMatchesDay(ex.muscle, todayDay) && <span style={{ color: C.yellow, fontSize: 11, marginLeft: 6 }}>今日の部位外</span>}
-                </strong>
-                <div style={{ display: "flex", gap: 4, flexShrink: 0, alignItems: "center" }}>
+                </div>
+                <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
                   <button onClick={() => moveExercise(ex.id, -1)} disabled={exIdx === 0} aria-label="上へ移動"
-                    style={{ ...btn(C.surface2, exIdx === 0 ? C.border : C.muted), padding: "4px 7px", fontSize: 12, cursor: exIdx === 0 ? "default" : "pointer" }}>▲</button>
+                    style={{ ...btn(C.surface2, exIdx === 0 ? C.border : C.muted), padding: "4px 8px", fontSize: 12, cursor: exIdx === 0 ? "default" : "pointer" }}>▲</button>
                   <button onClick={() => moveExercise(ex.id, 1)} disabled={exIdx === today.length - 1} aria-label="下へ移動"
-                    style={{ ...btn(C.surface2, exIdx === today.length - 1 ? C.border : C.muted), padding: "4px 7px", fontSize: 12, cursor: exIdx === today.length - 1 ? "default" : "pointer" }}>▼</button>
+                    style={{ ...btn(C.surface2, exIdx === today.length - 1 ? C.border : C.muted), padding: "4px 8px", fontSize: 12, cursor: exIdx === today.length - 1 ? "default" : "pointer" }}>▼</button>
                   {AI_ENABLED && <button onClick={() => howToDo(ex.name)} style={{ ...btn(C.surface2, C.blue), padding: "4px 8px", fontSize: 12 }}>やり方</button>}
-                  <button onClick={() => openYouTube(ex.name)} style={{ ...btn(C.surface2, C.red), padding: "4px 7px", fontSize: 12 }}>▶</button>
-                  <button onClick={() => setOpenCfg({ ...openCfg, [ex.id]: !openCfg[ex.id] })} style={{ ...btn(C.surface2, C.muted), padding: "4px 7px", fontSize: 12 }}>⚙</button>
-                  <button onClick={() => removeExercise(ex.id)} aria-label="種目を削除" style={{ ...btn("transparent", C.muted), padding: "4px 2px", fontSize: 12 }}>✕</button>
+                  <button onClick={() => openYouTube(ex.name)} aria-label="動画を検索" style={{ ...btn(C.surface2, C.red), padding: "4px 9px", fontSize: 12 }}>▶</button>
+                  <button onClick={() => setOpenCfg({ ...openCfg, [ex.id]: !openCfg[ex.id] })} style={{ ...btn(C.surface2, C.muted), padding: "4px 9px", fontSize: 12 }}>⚙</button>
+                  <div style={{ flex: 1 }} />
+                  <button onClick={() => removeExercise(ex.id)} aria-label="種目を削除" style={{ ...btn("transparent", C.muted), padding: "4px 6px", fontSize: 12 }}>✕ 削除</button>
                 </div>
               </div>
 
@@ -1740,9 +1752,15 @@ function App() {
 
               {/* 表示モード */}
               {!editing && w.exercises.map((ex, j) => (
-                <div key={j} style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 4, gap: 8 }}>
-                  <span style={{ minWidth: 0 }}>{ex.name}{ex.pain && <span style={{ color: "#FF5A4E", marginLeft: 4 }}>⚠</span>}{ex.formBroke && <span style={{ color: C.yellow, marginLeft: 4 }}>△</span>}</span>
-                  <span style={{ color: C.muted, textAlign: "right", flexShrink: 0 }}>{ex.sets.map(s => `${s.warmup ? "W:" : ""}${s.weight}×${s.reps}${s.rir != null ? `(残${s.rir})` : ""}`).join(" / ")}</span>
+                <div key={j} style={{ fontSize: 13, marginBottom: 8, paddingBottom: 6, borderBottom: j < w.exercises.length - 1 ? `1px solid ${C.border}` : "none" }}>
+                  <div style={{ marginBottom: 2, lineHeight: 1.4 }}>
+                    {ex.name}
+                    {ex.pain && <span style={{ color: "#FF5A4E", marginLeft: 4 }}>⚠</span>}
+                    {ex.formBroke && <span style={{ color: C.yellow, marginLeft: 4 }}>△</span>}
+                  </div>
+                  <div style={{ color: C.muted, fontSize: 12, lineHeight: 1.6, wordBreak: "break-word" }}>
+                    {ex.sets.map(s => `${s.warmup ? "W:" : ""}${s.weight}×${s.reps}${s.rir != null ? `(残${s.rir})` : ""}`).join(" / ")}
+                  </div>
                 </div>
               ))}
 
@@ -1878,7 +1896,7 @@ function App() {
       )}
 
       {/* タブバー */}
-      <nav style={{ position: "fixed", bottom: 0, left: 0, right: 0, maxWidth: 520, margin: "0 auto", display: "flex", background: C.surface, borderTop: `1px solid ${C.border}` }}>
+      <nav style={{ position: "fixed", bottom: 0, left: 0, right: 0, maxWidth: 520, margin: "0 auto", display: "flex", background: C.surface, borderTop: `1px solid ${C.border}`, paddingBottom: "env(safe-area-inset-bottom)" }}>
         {[["log", "記録"], ["suggest", "提案"], ["split", "分割"], ["history", "履歴"], ["settings", "設定"]].map(([k, label]) => (
           <button key={k} onClick={() => setView(k)} style={{ flex: 1, padding: "14px 0 18px", background: "none", border: "none", color: view === k ? C.red : C.muted, fontWeight: view === k ? 900 : 400, fontSize: 13, cursor: "pointer", fontFamily: "inherit", borderTop: view === k ? `2px solid ${C.red}` : "2px solid transparent" }}>{label}</button>
         ))}
