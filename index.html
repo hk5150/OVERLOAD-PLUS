@@ -487,7 +487,7 @@ function RirSelect({ value, onChange }) {
 
 // ================= アプリ本体 =================
 function App() {
-  const [view, setView] = useState("log");
+  const [view, setView] = useState("split"); // 起動時は分割タブ(今日どのセッションかを確認してから記録へ)
   const [workouts, setWorkouts] = useState([]);
   const [split, setSplit] = useState(null);
   const [profile, setProfile] = useState({ bodyweight: 70, aiMode: true, soundOn: true });
@@ -508,9 +508,13 @@ function App() {
   const [volMuscle, setVolMuscle] = useState("");
   const [openCfg, setOpenCfg] = useState({});
   const [openNote, setOpenNote] = useState({}); // 種目メモの開閉
+  const [swapEx, setSwapEx] = useState(null);   // 差し替え中の種目ID
+  const [swapSearch, setSwapSearch] = useState("");
   const [editDay, setEditDay] = useState(null);
   const [pickingSplit, setPickingSplit] = useState(false); // trueで分割選択(プリセット/新規作成)画面を表示
   const [backupMsg, setBackupMsg] = useState("");
+  const [lastBackupAt, setLastBackupAt] = useState(null); // 最後にバックアップした日時(ISO)
+  const [hideBackupNag, setHideBackupNag] = useState(false); // このセッション中は非表示
   const [editWorkout, setEditWorkout] = useState(null); // 編集中の記録 {index, draft}
   const [filterToday, setFilterToday] = useState(true);
 
@@ -541,6 +545,7 @@ function App() {
             setRecentNames(p.recentNames || []);
             setCustomExercises(p.customExercises || []);
             setExerciseNotes(p.exerciseNotes || {});
+            setLastBackupAt(p.lastBackupAt || null);
           }
         }
       } catch { /* データなし */ }
@@ -556,6 +561,7 @@ function App() {
       recentNames: patch.recentNames ?? recentNames,
       customExercises: patch.customExercises ?? customExercises,
       exerciseNotes: patch.exerciseNotes ?? exerciseNotes,
+      lastBackupAt: patch.lastBackupAt !== undefined ? patch.lastBackupAt : lastBackupAt,
     };
     if (patch.workouts !== undefined) setWorkouts(next.workouts);
     if (patch.split !== undefined) setSplit(next.split);
@@ -563,6 +569,7 @@ function App() {
     if (patch.recentNames !== undefined) setRecentNames(next.recentNames);
     if (patch.customExercises !== undefined) setCustomExercises(next.customExercises);
     if (patch.exerciseNotes !== undefined) setExerciseNotes(next.exerciseNotes);
+    if (patch.lastBackupAt !== undefined) setLastBackupAt(next.lastBackupAt);
     try { await store.set(STORAGE_KEY, JSON.stringify(next)); }
     catch { setError("保存に失敗しました。通信環境を確認してください。"); }
   };
@@ -577,6 +584,32 @@ function App() {
   // ---- 通知音(Web Audio。iOSは初回タップで解錠される) ----
   const soundOn = profile.soundOn !== false;
   const audioRef = useRef(null);
+  const firedMinRef = useRef(0); // 何分の通知まで鳴らしたか(再レンダーでも保持)
+
+  // iOSは「ユーザー操作」を経ないと音が出せない。最初のタップで無音を再生して解錠しておく。
+  useEffect(() => {
+    const unlock = () => {
+      try {
+        const Ctx = window.AudioContext || window.webkitAudioContext;
+        if (!Ctx) return;
+        if (!audioRef.current) audioRef.current = new Ctx();
+        const ctx = audioRef.current;
+        if (ctx.state === "suspended") ctx.resume();
+        // 無音を1回鳴らして解錠を確定させる
+        const osc = ctx.createOscillator(), g = ctx.createGain();
+        g.gain.setValueAtTime(0.0001, ctx.currentTime);
+        osc.connect(g); g.connect(ctx.destination);
+        osc.start(); osc.stop(ctx.currentTime + 0.01);
+      } catch { /* 無視 */ }
+    };
+    document.addEventListener("touchend", unlock, { once: true });
+    document.addEventListener("click", unlock, { once: true });
+    return () => {
+      document.removeEventListener("touchend", unlock);
+      document.removeEventListener("click", unlock);
+    };
+  }, []);
+
   const beep = (times = 1) => {
     if (!soundOn) return;
     try {
@@ -584,40 +617,49 @@ function App() {
       if (!Ctx) return;
       if (!audioRef.current) audioRef.current = new Ctx();
       const ctx = audioRef.current;
-      if (ctx.state === "suspended") ctx.resume();
-      for (let i = 0; i < times; i++) {
-        const t = ctx.currentTime + i * 0.28;
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = "sine";
-        osc.frequency.setValueAtTime(880, t);
-        gain.gain.setValueAtTime(0.0001, t);
-        gain.gain.exponentialRampToValueAtTime(0.35, t + 0.02);
-        gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
-        osc.connect(gain); gain.connect(ctx.destination);
-        osc.start(t); osc.stop(t + 0.24);
-      }
+      const play = () => {
+        for (let i = 0; i < times; i++) {
+          const t = ctx.currentTime + 0.02 + i * 0.28;
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = "sine";
+          osc.frequency.setValueAtTime(880, t);
+          gain.gain.setValueAtTime(0.0001, t);
+          gain.gain.exponentialRampToValueAtTime(0.4, t + 0.02);
+          gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
+          osc.connect(gain); gain.connect(ctx.destination);
+          osc.start(t); osc.stop(t + 0.24);
+        }
+      };
+      // 停止中なら復帰を待ってから鳴らす(待たずに鳴らすと無音になることがある)
+      if (ctx.state === "suspended") ctx.resume().then(play).catch(() => {});
+      else play();
+      if (navigator.vibrate) navigator.vibrate(times === 1 ? 200 : [150, 100, 150]);
     } catch { /* 音が出せない環境では無視 */ }
   };
 
-  // ---- インターバルタイマー(カウントアップ・自動スタート・1分ごとに通知音) ----
+  // ---- インターバルタイマー(カウントアップ・1分ごとに通知音) ----
   useEffect(() => {
-    if (restStartAt == null) return;
-    let lastMin = 0;
-    const id = setInterval(() => {
+    if (restStartAt == null) { firedMinRef.current = 0; return; }
+    const tick = () => {
       const sec = Math.floor((Date.now() - restStartAt) / 1000);
       setRestElapsed(sec);
       const min = Math.floor(sec / 60);
-      if (min > lastMin) { // 1分, 2分, 3分… の到達時に鳴らす
-        lastMin = min;
+      // 画面が止まっていて数分飛んだ場合も、最新の分だけは必ず鳴らす
+      if (min > firedMinRef.current) {
+        firedMinRef.current = min;
         beep(min === 1 ? 1 : Math.min(min, 3)); // 経過が長いほど回数を増やす
       }
-    }, 1000);
-    return () => clearInterval(id);
+    };
+    const id = setInterval(tick, 1000);
+    // 画面に戻ったとき(iOSはバックグラウンドでタイマーが止まる)に即座に補正
+    const onVisible = () => { if (document.visibilityState === "visible") tick(); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => { clearInterval(id); document.removeEventListener("visibilitychange", onVisible); };
   }, [restStartAt, soundOn]);
 
-  const startRest = () => { setRestStartAt(Date.now()); setRestElapsed(0); }; // 記録入力のたびに0から再スタート
-  const stopRest = () => { setRestStartAt(null); setRestElapsed(0); };
+  const startRest = () => { setRestStartAt(Date.now()); setRestElapsed(0); firedMinRef.current = 0; }; // 記録入力のたびに0から再スタート
+  const stopRest = () => { setRestStartAt(null); setRestElapsed(0); firedMinRef.current = 0; };
 
   // 記録開始時にセッションタイマー始動
   const ensureStarted = () => { if (!startAt) { setStartAt(Date.now()); setElapsed(0); } };
@@ -682,10 +724,13 @@ function App() {
   const muscleMatchesDay = (muscle, day) => !!day && (day.muscles.includes("全身") || muscle === "全身" || day.muscles.includes(muscle));
 
   // 今日の暫定ボリューム(記録中・ウォームアップ除外・可動域係数あり)
+  // 今日の暫定ボリューム: 「あと何回できた?」を入力したセットだけを完了とみなして集計
+  // (重量・回数を打った時点では加算せず、余力の入力=そのセット完了 とする)
+  const isDoneSet = (s) => !s.warmup && s.rir !== "" && s.rir != null;
   const liveVolume = useMemo(() => today.reduce((a, ex) => {
     const isDb = resolveIsDb(ex.name, ex.isDb);
     const rom = resolveRom(ex.name, ex.rom);
-    return a + ex.sets.filter(s => !s.warmup).reduce((b, s) => b + effWeight(num(s.weight), isDb, ex.bwFactor || 0, profile.bodyweight) * Math.round(num(s.reps)) * rom, 0);
+    return a + ex.sets.filter(isDoneSet).reduce((b, s) => b + effWeight(num(s.weight), isDb, ex.bwFactor || 0, profile.bodyweight) * Math.round(num(s.reps)) * rom, 0);
   }, 0), [today, profile.bodyweight]);
 
   // 比較基準は「同じセッション」の前回。分割中はPush同士・Pull同士で比べる(無ければ直近セッション)。
@@ -810,6 +855,20 @@ function App() {
   const removeSet = (id, i) => setToday(today.map(ex => ex.id !== id ? ex : { ...ex, sets: ex.sets.filter((_, j) => j !== i) }).filter(ex => ex.sets.length > 0));
   const removeExercise = (id) => setToday(today.filter(ex => ex.id !== id));
   // 種目の並べ替え(dir: -1=上へ, +1=下へ)
+  // 種目の差し替え(セット内容は維持したまま種目だけ変更)
+  const swapExercise = (id, newName) => {
+    const n = (newName || "").trim(); if (!n) return;
+    const cfg = lastConfig(n);
+    setToday(t => t.map(ex => ex.id !== id ? ex : {
+      ...ex,
+      name: n, muscle: cfg.muscle, bwFactor: cfg.bwFactor, isDb: cfg.isDb, rom: cfg.rom ?? 1.0,
+      repLow: cfg.repLow, repHigh: cfg.repHigh,
+      targetRirLow: cfg.targetRirLow, targetRirHigh: cfg.targetRirHigh, increment: cfg.increment,
+    }));
+    const nextRecent = [n, ...recentNames.filter(x => x !== n)].slice(0, 40);
+    persist({ recentNames: nextRecent });
+    setSwapEx(null); setSwapSearch("");
+  };
   const moveExercise = (id, dir) => setToday(t => {
     const i = t.findIndex(ex => ex.id === id);
     const j = i + dir;
@@ -963,7 +1022,7 @@ function App() {
   const clearAll = async () => {
     if (!window.confirm("すべての履歴を削除します。よろしいですか?")) return;
     try { await store.del(STORAGE_KEY); } catch { /* noop */ }
-    setWorkouts([]); setSplit(null); setResult(null); setChartExercise(""); setRecentNames([]); setCustomExercises([]); setExerciseNotes({});
+    setWorkouts([]); setSplit(null); setResult(null); setChartExercise(""); setRecentNames([]); setCustomExercises([]); setExerciseNotes({}); setLastBackupAt(null);
   };
 
   // ---- 履歴の編集・削除 ----
@@ -1065,10 +1124,13 @@ function App() {
     const payload = {
       app: "OVERLOAD+", version: 1, exportedAt: new Date().toISOString(),
       workouts, split, profile, recentNames, customExercises, exerciseNotes,
+      lastBackupAt: new Date().toISOString(),
     };
     const d = new Date();
     const stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
     downloadFile(`overload-backup-${stamp}.json`, JSON.stringify(payload, null, 2));
+    persist({ lastBackupAt: new Date().toISOString() });
+    setHideBackupNag(true);
     setBackupMsg(`バックアップを書き出しました(記録 ${workouts.length}件)。`);
   };
 
@@ -1102,6 +1164,7 @@ function App() {
         recentNames: p.recentNames || [],
         customExercises: p.customExercises || [],
         exerciseNotes: p.exerciseNotes || {},
+        lastBackupAt: new Date().toISOString(),
       };
       await persist(next);
       setBackupMsg(`復元しました(記録 ${next.workouts.length}件)。`);
@@ -1152,6 +1215,16 @@ function App() {
 
   const volDelta = compareBase ? liveVolume - compareBase.volume : null;
 
+  // ---- バックアップ推奨の判定 ----
+  // 記録が3件以上あり、①一度もバックアップしていない ②前回から30日以上経過 のいずれかで促す
+  const backupNag = useMemo(() => {
+    if (hideBackupNag || workouts.length < 3) return null;
+    if (!lastBackupAt) return { days: null, text: "まだ一度もバックアップしていません。" };
+    const days = Math.floor((Date.now() - new Date(lastBackupAt).getTime()) / 86400000);
+    if (days >= 30) return { days, text: `前回のバックアップから${days}日経過しています。` };
+    return null;
+  }, [lastBackupAt, workouts.length, hideBackupNag]);
+
   // ================= 画面 =================
   const showBar = true; // 経過・ボリューム・インターバルは常時表示
 
@@ -1177,7 +1250,7 @@ function App() {
             </div>
             <div style={{ flex: 1, minWidth: 0, textAlign: "center", borderLeft: `1px solid ${C.border}`, borderRight: `1px solid ${C.border}`, padding: "0 4px" }}>
               <div style={{ fontSize: 9, color: C.muted, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                ボリューム{compareBase && liveVolume > 0 ? `(vs ${compareBase.label})` : ""}
+                ボリューム{compareBase && liveVolume > 0 ? `(vs ${compareBase.label})` : "(余力入力後に加算)"}
               </div>
               <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: 19, lineHeight: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                 {Math.round(liveVolume).toLocaleString()}<span style={{ fontSize: 10, color: C.muted }}>kg</span>
@@ -1211,7 +1284,7 @@ function App() {
         <div>
           <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: 32, letterSpacing: 1, lineHeight: 1 }}>
             OVERLOAD<span style={{ color: C.red }}>+</span>
-            <span style={{ fontFamily: "'Noto Sans JP', sans-serif", fontSize: 11, fontWeight: 700, color: C.green, marginLeft: 8, verticalAlign: "middle" }}>v17</span>
+            <span style={{ fontFamily: "'Noto Sans JP', sans-serif", fontSize: 11, fontWeight: 700, color: C.green, marginLeft: 8, verticalAlign: "middle" }}>v19</span>
           </div>
         </div>
         {AI_ENABLED && (
@@ -1220,6 +1293,32 @@ function App() {
       </header>
 
       {error && <div style={{ margin: "0 16px 12px", padding: 12, borderRadius: 10, background: "#3A2224", color: "#F5B8B3", fontSize: 13 }}>{error}</div>}
+
+      {/* バックアップ推奨バナー */}
+      {backupNag && (
+        <div style={{
+          margin: "0 16px 12px", padding: 12, borderRadius: 10,
+          background: "#3A3222", border: `1px solid ${C.yellow}`, display: "flex", gap: 10, alignItems: "flex-start",
+        }}>
+          <span style={{ fontSize: 16, flexShrink: 0, lineHeight: 1.3 }}>💾</span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 13, color: C.text, lineHeight: 1.6, marginBottom: 8 }}>
+              {backupNag.text}<br />
+              <span style={{ color: C.muted, fontSize: 12 }}>
+                記録は端末内にのみ保存されています。念のためファイルに書き出しておきましょう。
+              </span>
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={() => { setView("settings"); }} style={{ ...btn(C.yellow, "#141517"), padding: "7px 14px", fontSize: 13 }}>
+                今すぐバックアップ
+              </button>
+              <button onClick={() => setHideBackupNag(true)} style={{ ...btn("transparent", C.muted), padding: "7px 10px", fontSize: 13 }}>
+                あとで
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ===== 記録タブ ===== */}
       {view === "log" && (
@@ -1293,11 +1392,42 @@ function App() {
                     style={{ ...btn(C.surface2, exIdx === today.length - 1 ? C.border : C.muted), padding: "4px 8px", fontSize: 12, cursor: exIdx === today.length - 1 ? "default" : "pointer" }}>▼</button>
                   {AI_ENABLED && <button onClick={() => howToDo(ex.name)} style={{ ...btn(C.surface2, C.blue), padding: "4px 8px", fontSize: 12 }}>やり方</button>}
                   <button onClick={() => openYouTube(ex.name)} aria-label="動画を検索" style={{ ...btn(C.surface2, C.red), padding: "4px 9px", fontSize: 12 }}>▶</button>
+                  <button onClick={() => { setSwapEx(swapEx === ex.id ? null : ex.id); setSwapSearch(""); }}
+                    style={{ ...btn(C.surface2, swapEx === ex.id ? C.blue : C.muted), padding: "4px 9px", fontSize: 12 }}>変更</button>
                   <button onClick={() => setOpenCfg({ ...openCfg, [ex.id]: !openCfg[ex.id] })} style={{ ...btn(C.surface2, C.muted), padding: "4px 9px", fontSize: 12 }}>⚙</button>
                   <div style={{ flex: 1 }} />
                   <button onClick={() => removeExercise(ex.id)} aria-label="種目を削除" style={{ ...btn("transparent", C.muted), padding: "4px 6px", fontSize: 12 }}>✕ 削除</button>
                 </div>
               </div>
+
+              {/* 種目の差し替え(セット内容はそのまま) */}
+              {swapEx === ex.id && (
+                <div style={{ background: C.bg, borderRadius: 10, padding: 10, marginBottom: 10, border: `1px solid ${C.blue}` }}>
+                  <div style={{ fontSize: 11, color: C.muted, marginBottom: 8 }}>
+                    別の種目に差し替えます(入力済みのセット内容はそのまま引き継がれます)。
+                  </div>
+                  <input value={swapSearch} onChange={e => setSwapSearch(e.target.value)} placeholder="種目を検索"
+                    style={{ width: "100%", background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: "8px 10px", fontSize: 13, fontFamily: "inherit", marginBottom: 8 }} />
+                  <div style={{ maxHeight: 180, overflowY: "auto" }}>
+                    {allExercises
+                      .filter(e => {
+                        const q = swapSearch.trim();
+                        if (e.n === ex.name) return false;
+                        if (q) return e.n.includes(q) || e.m.includes(q) || e.eq.includes(q);
+                        return ex.muscle ? e.m === ex.muscle : true; // 既定は同じ部位から
+                      })
+                      .slice(0, 40)
+                      .map(e => (
+                        <button key={e.n} onClick={() => swapExercise(ex.id, e.n)}
+                          style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, width: "100%", textAlign: "left", background: "transparent", border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 10px", marginBottom: 5, cursor: "pointer", color: C.text, fontSize: 13, fontFamily: "inherit" }}>
+                          <span style={{ minWidth: 0 }}>{e.n}</span>
+                          <span style={{ color: C.muted, fontSize: 11, flexShrink: 0 }}>{e.m}・{e.eq}</span>
+                        </button>
+                      ))}
+                  </div>
+                  <button onClick={() => { setSwapEx(null); setSwapSearch(""); }} style={{ ...btn("transparent", C.muted), width: "100%", fontSize: 12, padding: 6, marginTop: 2 }}>キャンセル</button>
+                </div>
+              )}
 
               {/* 推定1RM と PR(自己ベスト) */}
               {(() => {
@@ -1539,10 +1669,10 @@ function App() {
                       <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, minWidth: 0 }}>
                         <span style={{ color: C.muted, fontSize: 12, flexShrink: 0 }}>Day {i + 1}</span>
                         {editing ? <input value={d.name} onChange={e => updDay(i, { name: e.target.value })} onFocus={selectOnFocus} aria-label="Day名" style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: "4px 8px", fontSize: 14, fontFamily: "inherit", width: "100%" }} /> : <strong style={{ fontSize: 15 }}>{d.name}</strong>}
-                        {isNext && <span style={{ background: C.blue, color: "#fff", borderRadius: 999, padding: "2px 8px", fontSize: 10, fontWeight: 800, flexShrink: 0 }}>次回</span>}
+                        {isNext && <span style={{ background: C.blue, color: "#fff", borderRadius: 999, padding: "2px 8px", fontSize: 10, fontWeight: 800, flexShrink: 0 }}>今日</span>}
                       </div>
                       <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-                        {!isNext && <button onClick={() => updSplit({ cursor: i })} style={{ ...btn(C.surface2, C.muted), padding: "4px 10px", fontSize: 12 }}>次回にする</button>}
+                        {!isNext && <button onClick={() => updSplit({ cursor: i })} style={{ ...btn(C.surface2, C.muted), padding: "4px 10px", fontSize: 12 }}>今日はこれ</button>}
                         <button onClick={() => setEditDay(editing ? null : i)} style={{ ...btn(C.surface2, C.muted), padding: "4px 10px", fontSize: 12 }}>{editing ? "完了" : "編集"}</button>
                       </div>
                     </div>
@@ -1839,7 +1969,7 @@ function App() {
               </button>
             </label>
             <p style={{ color: C.muted, fontSize: 12, margin: "10px 0 0", lineHeight: 1.6 }}>
-              インターバル中、1分・2分・3分…の経過時に音が鳴ります(経過が長いほど回数が増えます)。
+              インターバル中、1分・2分・3分…の経過時に音が鳴ります(経過が長いほど回数が増えます)。アプリを開いた後、最初のタップで音が有効になります。
               iPhoneでは本体のサイレントスイッチがオンだと鳴りません。
             </p>
           </div>
