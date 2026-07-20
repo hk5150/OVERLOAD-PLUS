@@ -1,6 +1,6 @@
 // OVERLOAD+ Service Worker
 // アプリ本体とCDNライブラリをキャッシュし、オフラインでも起動できるようにする。
-const CACHE = "overload-v19";
+const CACHE = "overload-v20";
 
 // アプリ本体(更新時はここが入れ替わる)
 const APP_ASSETS = [
