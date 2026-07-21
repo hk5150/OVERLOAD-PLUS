@@ -368,9 +368,29 @@ function analyzeExercise(name, workouts) {
     repLow: latest.repLow ?? 8, repHigh: latest.repHigh ?? 12,
     rirLow: latest.targetRirLow ?? 1, rirHigh: latest.targetRirHigh ?? 2, inc: latest.increment ?? 2.5,
   };
-  // ワーキングセットのみを対象(ウォームアップは判定・ボリュームから除外)
-  const sets = (latest.sets || []).filter(s => !s.warmup);
-  if (sets.length === 0) return { type: "insufficient_data", reason: "ワーキングセットの記録がありません。" };
+  // ワーキングかつ補助なしのセットのみを判定対象に(ウォームアップ・補助ありは増量判定から除外)
+  const sets = (latest.sets || []).filter(s => !s.warmup && !s.assisted);
+  if (sets.length === 0) {
+    const working = (latest.sets || []).filter(s => !s.warmup);
+    if (working.length > 0) {
+      // 補助ありのみ → 重量・回数は据え置き(補助での伸びは増量に反映しない)
+      const db0 = dbLookup(name);
+      const inc0 = (latest.increment ?? 2.5) > 0 ? (latest.increment ?? 2.5) : 2.5;
+      const w0 = Math.max(...working.map(s => s.weight));
+      return {
+        type: "maintain", reason: "補助ありのセットのみでした。補助での伸びは増量に反映せず、同重量で自力挙上を狙います。",
+        prescription: {
+          name, muscle: latest.muscle ?? db0?.m ?? "", bwFactor: latest.bwFactor ?? db0?.bw ?? 0,
+          isDb: resolveIsDb(name, latest.isDb), rom: resolveRom(name, latest.rom),
+          weight: Math.max(0, Math.round(w0 / inc0) * inc0),
+          targetReps: working.map(s => s.reps), sets: working.length,
+          repLow: latest.repLow ?? 8, repHigh: latest.repHigh ?? 12,
+          targetRirLow: latest.targetRirLow ?? 1, targetRirHigh: latest.targetRirHigh ?? 2, increment: inc0,
+        },
+      };
+    }
+    return { type: "insufficient_data", reason: "ワーキングセットの記録がありません。" };
+  }
   const topWeight = Math.max(...sets.map(s => s.weight));
   const reps = sets.map(s => s.reps);
   const totalReps = reps.reduce((a, b) => a + b, 0);
@@ -397,7 +417,7 @@ function analyzeExercise(name, workouts) {
 
   let stall = 0;
   for (let i = sessions.length - 1; i > 0; i--) {
-    const cs = (sessions[i].sets || []).filter(s => !s.warmup), ps = (sessions[i - 1].sets || []).filter(s => !s.warmup);
+    const cs = (sessions[i].sets || []).filter(s => !s.warmup && !s.assisted), ps = (sessions[i - 1].sets || []).filter(s => !s.warmup && !s.assisted);
     if (cs.length === 0 || ps.length === 0) break;
     const curTop = Math.max(...cs.map(s => s.weight)), prevTop = Math.max(...ps.map(s => s.weight));
     const curReps = cs.reduce((a, s) => a + s.reps, 0), prevReps = ps.reduce((a, s) => a + s.reps, 0);
@@ -408,7 +428,7 @@ function analyzeExercise(name, workouts) {
     return presc("deload_candidate", topWeight * 0.9, fill(cfg.repLow), `${stall + 1}回連続で停滞${highFatigue ? "・疲労も高い" : ""}。重量を約10%下げて仕切り直し。`);
 
   if (sessions.length >= 2) {
-    const ps = (sessions[sessions.length - 2].sets || []).filter(s => !s.warmup);
+    const ps = (sessions[sessions.length - 2].sets || []).filter(s => !s.warmup && !s.assisted);
     if (ps.length > 0) {
       const prevTop = Math.max(...ps.map(s => s.weight)), prevTotal = ps.reduce((a, s) => a + s.reps, 0);
       if (topWeight >= prevTop && totalReps < prevTotal - 1)
@@ -444,6 +464,7 @@ const numInput = {
   fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 600, fontSize: 22,
 };
 const fieldLabel = { fontSize: 10, color: C.muted, textAlign: "center" };
+const adjBtn = { flex: 1, padding: "8px 0", borderRadius: 8, border: `1px solid ${C.border}`, background: C.surface2, color: C.text, fontSize: 13, fontWeight: 700, fontFamily: "inherit", cursor: "pointer" };
 const cfgInput = {
   width: 46, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8,
   padding: "5px 2px", color: C.text, textAlign: "center", fontSize: 14, fontFamily: "inherit",
@@ -460,7 +481,12 @@ const repsLabel = (arr) => {
   return uniq.length === 1 ? `${uniq[0]}回 × ${arr.length}セット` : `${arr.join("/")}回`;
 };
 // タップで全選択(既存文字を消す手間を省く)
-const selectOnFocus = (e) => e.target.select();
+const selectOnFocus = (e) => {
+  const el = e.target;
+  // iOSは即時selectだと効かないことがあるため次フレームでも選択
+  try { el.select(); } catch { /* noop */ }
+  setTimeout(() => { try { el.select(); } catch { /* noop */ } }, 0);
+};
 
 function JudgeBadge({ type }) {
   const j = JUDGE[type] || JUDGE.insufficient_data;
@@ -510,6 +536,10 @@ function App() {
   const [openNote, setOpenNote] = useState({}); // 種目メモの開閉
   const [swapEx, setSwapEx] = useState(null);   // 差し替え中の種目ID
   const [swapSearch, setSwapSearch] = useState("");
+  const [openSetKey, setOpenSetKey] = useState(null); // 展開中のセット "exId:index"
+  const [histMode, setHistMode] = useState("list"); // list | calendar
+  const [calMonth, setCalMonth] = useState(() => { const d = new Date(); return { y: d.getFullYear(), m: d.getMonth() }; });
+  const [selectedDate, setSelectedDate] = useState(null); // "YYYY-M-D"
   const [editDay, setEditDay] = useState(null);
   const [pickingSplit, setPickingSplit] = useState(false); // trueで分割選択(プリセット/新規作成)画面を表示
   const [backupMsg, setBackupMsg] = useState("");
@@ -619,22 +649,25 @@ function App() {
       const ctx = audioRef.current;
       const play = () => {
         for (let i = 0; i < times; i++) {
-          const t = ctx.currentTime + 0.02 + i * 0.28;
-          const osc = ctx.createOscillator();
-          const gain = ctx.createGain();
-          osc.type = "sine";
-          osc.frequency.setValueAtTime(880, t);
-          gain.gain.setValueAtTime(0.0001, t);
-          gain.gain.exponentialRampToValueAtTime(0.4, t + 0.02);
-          gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
-          osc.connect(gain); gain.connect(ctx.destination);
-          osc.start(t); osc.stop(t + 0.24);
+          const t = ctx.currentTime + 0.03 + i * 0.32;
+          // 基音+倍音を重ねて、小さいスピーカーでも聞こえやすくする
+          [880, 1320].forEach((freq, fi) => {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = fi === 0 ? "square" : "sine"; // 基音は矩形波でよく通る
+            osc.frequency.setValueAtTime(freq, t);
+            const peak = fi === 0 ? 0.9 : 0.4;
+            gain.gain.setValueAtTime(0.0001, t);
+            gain.gain.exponentialRampToValueAtTime(peak, t + 0.015);
+            gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.26);
+            osc.connect(gain); gain.connect(ctx.destination);
+            osc.start(t); osc.stop(t + 0.28);
+          });
         }
       };
-      // 停止中なら復帰を待ってから鳴らす(待たずに鳴らすと無音になることがある)
       if (ctx.state === "suspended") ctx.resume().then(play).catch(() => {});
       else play();
-      if (navigator.vibrate) navigator.vibrate(times === 1 ? 200 : [150, 100, 150]);
+      if (navigator.vibrate) navigator.vibrate(times === 1 ? [300] : [200, 120, 200, 120, 200]);
     } catch { /* 音が出せない環境では無視 */ }
   };
 
@@ -645,14 +678,15 @@ function App() {
       const sec = Math.floor((Date.now() - restStartAt) / 1000);
       setRestElapsed(sec);
       const min = Math.floor(sec / 60);
-      // 画面が止まっていて数分飛んだ場合も、最新の分だけは必ず鳴らす
+      // 1秒ごとの判定で分の境界を飛ばしても、未通知の分を確実に鳴らす
       if (min > firedMinRef.current) {
         firedMinRef.current = min;
         beep(min === 1 ? 1 : Math.min(min, 3)); // 経過が長いほど回数を増やす
       }
     };
-    const id = setInterval(tick, 1000);
-    // 画面に戻ったとき(iOSはバックグラウンドでタイマーが止まる)に即座に補正
+    // 500msごとに判定して1分の取りこぼしを減らす(表示は秒単位)
+    const id = setInterval(tick, 500);
+    tick();
     const onVisible = () => { if (document.visibilityState === "visible") tick(); };
     document.addEventListener("visibilitychange", onVisible);
     return () => { clearInterval(id); document.removeEventListener("visibilitychange", onVisible); };
@@ -685,6 +719,7 @@ function App() {
     const m = {};
     workouts.forEach(w => w.exercises.forEach(ex => {
       workingSets(ex).forEach(s => {
+        if (s.assisted) return; // 補助ありは自己ベストに含めない
         const eff = setEff(ex, s);
         const rm = est1RM(eff, s.reps);
         const cur = m[ex.name] || { best1RM: 0, bestWeight: 0, date: null };
@@ -696,10 +731,10 @@ function App() {
     return m;
   }, [workouts, profile.bodyweight]);
 
-  // 記録中の種目の現在の最高推定1RM(PR更新判定に使う)
+  // 記録中の種目の現在の最高推定1RM(PR更新判定に使う。補助ありは除外)
   const liveBest1RM = (ex) => {
     const isDb = resolveIsDb(ex.name, ex.isDb);
-    return ex.sets.filter(s => !s.warmup).reduce((max, s) => {
+    return ex.sets.filter(s => !s.warmup && !s.assisted).reduce((max, s) => {
       const eff = effWeight(num(s.weight), isDb, ex.bwFactor || 0, profile.bodyweight);
       return Math.max(max, est1RM(eff, Math.round(num(s.reps))));
     }, 0);
@@ -846,19 +881,70 @@ function App() {
       sets: [{ weight: w, reps: String(DEFAULT_REPS), rir: "", warmup: false }],
     }]);
     const nextRecent = [n, ...recentNames.filter(x => x !== n)].slice(0, 40);
-    persist({ recentNames: nextRecent, ...(known ? {} : { customExercises: nextCustom }) });
+    // 分割の今日のDayに種目テンプレがあり、まだ含まれていなければ追加して次回に引き継ぐ
+    let splitPatch = {};
+    if (split && todayDay) {
+      const dayIdx = split.cursor % split.days.length;
+      const day = split.days[dayIdx];
+      if (day.exercises && day.exercises.length && !day.exercises.includes(n)) {
+        const days = split.days.map((d, i) => i === dayIdx ? { ...d, exercises: [...d.exercises, n] } : d);
+        splitPatch = { split: { ...split, days } };
+      }
+    }
+    persist({ recentNames: nextRecent, ...(known ? {} : { customExercises: nextCustom }), ...splitPatch });
     setSearch(""); setCustomDraft({ muscle: "", eq: "ダンベル" });
   };
   const updEx = (id, patch) => setToday(today.map(ex => ex.id === id ? { ...ex, ...patch } : ex));
   const updateSet = (id, i, field, value) => setToday(today.map(ex => ex.id !== id ? ex : { ...ex, sets: ex.sets.map((s, j) => j === i ? { ...s, [field]: value } : s) }));
+  // 重量・回数を±で増減(空欄は0扱い、負にはしない)
+  const adjustSet = (id, i, field, delta) => setToday(today.map(ex => ex.id !== id ? ex : {
+    ...ex, sets: ex.sets.map((s, j) => {
+      if (j !== i) return s;
+      const cur = num(s[field]);
+      let v = Math.max(0, Math.round((cur + delta) * 100) / 100);
+      return { ...s, [field]: String(v) };
+    }),
+  }));
+  // このセットの重量・回数を次のセットにコピー(なければ新規セットを作ってコピー)
+  const copyToNext = (id, i) => setToday(today.map(ex => {
+    if (ex.id !== id) return ex;
+    const src = ex.sets[i];
+    const sets = [...ex.sets];
+    if (i + 1 < sets.length) {
+      sets[i + 1] = { ...sets[i + 1], weight: src.weight, reps: src.reps };
+    } else {
+      sets.push({ weight: src.weight, reps: src.reps, rir: "", warmup: !!src.warmup, ...(src.assisted ? { assisted: true } : {}) });
+    }
+    return { ...ex, sets };
+  }));
   const addSet = (id) => setToday(today.map(ex => ex.id !== id ? ex : { ...ex, sets: [...ex.sets, { ...ex.sets[ex.sets.length - 1], rir: "", warmup: false }] }));
   const removeSet = (id, i) => setToday(today.map(ex => ex.id !== id ? ex : { ...ex, sets: ex.sets.filter((_, j) => j !== i) }).filter(ex => ex.sets.length > 0));
-  const removeExercise = (id) => setToday(today.filter(ex => ex.id !== id));
+  // 分割の今日のDayに登録された種目を newName で置き換え(次回の自動メニューに反映)
+  const updateSplitDayExercise = (oldName, newName) => {
+    if (!split || !todayDay) return;
+    const dayIdx = split.cursor % split.days.length;
+    const day = split.days[dayIdx];
+    if (!day.exercises || !day.exercises.includes(oldName)) return; // 登録種目でなければ何もしない
+    const nextExercises = newName
+      ? day.exercises.map(x => x === oldName ? newName : x)
+      : day.exercises.filter(x => x !== oldName);
+    // 重複を除去
+    const deduped = [...new Set(nextExercises)];
+    const days = split.days.map((d, i) => i === dayIdx ? { ...d, exercises: deduped } : d);
+    persist({ split: { ...split, days } });
+  };
+
+  const removeExercise = (id) => {
+    const ex = today.find(e => e.id === id);
+    setToday(today.filter(e => e.id !== id));
+    if (ex) updateSplitDayExercise(ex.name, null);
+  };
   // 種目の並べ替え(dir: -1=上へ, +1=下へ)
   // 種目の差し替え(セット内容は維持したまま種目だけ変更)
   const swapExercise = (id, newName) => {
     const n = (newName || "").trim(); if (!n) return;
     const cfg = lastConfig(n);
+    const oldEx = today.find(e => e.id === id);
     setToday(t => t.map(ex => ex.id !== id ? ex : {
       ...ex,
       name: n, muscle: cfg.muscle, bwFactor: cfg.bwFactor, isDb: cfg.isDb, rom: cfg.rom ?? 1.0,
@@ -867,6 +953,7 @@ function App() {
     }));
     const nextRecent = [n, ...recentNames.filter(x => x !== n)].slice(0, 40);
     persist({ recentNames: nextRecent });
+    if (oldEx) updateSplitDayExercise(oldEx.name, n); // 分割にも反映して次回引き継ぎ
     setSwapEx(null); setSwapSearch("");
   };
   const moveExercise = (id, dir) => setToday(t => {
@@ -877,6 +964,36 @@ function App() {
     [next[i], next[j]] = [next[j], next[i]];
     return next;
   });
+
+  // ---- スーパーセット(グループ化) ----
+  // 連続する種目に同じ ssGroup を付けて連結表示する。解除はグループを外すだけ。
+  const toggleSuperset = (id) => setToday(t => {
+    const i = t.findIndex(ex => ex.id === id);
+    if (i <= 0) return t; // 先頭種目は上と結合できない
+    const cur = t[i], prev = t[i - 1];
+    const next = [...t];
+    if (cur.ssGroup && cur.ssGroup === prev.ssGroup) {
+      // すでに上と同じグループ → このセット以降を解除
+      const g = cur.ssGroup;
+      // このグループのうち i 以降を外す(i より前のグループはそのまま)
+      for (let k = i; k < next.length && next[k].ssGroup === g; k++) {
+        next[k] = { ...next[k], ssGroup: null };
+      }
+    } else {
+      // 上の種目と結合。上が既にグループならそれに乗る、なければ新規グループ
+      const g = prev.ssGroup || uid();
+      next[i - 1] = { ...prev, ssGroup: g };
+      next[i] = { ...cur, ssGroup: g };
+    }
+    return next;
+  });
+  // 記録中の種目が「同一スーパーセットグループの最後」かどうか
+  const isLastInGroup = (idx) => {
+    const ex = today[idx];
+    if (!ex?.ssGroup) return true; // 単独種目は常に「最後」扱い(=入力後にインターバル開始)
+    const nextEx = today[idx + 1];
+    return !nextEx || nextEx.ssGroup !== ex.ssGroup;
+  };
 
   // カロリー(METs×体重×時間, 目安)
   const estimateKcal = (min) => Math.round(5.0 * profile.bodyweight * (min / 60));
@@ -892,11 +1009,13 @@ function App() {
       repLow: num(ex.repLow) || 8, repHigh: num(ex.repHigh) || 12,
       targetRirLow: num(ex.targetRirLow), targetRirHigh: num(ex.targetRirHigh), increment: num(ex.increment) || 2.5,
       formBroke: !!ex.formBroke, pain: !!ex.pain,
+      ...(ex.ssGroup ? { ssGroup: ex.ssGroup } : {}),
       // 回数が未入力(0)のセットは保存しない。空セットが「1回」として履歴に残り判定を汚すのを防ぐ。
       sets: ex.sets
         .filter(s => Math.round(num(s.reps)) > 0)
         .map(s => ({
           weight: num(s.weight), reps: Math.round(num(s.reps)), warmup: !!s.warmup,
+          ...(s.assisted ? { assisted: true } : {}),
           ...(s.rir !== "" && s.rir != null ? { rir: num(s.rir) } : {}),
         })),
     })).filter(ex => ex.sets.length > 0); // 有効なセットが1つも無い種目は記録しない
@@ -1083,6 +1202,7 @@ function App() {
         .filter(s => Math.round(num(s.reps)) > 0)
         .map(s => ({
           weight: num(s.weight), reps: Math.round(num(s.reps)), warmup: !!s.warmup,
+          ...(s.assisted ? { assisted: true } : {}),
           ...(s.rir !== "" && s.rir != null ? { rir: num(s.rir) } : {}),
         })),
     })).filter(ex => ex.sets.length > 0);
@@ -1287,7 +1407,7 @@ function App() {
         <div>
           <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: 32, letterSpacing: 1, lineHeight: 1 }}>
             OVERLOAD<span style={{ color: C.red }}>+</span>
-            <span style={{ fontFamily: "'Noto Sans JP', sans-serif", fontSize: 11, fontWeight: 700, color: C.green, marginLeft: 8, verticalAlign: "middle" }}>v20</span>
+            <span style={{ fontFamily: "'Noto Sans JP', sans-serif", fontSize: 11, fontWeight: 700, color: C.green, marginLeft: 8, verticalAlign: "middle" }}>v23</span>
           </div>
         </div>
         {AI_ENABLED && (
@@ -1378,23 +1498,56 @@ function App() {
             </div>
           )}
 
-          {today.map((ex, exIdx) => (
-            <div key={ex.id} style={{ background: C.surface, borderRadius: 14, padding: 14, marginBottom: 12, border: `1px solid ${C.border}` }}>
+          {today.map((ex, exIdx) => {
+            const prevEx = today[exIdx - 1];
+            const nextEx = today[exIdx + 1];
+            const inGroup = !!ex.ssGroup;
+            const groupStart = inGroup && (!prevEx || prevEx.ssGroup !== ex.ssGroup);
+            const groupEnd = inGroup && (!nextEx || nextEx.ssGroup !== ex.ssGroup);
+            // グループ内の順番(A/B/C…)
+            let ssLetter = "";
+            if (inGroup) {
+              let n = 0;
+              for (let k = exIdx; k >= 0 && today[k].ssGroup === ex.ssGroup; k--) n++;
+              ssLetter = String.fromCharCode(64 + n); // 1→A
+            }
+            return (
+            <div key={ex.id} style={{
+              background: C.surface, padding: 14,
+              border: `1px solid ${inGroup ? C.blue : C.border}`,
+              borderTopWidth: inGroup && !groupStart ? 0 : 1,
+              borderRadius: inGroup ? (groupStart ? "14px 14px 0 0" : groupEnd ? "0 0 14px 14px" : 0) : 14,
+              marginBottom: inGroup && !groupEnd ? 0 : 12,
+            }}>
+              {groupStart && (
+                <div style={{ display: "inline-block", background: C.blue, color: "#fff", fontSize: 10, fontWeight: 800, borderRadius: 6, padding: "2px 8px", marginBottom: 8 }}>
+                  スーパーセット
+                </div>
+              )}
               <div style={{ marginBottom: 8 }}>
                 <div style={{ fontSize: 14, fontWeight: 700, lineHeight: 1.4, marginBottom: 6 }}>
+                  {inGroup && <span style={{ color: C.blue, fontWeight: 800, marginRight: 6 }}>{ssLetter}.</span>}
                   {ex.name}
                   {ex.muscle && <span style={{ color: C.muted, fontSize: 11, fontWeight: 400, marginLeft: 6 }}>{ex.muscle}</span>}
                   {resolveIsDb(ex.name, ex.isDb) && <span style={{ color: C.muted, fontSize: 11, marginLeft: 4 }}>片手</span>}
                   {resolveRom(ex.name, ex.rom) < 1 && <span style={{ color: C.blue, fontSize: 10, marginLeft: 4 }}>ROM×{resolveRom(ex.name, ex.rom)}</span>}
                   {todayDay && ex.muscle && !muscleMatchesDay(ex.muscle, todayDay) && <span style={{ color: C.yellow, fontSize: 11, marginLeft: 6 }}>今日の部位外</span>}
                 </div>
+                {exIdx > 0 && (
+                  <button onClick={() => toggleSuperset(ex.id)} style={{
+                    ...btn(inGroup && prevEx && prevEx.ssGroup === ex.ssGroup ? C.blue : C.surface2, inGroup && prevEx && prevEx.ssGroup === ex.ssGroup ? "#fff" : C.muted),
+                    padding: "4px 10px", fontSize: 11, marginBottom: 8,
+                  }}>
+                    {inGroup && prevEx && prevEx.ssGroup === ex.ssGroup ? "⛓ 上の種目とスーパーセット中(解除)" : "⛓ 上の種目とスーパーセットにする"}
+                  </button>
+                )}
                 <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
                   <button onClick={() => moveExercise(ex.id, -1)} disabled={exIdx === 0} aria-label="上へ移動"
                     style={{ ...btn(C.surface2, exIdx === 0 ? C.border : C.muted), padding: "4px 8px", fontSize: 12, cursor: exIdx === 0 ? "default" : "pointer" }}>▲</button>
                   <button onClick={() => moveExercise(ex.id, 1)} disabled={exIdx === today.length - 1} aria-label="下へ移動"
                     style={{ ...btn(C.surface2, exIdx === today.length - 1 ? C.border : C.muted), padding: "4px 8px", fontSize: 12, cursor: exIdx === today.length - 1 ? "default" : "pointer" }}>▼</button>
                   {AI_ENABLED && <button onClick={() => howToDo(ex.name)} style={{ ...btn(C.surface2, C.blue), padding: "4px 8px", fontSize: 12 }}>やり方</button>}
-                  <button onClick={() => openYouTube(ex.name)} aria-label="動画を検索" style={{ ...btn(C.surface2, C.red), padding: "4px 9px", fontSize: 12 }}>▶</button>
+                  <button onClick={() => openYouTube(ex.name)} aria-label="YouTubeでフォームを検索" style={{ ...btn(C.surface2, C.red), padding: "4px 8px", fontSize: 11, fontWeight: 700 }}>YouTube</button>
                   <button onClick={() => { setSwapEx(swapEx === ex.id ? null : ex.id); setSwapSearch(""); }}
                     style={{ ...btn(C.surface2, swapEx === ex.id ? C.blue : C.muted), padding: "4px 9px", fontSize: 12 }}>変更</button>
                   <button onClick={() => setOpenCfg({ ...openCfg, [ex.id]: !openCfg[ex.id] })} style={{ ...btn(C.surface2, C.muted), padding: "4px 9px", fontSize: 12 }}>⚙</button>
@@ -1485,29 +1638,62 @@ function App() {
 
               {ex.sets.map((s, i) => {
                 const wsIndex = ex.sets.slice(0, i + 1).filter(x => !x.warmup).length; // ワーキング通し番号
+                const setKey = `${ex.id}:${i}`;
+                const expanded = openSetKey === setKey;
+                const inc = num(ex.increment) || 2.5;
                 return (
-                <div key={i} style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
-                  <button onClick={() => updateSet(ex.id, i, "warmup", !s.warmup)}
-                    title="タップでウォームアップ/ワーキング切替"
-                    aria-label={`セット${i + 1}を${s.warmup ? "ワーキング" : "ウォームアップ"}にする`}
-                    style={{ width: 22, height: 22, borderRadius: 6, flexShrink: 0, cursor: "pointer", fontSize: 11, fontWeight: 800, fontFamily: "inherit",
-                      border: `1px solid ${s.warmup ? C.yellow : C.border}`, background: s.warmup ? C.yellow : "transparent", color: s.warmup ? "#141517" : C.muted }}>
-                    {s.warmup ? "W" : wsIndex}
-                  </button>
-                  <input type="number" inputMode="decimal" step="0.5" min="0" value={s.weight} placeholder="0" onFocus={selectOnFocus}
-                    onBlur={() => { if (num(s.weight) > 0 || num(s.reps) > 0) startRest(); }}
-                    onChange={e => updateSet(ex.id, i, "weight", e.target.value)} aria-label={`セット${i + 1}の重量`} style={{ ...numInput, flex: 1.3, opacity: s.warmup ? 0.6 : 1 }} />
-                  <input type="number" inputMode="numeric" step="1" min="1" value={s.reps} placeholder="0" onFocus={selectOnFocus}
-                    onBlur={() => { if (num(s.weight) > 0 || num(s.reps) > 0) startRest(); }}
-                    onChange={e => updateSet(ex.id, i, "reps", e.target.value)} aria-label={`セット${i + 1}の回数`} style={{ ...numInput, flex: 1, opacity: s.warmup ? 0.6 : 1 }} />
-                  <div style={{ flex: 2.4, opacity: s.warmup ? 0.35 : 1, pointerEvents: s.warmup ? "none" : "auto" }}>
-                    <RirSelect value={s.rir === "" ? null : num(s.rir)} onChange={v => { updateSet(ex.id, i, "rir", v === "" ? "" : v); if (v !== "") startRest(); }} />
+                <div key={i} style={{ marginBottom: 8, background: expanded ? C.bg : "transparent", borderRadius: 10, padding: expanded ? 8 : 0 }}>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                    <button onClick={() => updateSet(ex.id, i, "warmup", !s.warmup)}
+                      title="タップでウォームアップ/ワーキング切替"
+                      aria-label={`セット${i + 1}を${s.warmup ? "ワーキング" : "ウォームアップ"}にする`}
+                      style={{ width: 22, height: 22, borderRadius: 6, flexShrink: 0, cursor: "pointer", fontSize: 11, fontWeight: 800, fontFamily: "inherit",
+                        border: `1px solid ${s.warmup ? C.yellow : C.border}`, background: s.warmup ? C.yellow : "transparent", color: s.warmup ? "#141517" : C.muted }}>
+                      {s.warmup ? "W" : wsIndex}
+                    </button>
+                    <input type="number" inputMode="decimal" step="0.5" min="0" value={s.weight} placeholder="0" onFocus={selectOnFocus}
+                      onBlur={() => { if ((num(s.weight) > 0 || num(s.reps) > 0) && isLastInGroup(exIdx)) startRest(); }}
+                      onChange={e => updateSet(ex.id, i, "weight", e.target.value)} aria-label={`セット${i + 1}の重量`} style={{ ...numInput, flex: 1.3, opacity: s.warmup ? 0.6 : 1 }} />
+                    <input type="number" inputMode="numeric" step="1" min="1" value={s.reps} placeholder="0" onFocus={selectOnFocus}
+                      onBlur={() => { if ((num(s.weight) > 0 || num(s.reps) > 0) && isLastInGroup(exIdx)) startRest(); }}
+                      onChange={e => updateSet(ex.id, i, "reps", e.target.value)} aria-label={`セット${i + 1}の回数`} style={{ ...numInput, flex: 1, opacity: s.warmup ? 0.6 : 1 }} />
+                    <div style={{ flex: 2.4, opacity: s.warmup ? 0.35 : 1, pointerEvents: s.warmup ? "none" : "auto" }}>
+                      <RirSelect value={s.rir === "" ? null : num(s.rir)} onChange={v => { updateSet(ex.id, i, "rir", v === "" ? "" : v); if (v !== "" && isLastInGroup(exIdx)) startRest(); }} />
+                    </div>
+                    <button onClick={() => setOpenSetKey(expanded ? null : setKey)} aria-label="このセットの調整"
+                      style={{ width: 26, height: 26, borderRadius: 8, border: `1px solid ${expanded ? C.blue : C.border}`, background: expanded ? C.blue : C.surface2, color: expanded ? "#fff" : C.muted, fontSize: 13, cursor: "pointer", flexShrink: 0 }}>±</button>
                   </div>
-                  <button onClick={() => removeSet(ex.id, i)} aria-label="セットを削除" style={{ width: 26, height: 26, borderRadius: 8, border: `1px solid ${C.border}`, background: C.surface2, color: C.muted, fontSize: 12, cursor: "pointer", flexShrink: 0 }}>✕</button>
+
+                  {expanded && (
+                    <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 8 }}>
+                      {/* 重量の±(increment単位) */}
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <span style={{ fontSize: 11, color: C.muted, width: 40, flexShrink: 0 }}>重量</span>
+                        <button onClick={() => adjustSet(ex.id, i, "weight", -inc)} style={adjBtn}>-{inc}</button>
+                        <button onClick={() => adjustSet(ex.id, i, "weight", -inc * 2)} style={adjBtn}>-{inc * 2}</button>
+                        <button onClick={() => adjustSet(ex.id, i, "weight", inc * 2)} style={adjBtn}>+{inc * 2}</button>
+                        <button onClick={() => adjustSet(ex.id, i, "weight", inc)} style={adjBtn}>+{inc}</button>
+                      </div>
+                      {/* 回数の± */}
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <span style={{ fontSize: 11, color: C.muted, width: 40, flexShrink: 0 }}>回数</span>
+                        <button onClick={() => adjustSet(ex.id, i, "reps", -1)} style={adjBtn}>-1</button>
+                        <button onClick={() => adjustSet(ex.id, i, "reps", 1)} style={adjBtn}>+1</button>
+                        <div style={{ flex: 1 }} />
+                        <button onClick={() => copyToNext(ex.id, i)} style={{ ...adjBtn, flex: "none", padding: "6px 12px", color: C.blue, borderColor: C.blue }}>次のセットにコピー</button>
+                      </div>
+                      {/* 補助あり(1RM・PRに反映しない) */}
+                      <button onClick={() => updateSet(ex.id, i, "assisted", !s.assisted)}
+                        style={{ ...btn(s.assisted ? C.blue : C.surface2, s.assisted ? "#fff" : C.muted), padding: "7px 0", fontSize: 12, border: `1px solid ${s.assisted ? C.blue : C.border}` }}>
+                        {s.assisted ? "✓ 補助あり(1RM・PR・増量判定に反映しない)" : "補助ありにする"}
+                      </button>
+                      <button onClick={() => removeSet(ex.id, i)} style={{ ...btn("transparent", "#FF5A4E"), padding: "4px 0", fontSize: 12 }}>このセットを削除</button>
+                    </div>
+                  )}
                 </div>
                 );
               })}
-              <div style={{ fontSize: 10, color: C.muted, marginBottom: 8 }}>※ 左の番号をタップするとウォームアップ(W)になり、判定・ボリュームから除外されます。</div>
+              <div style={{ fontSize: 10, color: C.muted, marginBottom: 8 }}>※ 左の番号タップでウォームアップ(W)。「±」で重量・回数の微調整・コピー・補助設定ができます。</div>
 
               <button onClick={() => { addSet(ex.id); }} style={{ ...btn(C.surface2, C.text), width: "100%", padding: 10, fontSize: 13, marginBottom: 8 }}>＋ セットを追加</button>
 
@@ -1544,7 +1730,8 @@ function App() {
                 </div>
               ) : null}
             </div>
-          ))}
+            );
+          })}
 
           {/* 種目選択 */}
           <div style={{ background: C.surface, borderRadius: 14, padding: 14, border: `1px solid ${C.border}` }}>
@@ -1838,10 +2025,73 @@ function App() {
             </div>
           )}
 
-          <h2 style={{ fontSize: 16, fontWeight: 900, margin: "8px 0 12px" }}>履歴 <span style={{ color: C.muted, fontWeight: 400, fontSize: 13 }}>{workouts.length}回</span></h2>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: "8px 0 12px" }}>
+            <h2 style={{ fontSize: 16, fontWeight: 900, margin: 0 }}>履歴 <span style={{ color: C.muted, fontWeight: 400, fontSize: 13 }}>{workouts.length}回</span></h2>
+            <div style={{ display: "flex", gap: 6 }}>
+              <button onClick={() => { setHistMode("list"); setSelectedDate(null); }} style={chip(histMode === "list")}>リスト</button>
+              <button onClick={() => setHistMode("calendar")} style={chip(histMode === "calendar")}>カレンダー</button>
+            </div>
+          </div>
+
+          {/* カレンダー */}
+          {histMode === "calendar" && (() => {
+            const trainedDates = new Set(workouts.map(w => { const d = new Date(w.date); return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`; }));
+            const first = new Date(calMonth.y, calMonth.m, 1);
+            const startDow = first.getDay();
+            const daysInMonth = new Date(calMonth.y, calMonth.m + 1, 0).getDate();
+            const cells = [];
+            for (let i = 0; i < startDow; i++) cells.push(null);
+            for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+            const prevMonth = () => setCalMonth(c => c.m === 0 ? { y: c.y - 1, m: 11 } : { y: c.y, m: c.m - 1 });
+            const nextMonth = () => setCalMonth(c => c.m === 11 ? { y: c.y + 1, m: 0 } : { y: c.y, m: c.m + 1 });
+            const today = new Date();
+            return (
+              <div style={{ background: C.surface, borderRadius: 14, padding: 14, border: `1px solid ${C.border}`, marginBottom: 12 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                  <button onClick={prevMonth} style={{ ...btn(C.surface2, C.text), padding: "6px 12px", fontSize: 14 }}>‹</button>
+                  <div style={{ fontWeight: 900, fontSize: 15 }}>{calMonth.y}年{calMonth.m + 1}月</div>
+                  <button onClick={nextMonth} style={{ ...btn(C.surface2, C.text), padding: "6px 12px", fontSize: 14 }}>›</button>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4 }}>
+                  {["日", "月", "火", "水", "木", "金", "土"].map((d, i) => (
+                    <div key={d} style={{ textAlign: "center", fontSize: 10, color: i === 0 ? C.red : i === 6 ? C.blue : C.muted, paddingBottom: 4 }}>{d}</div>
+                  ))}
+                  {cells.map((d, i) => {
+                    if (d === null) return <div key={`e${i}`} />;
+                    const key = `${calMonth.y}-${calMonth.m}-${d}`;
+                    const trained = trainedDates.has(key);
+                    const isToday = today.getFullYear() === calMonth.y && today.getMonth() === calMonth.m && today.getDate() === d;
+                    const isSel = selectedDate === key;
+                    return (
+                      <button key={key} onClick={() => setSelectedDate(isSel ? null : key)}
+                        style={{
+                          aspectRatio: "1", borderRadius: 8, border: isToday ? `1px solid ${C.muted}` : "1px solid transparent",
+                          background: isSel ? C.blue : trained ? "rgba(226,69,60,0.18)" : "transparent",
+                          color: isSel ? "#fff" : C.text, fontSize: 13, fontFamily: "inherit", cursor: "pointer",
+                          display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 2,
+                        }}>
+                        {d}
+                        {trained && <span style={{ width: 5, height: 5, borderRadius: "50%", background: isSel ? "#fff" : C.red }} />}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div style={{ fontSize: 11, color: C.muted, marginTop: 10, textAlign: "center" }}>
+                  {selectedDate ? "日付をもう一度タップで解除" : "赤い点=トレーニング日。タップでその日の記録を表示"}
+                </div>
+              </div>
+            );
+          })()}
+
           {!loaded && <div style={{ color: C.muted, fontSize: 14 }}>読み込み中…</div>}
           {loaded && workouts.length === 0 && <div style={{ border: `1px dashed ${C.border}`, borderRadius: 14, padding: 20, color: C.muted, fontSize: 14, textAlign: "center" }}>まだ記録がありません。</div>}
-          {[...workouts].map((w, revIdx) => ({ w, idx: revIdx })).reverse().map(({ w, idx }) => {
+          {[...workouts].map((w, revIdx) => ({ w, idx: revIdx })).reverse()
+            .filter(({ w }) => {
+              if (!(histMode === "calendar" && selectedDate)) return true;
+              const d = new Date(w.date);
+              return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}` === selectedDate;
+            })
+            .map(({ w, idx }) => {
             const editing = editWorkout && editWorkout.index === idx;
             const d = editing ? editWorkout.draft : w;
             return (
@@ -1884,18 +2134,24 @@ function App() {
               )}
 
               {/* 表示モード */}
-              {!editing && w.exercises.map((ex, j) => (
+              {!editing && w.exercises.map((ex, j) => {
+                const prevE = w.exercises[j - 1];
+                const ssStart = ex.ssGroup && (!prevE || prevE.ssGroup !== ex.ssGroup);
+                return (
                 <div key={j} style={{ fontSize: 13, marginBottom: 8, paddingBottom: 6, borderBottom: j < w.exercises.length - 1 ? `1px solid ${C.border}` : "none" }}>
                   <div style={{ marginBottom: 2, lineHeight: 1.4 }}>
+                    {ssStart && <span style={{ background: C.blue, color: "#fff", fontSize: 9, fontWeight: 800, borderRadius: 4, padding: "1px 6px", marginRight: 6 }}>SS</span>}
+                    {ex.ssGroup && !ssStart && <span style={{ color: C.blue, marginRight: 6 }}>┗</span>}
                     {ex.name}
                     {ex.pain && <span style={{ color: "#FF5A4E", marginLeft: 4 }}>⚠</span>}
                     {ex.formBroke && <span style={{ color: C.yellow, marginLeft: 4 }}>△</span>}
                   </div>
                   <div style={{ color: C.muted, fontSize: 12, lineHeight: 1.6, wordBreak: "break-word" }}>
-                    {ex.sets.map(s => `${s.warmup ? "W:" : ""}${s.weight}×${s.reps}${s.rir != null ? `(残${s.rir})` : ""}`).join(" / ")}
+                    {ex.sets.map(s => `${s.warmup ? "W:" : ""}${s.assisted ? "補:" : ""}${s.weight}×${s.reps}${s.rir != null ? `(残${s.rir})` : ""}`).join(" / ")}
                   </div>
                 </div>
-              ))}
+                );
+              })}
 
               {/* 編集モード */}
               {editing && (
