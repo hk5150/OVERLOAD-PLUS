@@ -493,6 +493,76 @@ function JudgeBadge({ type }) {
   return <span style={{ background: j.color, color: "#fff", borderRadius: 999, padding: "3px 11px", fontSize: 12, fontWeight: 800, whiteSpace: "nowrap" }}>{j.label}</span>;
 }
 
+// 初回ガイドのビジュアル(絵文字ではなくSVG線画)
+function GuideArt({ kind }) {
+  const R = C.red, Y = C.yellow, B = C.blue, G = C.green, L = C.text, M = C.muted, BR = C.border;
+  const wrap = (children) => (
+    <svg viewBox="0 0 200 150" width="200" height="150" style={{ maxWidth: "68%", height: "auto" }} fill="none" xmlns="http://www.w3.org/2000/svg">
+      {children}
+    </svg>
+  );
+  if (kind === "hero") {
+    // バーベル + 上向き矢印(オーバーロード)
+    return wrap(<>
+      <circle cx="100" cy="75" r="60" stroke={BR} strokeWidth="1.5" strokeDasharray="4 5" opacity="0.6" />
+      {/* シャフト */}
+      <rect x="45" y="88" width="110" height="7" rx="3.5" fill={L} />
+      {/* プレート左右(赤) */}
+      <rect x="38" y="72" width="12" height="39" rx="3" fill={R} />
+      <rect x="150" y="72" width="12" height="39" rx="3" fill={R} />
+      {/* 内側プレート(黄) */}
+      <rect x="54" y="80" width="8" height="23" rx="2" fill={Y} />
+      <rect x="138" y="80" width="8" height="23" rx="2" fill={Y} />
+      {/* 上向き矢印 */}
+      <path d="M100 62 L100 24" stroke={G} strokeWidth="5" strokeLinecap="round" />
+      <path d="M86 38 L100 22 L114 38" stroke={G} strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
+    </>);
+  }
+  if (kind === "split") {
+    // 3日分のカード(分割)
+    return wrap(<>
+      {[0, 1, 2].map((i) => (
+        <g key={i}>
+          <rect x={20 + i * 58} y={38 + i * 6} width="48" height="74" rx="8" fill={C.surface} stroke={i === 0 ? R : BR} strokeWidth={i === 0 ? "2" : "1.5"} />
+          <rect x={28 + i * 58} y={48 + i * 6} width="24" height="5" rx="2.5" fill={[R, B, Y][i]} />
+          <rect x={28 + i * 58} y={60 + i * 6} width="32" height="4" rx="2" fill={M} />
+          <rect x={28 + i * 58} y={70 + i * 6} width="28" height="4" rx="2" fill={M} />
+          <rect x={28 + i * 58} y={80 + i * 6} width="30" height="4" rx="2" fill={M} />
+        </g>
+      ))}
+      <path d="M150 30 a10 10 0 1 1 -3 -7" stroke={G} strokeWidth="3" strokeLinecap="round" />
+      <path d="M147 16 l3 7 l-8 1" stroke={G} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+    </>);
+  }
+  if (kind === "record") {
+    // 記録カード + チェック
+    return wrap(<>
+      <rect x="36" y="26" width="128" height="98" rx="10" fill={C.surface} stroke={BR} strokeWidth="1.5" />
+      <rect x="50" y="40" width="52" height="7" rx="3.5" fill={L} />
+      {[0, 1, 2].map((i) => (
+        <g key={i}>
+          <circle cx="56" cy={64 + i * 20} r="6" fill="none" stroke={i < 2 ? G : M} strokeWidth="2" />
+          {i < 2 && <path d={`M53 ${64 + i * 20} l2.5 2.5 l4 -5`} stroke={G} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />}
+          <rect x="70" y={60 + i * 20} width="34" height="7" rx="3.5" fill={i < 2 ? L : M} opacity={i < 2 ? 1 : 0.5} />
+          <rect x="112" y={60 + i * 20} width="18" height="7" rx="3.5" fill={Y} opacity={i < 2 ? 1 : 0.4} />
+          <rect x="138" y={60 + i * 20} width="14" height="7" rx="3.5" fill={B} opacity={i < 2 ? 1 : 0.4} />
+        </g>
+      ))}
+    </>);
+  }
+  // progress: 折れ線グラフ(右肩上がり)
+  return wrap(<>
+    <line x1="34" y1="118" x2="168" y2="118" stroke={BR} strokeWidth="1.5" />
+    <line x1="34" y1="26" x2="34" y2="118" stroke={BR} strokeWidth="1.5" />
+    <path d="M40 104 L72 92 L104 70 L136 52 L162 34" stroke={R} strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+    {[[40, 104], [72, 92], [104, 70], [136, 52], [162, 34]].map(([x, y], i) => (
+      <circle key={i} cx={x} cy={y} r="5" fill={i === 4 ? Y : R} />
+    ))}
+    {/* PRバッジ */}
+    <circle cx="162" cy="34" r="12" fill="none" stroke={Y} strokeWidth="2" opacity="0.8" />
+  </>);
+}
+
 function RirSelect({ value, onChange }) {
   return (
     <div style={{ display: "flex", gap: 3 }}>
@@ -529,6 +599,8 @@ function App() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [loaded, setLoaded] = useState(false);
+  const [guideSeen, setGuideSeen] = useState(false); // 初回ガイドを見たか
+  const [guideStep, setGuideStep] = useState(0);      // ガイドの現在ページ
   const [chartExercise, setChartExercise] = useState("");
   const [volMode, setVolMode] = useState("total"); // total | muscle
   const [volMuscle, setVolMuscle] = useState("");
@@ -576,6 +648,7 @@ function App() {
             setCustomExercises(p.customExercises || []);
             setExerciseNotes(p.exerciseNotes || {});
             setLastBackupAt(p.lastBackupAt || null);
+            if (p.guideSeen) setGuideSeen(true);
           }
         }
       } catch { /* データなし */ }
@@ -592,6 +665,7 @@ function App() {
       customExercises: patch.customExercises ?? customExercises,
       exerciseNotes: patch.exerciseNotes ?? exerciseNotes,
       lastBackupAt: patch.lastBackupAt !== undefined ? patch.lastBackupAt : lastBackupAt,
+      guideSeen: patch.guideSeen !== undefined ? patch.guideSeen : guideSeen,
     };
     if (patch.workouts !== undefined) setWorkouts(next.workouts);
     if (patch.split !== undefined) setSplit(next.split);
@@ -600,6 +674,7 @@ function App() {
     if (patch.customExercises !== undefined) setCustomExercises(next.customExercises);
     if (patch.exerciseNotes !== undefined) setExerciseNotes(next.exerciseNotes);
     if (patch.lastBackupAt !== undefined) setLastBackupAt(next.lastBackupAt);
+    if (patch.guideSeen !== undefined) setGuideSeen(next.guideSeen);
     try { await store.set(STORAGE_KEY, JSON.stringify(next)); }
     catch { setError("保存に失敗しました。通信環境を確認してください。"); }
   };
@@ -1357,6 +1432,66 @@ function App() {
         input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; }
       `}</style>
 
+      {/* ===== 初回ガイド ===== */}
+      {loaded && !guideSeen && (() => {
+        const steps = [
+          {
+            art: "hero", title: "OVERLOAD+ へようこそ",
+            lead: "「次に何をやるか」を自動で決めてくれる、筋トレ記録アプリです。",
+            body: "多くのアプリは記録するだけ。OVERLOAD+ は前回の結果から、次回の重量・回数をルールで計算して提案します。判定はAIではなく決定論的なルールなので、毎回ブレません。",
+          },
+          {
+            art: "split", title: "① 分割を決める",
+            lead: "「分割」タブで、あなたのトレーニング分割を作ります。",
+            body: "全身・上下・PPL・5分割のプリセットから選ぶか、ゼロから作成。各日にやる種目を登録しておくと、その日のメニューが自動で組まれます。保存するたびに次の日へ自動で進みます。",
+          },
+          {
+            art: "record", title: "② 記録する",
+            lead: "「記録」タブで、重量・回数・「あと何回できた?」を入力。",
+            body: "セットの「±」で微調整やコピー、補助ありの指定もできます。ウォームアップは番号タップでW化。連続する種目はスーパーセットにまとめられます。休憩は入力後に自動でタイマーが動き、1分ごとに通知音が鳴ります。",
+          },
+          {
+            art: "progress", title: "③ 次回は自動で提案",
+            lead: "次にその日を開くと、調整済みのメニューが出ます。",
+            body: "全セットで目標回数に届けば増量、届かなければ回数を増やす、停滞すればデロード——といったルールで処方。推定1RM・PRも自動で記録されます。\n\n⚠️ データは端末内だけに保存されます。設定タブから定期的にバックアップを書き出してください。",
+          },
+        ];
+        const step = steps[guideStep];
+        const last = guideStep === steps.length - 1;
+        const finish = () => { persist({ guideSeen: true }); setGuideStep(0); setView("split"); };
+        return (
+          <div style={{ position: "fixed", inset: 0, zIndex: 100, background: "rgba(10,11,12,0.96)", display: "flex", flexDirection: "column", padding: "calc(24px + env(safe-area-inset-top)) 24px calc(24px + env(safe-area-inset-bottom))", overflowY: "auto" }}>
+            <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", maxWidth: 460, width: "100%", margin: "0 auto" }}>
+              <div style={{ display: "flex", justifyContent: "center", marginBottom: 24 }}>
+                <div style={{
+                  width: 168, height: 168, borderRadius: 28, background: C.surface,
+                  border: `1px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "center",
+                  boxShadow: "0 12px 40px rgba(0,0,0,0.45)",
+                }}>
+                  <GuideArt kind={step.art} />
+                </div>
+              </div>
+              <h2 style={{ fontSize: 24, fontWeight: 900, textAlign: "center", margin: "0 0 14px", lineHeight: 1.35 }}>{step.title}</h2>
+              <p style={{ fontSize: 16, color: C.text, textAlign: "center", lineHeight: 1.7, margin: "0 0 14px", fontWeight: 700 }}>{step.lead}</p>
+              <p style={{ fontSize: 14, color: C.muted, lineHeight: 1.9, margin: 0, whiteSpace: "pre-wrap" }}>{step.body}</p>
+            </div>
+            <div style={{ maxWidth: 460, width: "100%", margin: "0 auto" }}>
+              <div style={{ display: "flex", justifyContent: "center", gap: 8, margin: "24px 0" }}>
+                {steps.map((_, i) => (
+                  <div key={i} style={{ width: i === guideStep ? 22 : 8, height: 8, borderRadius: 999, background: i === guideStep ? C.red : C.border, transition: "width .2s" }} />
+                ))}
+              </div>
+              <button onClick={() => last ? finish() : setGuideStep(guideStep + 1)} style={{ ...btn(C.red), width: "100%", padding: 16, fontSize: 16 }}>
+                {last ? "はじめる" : "次へ"}
+              </button>
+              <button onClick={finish} style={{ ...btn("transparent", C.muted), width: "100%", padding: 12, fontSize: 13, marginTop: 6 }}>
+                {last ? "" : "スキップ"}
+              </button>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* ===== 固定バー(タイマー+ボリューム) ===== */}
       {showBar && (
         <div style={{
@@ -1407,7 +1542,7 @@ function App() {
         <div>
           <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: 32, letterSpacing: 1, lineHeight: 1 }}>
             OVERLOAD<span style={{ color: C.red }}>+</span>
-            <span style={{ fontFamily: "'Noto Sans JP', sans-serif", fontSize: 11, fontWeight: 700, color: C.green, marginLeft: 8, verticalAlign: "middle" }}>v23</span>
+            <span style={{ fontFamily: "'Noto Sans JP', sans-serif", fontSize: 11, fontWeight: 700, color: C.green, marginLeft: 8, verticalAlign: "middle" }}>v28</span>
           </div>
         </div>
         {AI_ENABLED && (
@@ -1787,44 +1922,6 @@ function App() {
       )}
 
       {/* ===== 提案タブ ===== */}
-      {view === "suggest" && (
-        <div style={{ padding: "0 16px" }}>
-          <h2 style={{ fontSize: 16, fontWeight: 900, margin: "8px 0 4px" }}>次回メニュー</h2>
-          <p style={{ color: C.muted, fontSize: 12, margin: "0 0 12px" }}>重量・回数はルールエンジンが決定します。</p>
-          {workouts.length === 0 ? (
-            <div style={{ border: `1px dashed ${C.border}`, borderRadius: 14, padding: 20, color: C.muted, fontSize: 14, textAlign: "center" }}>まず1回分のトレーニングを記録すると、次回メニューを判定できます。</div>
-          ) : (
-            <>
-              {split && <button onClick={() => setFilterToday(!filterToday)} style={{ ...chip(filterToday), marginBottom: 10 }}>{filterToday ? "✓ " : ""}今日のセッション({todayDay.name})の種目に絞る</button>}
-              <button onClick={generate} style={{ ...btn(C.blue), width: "100%", padding: 16, fontSize: 16 }}>次回メニューを判定する</button>
-              {result && (
-                <div style={{ marginTop: 14 }}>
-                  {(result.advice || aiLoading) && AI_ENABLED && (
-                    <div style={{ background: C.surface, borderLeft: `4px solid ${C.yellow}`, borderRadius: 10, padding: 14, fontSize: 14, marginBottom: 14, lineHeight: 1.7, color: result.advice ? C.text : C.muted }}>{result.advice || "AIが総括を作成中…"}</div>
-                  )}
-                  {result.items.map((it, i) => {
-                    const p = it.prescription;
-                    return (
-                      <div key={i} style={{ background: C.surface, borderRadius: 14, padding: 14, marginBottom: 10, border: `1px solid ${C.border}` }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
-                          <strong style={{ fontSize: 14, lineHeight: 1.4 }}>{p.name}{p.muscle && <span style={{ color: C.muted, fontSize: 11, fontWeight: 400, marginLeft: 6 }}>{p.muscle}</span>}</strong>
-                          <JudgeBadge type={it.type} />
-                        </div>
-                        <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 26, fontWeight: 600, margin: "8px 0 4px" }}>
-                          {p.weight}<span style={{ fontSize: 13, color: C.muted }}>{p.bwFactor > 0 ? "kg加重" : p.isDb ? "kg片手" : "kg"}</span>{" × "}<span style={{ fontSize: 20 }}>{repsLabel(p.targetReps)}</span>
-                        </div>
-                        <div style={{ color: C.muted, fontSize: 12, lineHeight: 1.6 }}>{it.reason}</div>
-                      </div>
-                    );
-                  })}
-                  <button onClick={loadPrescription} style={{ ...btn(C.red), width: "100%", padding: 16, fontSize: 16, marginTop: 6 }}>このメニューを今日の記録に読み込む</button>
-                </div>
-              )}
-            </>
-          )}
-        </div>
-      )}
-
       {/* ===== 分割タブ ===== */}
       {view === "split" && (
         <div style={{ padding: "0 16px" }}>
@@ -2211,6 +2308,12 @@ function App() {
       {view === "settings" && (
         <div style={{ padding: "0 16px" }}>
           <h2 style={{ fontSize: 16, fontWeight: 900, margin: "8px 0 12px" }}>設定</h2>
+
+          <button onClick={() => { setGuideStep(0); setGuideSeen(false); }}
+            style={{ ...btn(C.surface2, C.text), width: "100%", padding: 14, fontSize: 14, marginBottom: 12, border: `1px solid ${C.border}` }}>
+            📖 使い方ガイドをもう一度見る
+          </button>
+
           <div style={{ background: C.surface, borderRadius: 14, padding: 16, border: `1px solid ${C.border}`, marginBottom: 12 }}>
             <label style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 14 }}>
               体重(自重換算・カロリー計算に使用)
@@ -2286,7 +2389,7 @@ function App() {
 
       {/* タブバー */}
       <nav style={{ position: "fixed", bottom: 0, left: 0, right: 0, maxWidth: 520, margin: "0 auto", display: "flex", background: C.surface, borderTop: `1px solid ${C.border}`, paddingBottom: "env(safe-area-inset-bottom)" }}>
-        {[["log", "記録"], ["suggest", "提案"], ["split", "分割"], ["history", "履歴"], ["settings", "設定"]].map(([k, label]) => (
+        {[["log", "記録"], ["split", "分割"], ["history", "履歴"], ["settings", "設定"]].map(([k, label]) => (
           <button key={k} onClick={() => setView(k)} style={{ flex: 1, padding: "14px 0 18px", background: "none", border: "none", color: view === k ? C.red : C.muted, fontWeight: view === k ? 900 : 400, fontSize: 13, cursor: "pointer", fontFamily: "inherit", borderTop: view === k ? `2px solid ${C.red}` : "2px solid transparent" }}>{label}</button>
         ))}
       </nav>
