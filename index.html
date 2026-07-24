@@ -125,6 +125,7 @@ const C = {
 };
 
 const STORAGE_KEY = "workout-log-v1";
+const DRAFT_KEY = "workout-draft-v1"; // 入力途中の記録(アプリが落ちても復元できるように)
 // 保存: window.storage(この環境)優先、失敗時はブラウザのlocalStorageに退避。どちらも例外を握り潰して落ちないようにする。
 const store = {
   async get(key) {
@@ -483,9 +484,16 @@ const repsLabel = (arr) => {
 // タップで全選択(既存文字を消す手間を省く)
 const selectOnFocus = (e) => {
   const el = e.target;
-  // iOSは即時selectだと効かないことがあるため次フレームでも選択
-  try { el.select(); } catch { /* noop */ }
-  setTimeout(() => { try { el.select(); } catch { /* noop */ } }, 0);
+  const sel = () => {
+    try {
+      el.select();
+      // iOSはselect()だけだと効かないことがあるため範囲指定も行う
+      if (el.setSelectionRange) el.setSelectionRange(0, (el.value || "").length);
+    } catch { /* noop */ }
+  };
+  sel();
+  setTimeout(sel, 0);
+  setTimeout(sel, 50);
 };
 
 function JudgeBadge({ type }) {
@@ -586,7 +594,7 @@ function App() {
   const [view, setView] = useState("split"); // 起動時は分割タブ(今日どのセッションかを確認してから記録へ)
   const [workouts, setWorkouts] = useState([]);
   const [split, setSplit] = useState(null);
-  const [profile, setProfile] = useState({ bodyweight: 70, aiMode: true, soundOn: true });
+  const [profile, setProfile] = useState({ bodyweight: 70, aiMode: true, soundOn: true, defRepLow: 8, defRepHigh: 12, defIncrement: 2.5 });
   const [recentNames, setRecentNames] = useState([]); // 選択履歴順
   const [customExercises, setCustomExercises] = useState([]); // 永続保存するカスタム種目 [{n,m,eq,t,db,bw}]
   const [exerciseNotes, setExerciseNotes] = useState({}); // 種目ごとの固定メモ {種目名: "メモ"}
@@ -609,6 +617,7 @@ function App() {
   const [swapEx, setSwapEx] = useState(null);   // 差し替え中の種目ID
   const [swapSearch, setSwapSearch] = useState("");
   const [openSetKey, setOpenSetKey] = useState(null); // 展開中のセット "exId:index"
+  const [openHist, setOpenHist] = useState({});       // 種目カードの履歴パネル開閉
   const [histMode, setHistMode] = useState("list"); // list | calendar
   const [calMonth, setCalMonth] = useState(() => { const d = new Date(); return { y: d.getFullYear(), m: d.getMonth() }; });
   const [selectedDate, setSelectedDate] = useState(null); // "YYYY-M-D"
@@ -628,6 +637,42 @@ function App() {
 
   // AIモーダル
   const [aiModal, setAiModal] = useState(null); // {title, body, loading}
+  const [draftRestored, setDraftRestored] = useState(false); // 復元した旨の通知
+
+  // ---- 入力途中の記録を自動保存 ----
+  // 他アプリに切り替えてブラウザが破棄されても、記録が消えないようにする。
+  useEffect(() => {
+    if (!loaded) return; // 初期読み込み前は書かない
+    (async () => {
+      try {
+        if (today.length === 0 && !startAt) {
+          await store.del(DRAFT_KEY); // 記録がなければ下書きも消す
+        } else {
+          await store.set(DRAFT_KEY, JSON.stringify({
+            today, startAt, restStartAt, savedAt: Date.now(),
+          }));
+        }
+      } catch { /* 保存できなくても操作は続行 */ }
+    })();
+  }, [today, startAt, restStartAt, loaded]);
+
+  // 画面を離れる直前にも保存(iOSでのバックグラウンド破棄対策)
+  useEffect(() => {
+    const flush = () => {
+      if (today.length === 0 && !startAt) return;
+      try {
+        // 同期的に書けるlocalStorageへ直接退避
+        localStorage.setItem(DRAFT_KEY, JSON.stringify({ today, startAt, restStartAt, savedAt: Date.now() }));
+      } catch { /* noop */ }
+    };
+    const onHide = () => { if (document.visibilityState === "hidden") flush(); };
+    document.addEventListener("visibilitychange", onHide);
+    window.addEventListener("pagehide", flush);
+    return () => {
+      document.removeEventListener("visibilitychange", onHide);
+      window.removeEventListener("pagehide", flush);
+    };
+  }, [today, startAt, restStartAt]);
 
   // ---- 読み込み ----
   useEffect(() => {
@@ -643,7 +688,8 @@ function App() {
           else {
             setWorkouts(migW(p.workouts));
             setSplit(migSplit(p.split));
-            setProfile({ bodyweight: p.profile?.bodyweight ?? 70, aiMode: false, soundOn: p.profile?.soundOn ?? true });
+            setProfile({ bodyweight: p.profile?.bodyweight ?? 70, aiMode: false, soundOn: p.profile?.soundOn ?? true,
+              defRepLow: p.profile?.defRepLow ?? 8, defRepHigh: p.profile?.defRepHigh ?? 12, defIncrement: p.profile?.defIncrement ?? 2.5 });
             setRecentNames(p.recentNames || []);
             setCustomExercises(p.customExercises || []);
             setExerciseNotes(p.exerciseNotes || {});
@@ -652,6 +698,25 @@ function App() {
           }
         }
       } catch { /* データなし */ }
+
+      // 入力途中の記録を復元(24時間以内のものだけ)
+      try {
+        const d = await store.get(DRAFT_KEY);
+        if (d?.value) {
+          const draft = JSON.parse(d.value);
+          const fresh = draft.savedAt && (Date.now() - draft.savedAt) < 24 * 3600 * 1000;
+          if (fresh && Array.isArray(draft.today) && draft.today.length > 0) {
+            setToday(draft.today);
+            if (draft.startAt) setStartAt(draft.startAt);
+            if (draft.restStartAt) setRestStartAt(draft.restStartAt);
+            setDraftRestored(true);
+            setView("log"); // 記録の続きから始められるように記録タブへ
+          } else if (!fresh) {
+            await store.del(DRAFT_KEY); // 古い下書きは破棄
+          }
+        }
+      } catch { /* 下書きなし */ }
+
       setLoaded(true);
     })();
   }, []);
@@ -795,6 +860,7 @@ function App() {
     workouts.forEach(w => w.exercises.forEach(ex => {
       workingSets(ex).forEach(s => {
         if (s.assisted) return; // 補助ありは自己ベストに含めない
+        if (!s.reps || s.reps < 1) return; // 実際に挙げていないセットは対象外
         const eff = setEff(ex, s);
         const rm = est1RM(eff, s.reps);
         const cur = m[ex.name] || { best1RM: 0, bestWeight: 0, date: null };
@@ -813,6 +879,24 @@ function App() {
       const eff = effWeight(num(s.weight), isDb, ex.bwFactor || 0, profile.bodyweight);
       return Math.max(max, est1RM(eff, Math.round(num(s.reps))));
     }, 0);
+  };
+  // 記録中の種目の最大重量(実際に挙げた重量。回数1以上のセットのみ)
+  const liveMaxWeight = (ex) => {
+    const isDb = resolveIsDb(ex.name, ex.isDb);
+    return ex.sets.filter(s => !s.warmup && !s.assisted && Math.round(num(s.reps)) > 0).reduce((max, s) => {
+      return Math.max(max, effWeight(num(s.weight), isDb, ex.bwFactor || 0, profile.bodyweight));
+    }, 0);
+  };
+
+  // 種目の過去履歴(新しい順)。記録画面で前回までの内容を参照するのに使う
+  const exerciseHistory = (name, limit = 5) => {
+    const out = [];
+    for (let i = workouts.length - 1; i >= 0 && out.length < limit; i--) {
+      const w = workouts[i];
+      const ex = w.exercises.find(e => e.name === name);
+      if (ex) out.push({ date: w.date, session: w.session, ex, volume: exVolume(ex) });
+    }
+    return out;
   };
 
   // 直近7日 部位別 セット数+ボリューム
@@ -884,9 +968,9 @@ function App() {
     }
     const db = findExercise(name);
     return {
-      repLow: 8, repHigh: 12,
+      repLow: num(profile.defRepLow) || 8, repHigh: num(profile.defRepHigh) || 12,
       targetRirLow: db ? (db.t === "C" ? 1 : 0) : 1, targetRirHigh: db ? (db.t === "C" ? 3 : 2) : 2,
-      increment: 2.5, muscle: db?.m ?? customDraft.muscle ?? "", bwFactor: db?.bw ?? 0,
+      increment: num(profile.defIncrement) || 2.5, muscle: db?.m ?? customDraft.muscle ?? "", bwFactor: db?.bw ?? 0,
       isDb: db ? !!db.db : (customDraft.eq === "ダンベル"), rom: db?.rom ?? 1.0,
       lastWeight: null,
     };
@@ -1111,6 +1195,8 @@ function App() {
     if (AI_ENABLED) endCoachComment(entry);
     setToday([]); setSaving(false); setResult(null);
     setStartAt(null); setElapsed(0); stopRest();
+    setDraftRestored(false);
+    try { await store.del(DRAFT_KEY); localStorage.removeItem(DRAFT_KEY); } catch { /* noop */ }
     setView("history");
   };
 
@@ -1215,7 +1301,7 @@ function App() {
 
   const clearAll = async () => {
     if (!window.confirm("すべての履歴を削除します。よろしいですか?")) return;
-    try { await store.del(STORAGE_KEY); } catch { /* noop */ }
+    try { await store.del(STORAGE_KEY); await store.del(DRAFT_KEY); localStorage.removeItem(DRAFT_KEY); } catch { /* noop */ }
     setWorkouts([]); setSplit(null); setResult(null); setChartExercise(""); setRecentNames([]); setCustomExercises([]); setExerciseNotes({}); setLastBackupAt(null);
   };
 
@@ -1355,7 +1441,8 @@ function App() {
       const next = {
         workouts: migW(ws),
         split: p.split ? { ...p.split, days: p.split.days.map(d => ({ ...d, muscles: [...new Set((d.muscles || []).map(normMuscle))] })) } : null,
-        profile: { bodyweight: p.profile?.bodyweight ?? 70, aiMode: false, soundOn: p.profile?.soundOn ?? true },
+        profile: { bodyweight: p.profile?.bodyweight ?? 70, aiMode: false, soundOn: p.profile?.soundOn ?? true,
+          defRepLow: p.profile?.defRepLow ?? 8, defRepHigh: p.profile?.defRepHigh ?? 12, defIncrement: p.profile?.defIncrement ?? 2.5 },
         recentNames: p.recentNames || [],
         customExercises: p.customExercises || [],
         exerciseNotes: p.exerciseNotes || {},
@@ -1542,7 +1629,7 @@ function App() {
         <div>
           <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: 32, letterSpacing: 1, lineHeight: 1 }}>
             OVERLOAD<span style={{ color: C.red }}>+</span>
-            <span style={{ fontFamily: "'Noto Sans JP', sans-serif", fontSize: 11, fontWeight: 700, color: C.green, marginLeft: 8, verticalAlign: "middle" }}>v28</span>
+            <span style={{ fontFamily: "'Noto Sans JP', sans-serif", fontSize: 11, fontWeight: 700, color: C.green, marginLeft: 8, verticalAlign: "middle" }}>v34</span>
           </div>
         </div>
         {AI_ENABLED && (
@@ -1551,6 +1638,26 @@ function App() {
       </header>
 
       {error && <div style={{ margin: "0 16px 12px", padding: 12, borderRadius: 10, background: "#3A2224", color: "#F5B8B3", fontSize: 13 }}>{error}</div>}
+
+      {/* 入力途中の記録を復元した通知 */}
+      {draftRestored && today.length > 0 && (
+        <div style={{ margin: "0 16px 12px", padding: 12, borderRadius: 10, background: "#1E3226", border: `1px solid ${C.green}`, display: "flex", gap: 10, alignItems: "flex-start" }}>
+          <span style={{ fontSize: 15, flexShrink: 0 }}>💾</span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 13, color: "#A8E6BC", lineHeight: 1.6, marginBottom: 8 }}>
+              入力途中の記録を復元しました。続きから記録できます。
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={() => setDraftRestored(false)} style={{ ...btn(C.green, "#fff"), padding: "6px 14px", fontSize: 12 }}>OK</button>
+              <button onClick={async () => {
+                if (!window.confirm("復元した記録を破棄して、最初からやり直しますか?")) return;
+                setToday([]); setStartAt(null); setElapsed(0); stopRest(); setDraftRestored(false);
+                try { await store.del(DRAFT_KEY); localStorage.removeItem(DRAFT_KEY); } catch { /* noop */ }
+              }} style={{ ...btn("transparent", C.muted), padding: "6px 10px", fontSize: 12 }}>破棄する</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* バックアップ推奨バナー */}
       {backupNag && (
@@ -1685,6 +1792,8 @@ function App() {
                   <button onClick={() => openYouTube(ex.name)} aria-label="YouTubeでフォームを検索" style={{ ...btn(C.surface2, C.red), padding: "4px 8px", fontSize: 11, fontWeight: 700 }}>YouTube</button>
                   <button onClick={() => { setSwapEx(swapEx === ex.id ? null : ex.id); setSwapSearch(""); }}
                     style={{ ...btn(C.surface2, swapEx === ex.id ? C.blue : C.muted), padding: "4px 9px", fontSize: 12 }}>変更</button>
+                  <button onClick={() => setOpenHist({ ...openHist, [ex.id]: !openHist[ex.id] })}
+                    style={{ ...btn(C.surface2, openHist[ex.id] ? C.blue : C.muted), padding: "4px 9px", fontSize: 12 }}>履歴</button>
                   <button onClick={() => setOpenCfg({ ...openCfg, [ex.id]: !openCfg[ex.id] })} style={{ ...btn(C.surface2, C.muted), padding: "4px 9px", fontSize: 12 }}>⚙</button>
                   <div style={{ flex: 1 }} />
                   <button onClick={() => removeExercise(ex.id)} aria-label="種目を削除" style={{ ...btn("transparent", C.muted), padding: "4px 6px", fontSize: 12 }}>✕ 削除</button>
@@ -1723,41 +1832,91 @@ function App() {
               {/* 推定1RM と PR(自己ベスト) */}
               {(() => {
                 const pr = prMap[ex.name];
-                const live = liveBest1RM(ex);
-                const best = pr?.best1RM || 0;
-                const isPR = live > 0 && live > best + 0.01;
-                if (live === 0 && best === 0) return null;
+                const live1RM = liveBest1RM(ex);            // 今日の推定1RM
+                const liveW = liveMaxWeight(ex);            // 今日の最大重量(実挙上)
+                const bestW = pr?.bestWeight || 0;          // 自己ベスト = 実際に挙げた最大重量
+                const best1RM = pr?.best1RM || 0;           // 推定1RMのベスト
+                const isPRw = liveW > 0 && liveW > bestW + 0.01;      // 重量の自己ベスト更新
+                const isPR1RM = live1RM > 0 && live1RM > best1RM + 0.01; // 推定1RMの自己ベスト更新
+                if (live1RM === 0 && bestW === 0) return null;
+                const unit = ex.bwFactor > 0 ? "kg(体重込)" : resolveIsDb(ex.name, ex.isDb) ? "kg(両手計)" : "kg";
                 return (
-                  <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", background: C.bg, borderRadius: 8, padding: "6px 10px", marginBottom: 10 }}>
-                    {live > 0 && (
-                      <span style={{ fontSize: 11, color: C.muted }}>
-                        推定1RM <strong style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 16, color: isPR ? C.green : C.text, marginLeft: 2 }}>{live.toFixed(1)}</strong>kg
-                      </span>
+                  <div style={{ background: C.bg, borderRadius: 8, padding: "7px 10px", marginBottom: 10 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                      {bestW > 0 && (
+                        <span style={{ fontSize: 11, color: C.muted }}>
+                          PR(最大重量) <strong style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 17, color: isPRw ? C.green : C.yellow, marginLeft: 2 }}>{(isPRw ? liveW : bestW).toFixed(1)}</strong>{unit}
+                        </span>
+                      )}
+                      {live1RM > 0 && (
+                        <span style={{ fontSize: 11, color: C.muted }}>
+                          今日の推定1RM <strong style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 15, color: isPR1RM ? C.green : C.text, marginLeft: 2 }}>{live1RM.toFixed(1)}</strong>kg
+                        </span>
+                      )}
+                    </div>
+
+                    {/* 更新バッジ(重量PR / 推定1RM PR) */}
+                    {(isPRw || isPR1RM) && (
+                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
+                        {isPRw && (
+                          <span style={{ background: C.green, color: "#fff", borderRadius: 999, padding: "3px 11px", fontSize: 11, fontWeight: 800 }}>
+                            🏆 重量PR更新 +{(liveW - bestW).toFixed(1)}kg
+                          </span>
+                        )}
+                        {isPR1RM && (
+                          <span style={{ background: C.yellow, color: "#141517", borderRadius: 999, padding: "3px 11px", fontSize: 11, fontWeight: 800 }}>
+                            ⚡ 推定1RM更新 +{(live1RM - best1RM).toFixed(1)}kg
+                          </span>
+                        )}
+                      </div>
                     )}
-                    {best > 0 && (
-                      <span style={{ fontSize: 11, color: C.muted }}>
-                        PR <strong style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 16, color: C.yellow, marginLeft: 2 }}>{best.toFixed(1)}</strong>kg
-                      </span>
+
+                    {best1RM > 0 && (
+                      <div style={{ fontSize: 10, color: C.muted, marginTop: 4 }}>
+                        推定1RMベスト {best1RM.toFixed(1)}kg{isPR1RM ? " → 更新中!" : "(重量×回数からの推定値)"}
+                      </div>
                     )}
-                    {isPR && (
-                      <span style={{ background: C.green, color: "#fff", borderRadius: 999, padding: "2px 10px", fontSize: 11, fontWeight: 800 }}>
-                        🏆 PR更新 +{(live - best).toFixed(1)}kg
-                      </span>
-                    )}
+                  </div>
+                );
+              })()}
+
+              {/* この種目の過去履歴 */}
+              {openHist[ex.id] && (() => {
+                const hist = exerciseHistory(ex.name, 5);
+                return (
+                  <div style={{ background: C.bg, borderRadius: 10, padding: 10, marginBottom: 10, border: `1px solid ${C.blue}` }}>
+                    <div style={{ fontSize: 11, color: C.muted, marginBottom: 8 }}>
+                      {ex.name} の直近{hist.length > 0 ? hist.length : ""}回の記録
+                    </div>
+                    {hist.length === 0 ? (
+                      <div style={{ fontSize: 12, color: C.muted, textAlign: "center", padding: "8px 0" }}>この種目の過去記録はまだありません。</div>
+                    ) : hist.map((h, hi) => (
+                      <div key={hi} style={{ marginBottom: 8, paddingBottom: 6, borderBottom: hi < hist.length - 1 ? `1px solid ${C.border}` : "none" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, marginBottom: 2 }}>
+                          <span style={{ fontSize: 12, fontWeight: 700, color: hi === 0 ? C.text : C.muted }}>
+                            {fmtDate(h.date)}{hi === 0 && <span style={{ color: C.blue, fontSize: 10, marginLeft: 6 }}>前回</span>}
+                          </span>
+                          <span style={{ fontSize: 11, color: C.yellow, flexShrink: 0 }}>{Math.round(h.volume).toLocaleString()}kg</span>
+                        </div>
+                        <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.6, wordBreak: "break-word" }}>
+                          {h.ex.sets.map(s => `${s.warmup ? "W:" : ""}${s.assisted ? "補:" : ""}${s.weight}×${s.reps}${s.rir != null ? `(残${s.rir})` : ""}`).join(" / ")}
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 );
               })()}
 
               {openCfg[ex.id] && (
                 <div style={{ background: C.bg, borderRadius: 10, padding: 10, marginBottom: 10, display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center" }}>
-                  <label style={{ fontSize: 12, color: C.muted }}>回数範囲 <input type="number" value={ex.repLow} style={cfgInput} onFocus={selectOnFocus} onChange={e => updEx(ex.id, { repLow: e.target.value })} /><span style={{ margin: "0 4px" }}>–</span><input type="number" value={ex.repHigh} style={cfgInput} onFocus={selectOnFocus} onChange={e => updEx(ex.id, { repHigh: e.target.value })} /></label>
-                  <label style={{ fontSize: 12, color: C.muted }}>目標(あと)回 <input type="number" value={ex.targetRirLow} style={cfgInput} onFocus={selectOnFocus} onChange={e => updEx(ex.id, { targetRirLow: e.target.value })} /><span style={{ margin: "0 4px" }}>–</span><input type="number" value={ex.targetRirHigh} style={cfgInput} onFocus={selectOnFocus} onChange={e => updEx(ex.id, { targetRirHigh: e.target.value })} /></label>
-                  <label style={{ fontSize: 12, color: C.muted }}>増加幅 <input type="number" step="0.5" value={ex.increment} style={cfgInput} onFocus={selectOnFocus} onChange={e => updEx(ex.id, { increment: e.target.value })} />kg</label>
+                  <label style={{ fontSize: 12, color: C.muted }}>回数範囲 <input type="text" inputMode="decimal" value={ex.repLow} style={cfgInput} onFocus={selectOnFocus} onChange={e => updEx(ex.id, { repLow: e.target.value })} /><span style={{ margin: "0 4px" }}>–</span><input type="text" inputMode="decimal" value={ex.repHigh} style={cfgInput} onFocus={selectOnFocus} onChange={e => updEx(ex.id, { repHigh: e.target.value })} /></label>
+                  <label style={{ fontSize: 12, color: C.muted }}>目標(あと)回 <input type="text" inputMode="decimal" value={ex.targetRirLow} style={cfgInput} onFocus={selectOnFocus} onChange={e => updEx(ex.id, { targetRirLow: e.target.value })} /><span style={{ margin: "0 4px" }}>–</span><input type="text" inputMode="decimal" value={ex.targetRirHigh} style={cfgInput} onFocus={selectOnFocus} onChange={e => updEx(ex.id, { targetRirHigh: e.target.value })} /></label>
+                  <label style={{ fontSize: 12, color: C.muted }}>増加幅 <input type="text" inputMode="decimal" step="0.5" value={ex.increment} style={cfgInput} onFocus={selectOnFocus} onChange={e => updEx(ex.id, { increment: e.target.value })} />kg</label>
                   <label style={{ fontSize: 12, color: C.muted }}>部位 <select value={ex.muscle} onChange={e => updEx(ex.id, { muscle: e.target.value })} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: "5px 6px", fontSize: 13, fontFamily: "inherit" }}><option value="">未設定</option>{MUSCLES.map(m => <option key={m} value={m}>{m}</option>)}</select></label>
                   <label style={{ fontSize: 12, color: C.muted, display: "flex", alignItems: "center", gap: 4 }}><input type="checkbox" checked={ex.bwFactor > 0} onChange={e => updEx(ex.id, { bwFactor: e.target.checked ? 0.7 : 0 })} />自重(体重換算)</label>
-                  {ex.bwFactor > 0 && <label style={{ fontSize: 12, color: C.muted }}>体重係数 <input type="number" step="0.05" value={ex.bwFactor} style={cfgInput} onFocus={selectOnFocus} onChange={e => updEx(ex.id, { bwFactor: num(e.target.value) })} /></label>}
+                  {ex.bwFactor > 0 && <label style={{ fontSize: 12, color: C.muted }}>体重係数 <input type="text" inputMode="decimal" step="0.05" value={ex.bwFactor} style={cfgInput} onFocus={selectOnFocus} onChange={e => updEx(ex.id, { bwFactor: num(e.target.value) })} /></label>}
                   <label style={{ fontSize: 12, color: C.muted }}>
-                    可動域係数 <input type="number" step="0.1" min="0.1" max="1" value={ex.rom ?? 1} style={cfgInput} onFocus={selectOnFocus} onChange={e => updEx(ex.id, { rom: num(e.target.value) || 1 })} />
+                    可動域係数 <input type="text" inputMode="decimal" step="0.1" min="0.1" max="1" value={ex.rom ?? 1} style={cfgInput} onFocus={selectOnFocus} onChange={e => updEx(ex.id, { rom: num(e.target.value) || 1 })} />
                     <span style={{ fontSize: 10, marginLeft: 4 }}>(集計ボリュームのみ)</span>
                   </label>
                 </div>
@@ -1786,10 +1945,10 @@ function App() {
                         border: `1px solid ${s.warmup ? C.yellow : C.border}`, background: s.warmup ? C.yellow : "transparent", color: s.warmup ? "#141517" : C.muted }}>
                       {s.warmup ? "W" : wsIndex}
                     </button>
-                    <input type="number" inputMode="decimal" step="0.5" min="0" value={s.weight} placeholder="0" onFocus={selectOnFocus}
+                    <input type="text" inputMode="decimal" step="0.5" min="0" value={s.weight} placeholder="0" onFocus={selectOnFocus}
                       onBlur={() => { if ((num(s.weight) > 0 || num(s.reps) > 0) && isLastInGroup(exIdx)) startRest(); }}
                       onChange={e => updateSet(ex.id, i, "weight", e.target.value)} aria-label={`セット${i + 1}の重量`} style={{ ...numInput, flex: 1.3, opacity: s.warmup ? 0.6 : 1 }} />
-                    <input type="number" inputMode="numeric" step="1" min="1" value={s.reps} placeholder="0" onFocus={selectOnFocus}
+                    <input type="text" inputMode="numeric" step="1" min="1" value={s.reps} placeholder="0" onFocus={selectOnFocus}
                       onBlur={() => { if ((num(s.weight) > 0 || num(s.reps) > 0) && isLastInGroup(exIdx)) startRest(); }}
                       onChange={e => updateSet(ex.id, i, "reps", e.target.value)} aria-label={`セット${i + 1}の回数`} style={{ ...numInput, flex: 1, opacity: s.warmup ? 0.6 : 1 }} />
                     <div style={{ flex: 2.4, opacity: s.warmup ? 0.35 : 1, pointerEvents: s.warmup ? "none" : "auto" }}>
@@ -2098,30 +2257,6 @@ function App() {
             </>
           )}
 
-          {/* PR(自己ベスト)一覧 */}
-          {Object.keys(prMap).length > 0 && (
-            <div style={{ background: C.surface, borderRadius: 14, padding: 14, border: `1px solid ${C.border}`, marginBottom: 16 }}>
-              <h2 style={{ fontSize: 14, fontWeight: 900, margin: "0 0 4px" }}>🏆 PR(自己ベスト)</h2>
-              <p style={{ color: C.muted, fontSize: 11, margin: "0 0 10px" }}>推定1RM = 重量×(1+回数/30)。高回数ほど誤差が出るため目安です。</p>
-              <div style={{ display: "flex", fontSize: 10, color: C.muted, marginBottom: 6 }}>
-                <span style={{ flex: 1 }}>種目</span>
-                <span style={{ width: 76, textAlign: "right" }}>推定1RM</span>
-                <span style={{ width: 68, textAlign: "right" }}>最大重量</span>
-              </div>
-              {Object.entries(prMap).sort((a, b) => b[1].best1RM - a[1].best1RM).map(([name, pr]) => (
-                <div key={name} style={{ display: "flex", alignItems: "center", fontSize: 13, marginBottom: 6 }}>
-                  <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</span>
-                  <span style={{ width: 76, textAlign: "right", fontFamily: "'Barlow Condensed', sans-serif", fontSize: 17, fontWeight: 600, color: C.yellow }}>
-                    {pr.best1RM.toFixed(1)}<span style={{ fontSize: 10, color: C.muted }}>kg</span>
-                  </span>
-                  <span style={{ width: 68, textAlign: "right", fontFamily: "'Barlow Condensed', sans-serif", fontSize: 15, color: C.muted }}>
-                    {pr.bestWeight.toFixed(1)}<span style={{ fontSize: 10 }}>kg</span>
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: "8px 0 12px" }}>
             <h2 style={{ fontSize: 16, fontWeight: 900, margin: 0 }}>履歴 <span style={{ color: C.muted, fontWeight: 400, fontSize: 13 }}>{workouts.length}回</span></h2>
             <div style={{ display: "flex", gap: 6 }}>
@@ -2277,13 +2412,13 @@ function App() {
                               border: `1px solid ${s.warmup ? C.yellow : C.border}`, background: s.warmup ? C.yellow : "transparent", color: s.warmup ? "#141517" : C.muted }}>
                             {s.warmup ? "W" : setIdx + 1}
                           </button>
-                          <input type="number" inputMode="decimal" step="0.5" min="0" value={s.weight} onFocus={selectOnFocus}
+                          <input type="text" inputMode="decimal" step="0.5" min="0" value={s.weight} onFocus={selectOnFocus}
                             onChange={e => editSet(exIdx, setIdx, "weight", e.target.value)} aria-label="重量"
                             style={{ ...numInput, flex: 1.3, fontSize: 18, padding: "7px 2px" }} />
-                          <input type="number" inputMode="numeric" step="1" min="0" value={s.reps} onFocus={selectOnFocus}
+                          <input type="text" inputMode="numeric" step="1" min="0" value={s.reps} onFocus={selectOnFocus}
                             onChange={e => editSet(exIdx, setIdx, "reps", e.target.value)} aria-label="回数"
                             style={{ ...numInput, flex: 1, fontSize: 18, padding: "7px 2px" }} />
-                          <input type="number" inputMode="numeric" step="1" min="0" max="4" value={s.rir} placeholder="–" onFocus={selectOnFocus}
+                          <input type="text" inputMode="numeric" step="1" min="0" max="4" value={s.rir} placeholder="–" onFocus={selectOnFocus}
                             onChange={e => editSet(exIdx, setIdx, "rir", e.target.value)} aria-label="余力"
                             style={{ ...numInput, flex: 1, fontSize: 18, padding: "7px 2px", color: C.yellow }} />
                           <button onClick={() => editRemoveSet(exIdx, setIdx)} aria-label="セットを削除"
@@ -2300,6 +2435,33 @@ function App() {
             </div>
             );
           })}
+          {/* PR(自己ベスト)一覧 */}
+          {Object.keys(prMap).length > 0 && (
+            <div style={{ background: C.surface, borderRadius: 14, padding: 14, border: `1px solid ${C.border}`, marginBottom: 16 }}>
+              <h2 style={{ fontSize: 14, fontWeight: 900, margin: "0 0 4px" }}>🏆 PR(自己ベスト)</h2>
+              <p style={{ color: C.muted, fontSize: 11, margin: "0 0 10px", lineHeight: 1.6 }}>
+                PR=実際に挙げた最大重量。推定1RMは重量×(1+回数/30)による参考値です。
+                ダンベル種目は両手合計、自重種目は体重を含む実効重量で表示します。
+              </p>
+              <div style={{ display: "flex", fontSize: 10, color: C.muted, marginBottom: 6 }}>
+                <span style={{ flex: 1 }}>種目</span>
+                <span style={{ width: 76, textAlign: "right" }}>PR(最大重量)</span>
+                <span style={{ width: 68, textAlign: "right" }}>推定1RM</span>
+              </div>
+              {Object.entries(prMap).sort((a, b) => b[1].bestWeight - a[1].bestWeight).map(([name, pr]) => (
+                <div key={name} style={{ display: "flex", alignItems: "center", fontSize: 13, marginBottom: 6 }}>
+                  <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</span>
+                  <span style={{ width: 76, textAlign: "right", fontFamily: "'Barlow Condensed', sans-serif", fontSize: 17, fontWeight: 600, color: C.yellow }}>
+                    {pr.bestWeight.toFixed(1)}<span style={{ fontSize: 10, color: C.muted }}>kg</span>
+                  </span>
+                  <span style={{ width: 68, textAlign: "right", fontFamily: "'Barlow Condensed', sans-serif", fontSize: 15, color: C.muted }}>
+                    {pr.best1RM.toFixed(1)}<span style={{ fontSize: 10 }}>kg</span>
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+
           {workouts.length > 0 && <button onClick={clearAll} style={{ ...btn("transparent", C.muted), fontSize: 12, padding: 8 }}>すべての履歴を削除</button>}
         </div>
       )}
@@ -2317,11 +2479,59 @@ function App() {
           <div style={{ background: C.surface, borderRadius: 14, padding: 16, border: `1px solid ${C.border}`, marginBottom: 12 }}>
             <label style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 14 }}>
               体重(自重換算・カロリー計算に使用)
-              <span><input type="number" step="0.5" value={profile.bodyweight} onFocus={selectOnFocus} onChange={e => persist({ profile: { ...profile, bodyweight: num(e.target.value) } })} style={{ ...cfgInput, width: 70, fontSize: 16 }} /> kg</span>
+              <span><input type="text" inputMode="decimal" step="0.5" value={profile.bodyweight} onFocus={selectOnFocus} onChange={e => persist({ profile: { ...profile, bodyweight: num(e.target.value) } })} style={{ ...cfgInput, width: 70, fontSize: 16 }} /> kg</span>
             </label>
           </div>
 
-          {/* 通知音 */}
+          {/* 判定のデフォルト値 */}
+          <div style={{ background: C.surface, borderRadius: 14, padding: 16, border: `1px solid ${C.border}`, marginBottom: 12 }}>
+            <div style={{ fontSize: 14, fontWeight: 900, marginBottom: 4 }}>次回メニュー判定のデフォルト</div>
+            <p style={{ color: C.muted, fontSize: 12, margin: "0 0 14px", lineHeight: 1.6 }}>
+              新しく追加する種目に適用される既定値です。種目ごとの調整は各カードの⚙から行えます(既存の種目には影響しません)。
+            </p>
+
+            <label style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 14, marginBottom: 12 }}>
+              回数範囲
+              <span>
+                <input type="text" inputMode="numeric" value={profile.defRepLow} onFocus={selectOnFocus}
+                  onChange={e => persist({ profile: { ...profile, defRepLow: e.target.value } })}
+                  onBlur={e => {
+                    const v = Math.min(50, Math.max(1, Math.round(num(e.target.value)) || 8));
+                    persist({ profile: { ...profile, defRepLow: v, defRepHigh: Math.max(v, num(profile.defRepHigh) || 12) } });
+                  }}
+                  style={{ ...cfgInput, width: 56, fontSize: 16 }} />
+                <span style={{ margin: "0 6px", color: C.muted }}>〜</span>
+                <input type="text" inputMode="numeric" value={profile.defRepHigh} onFocus={selectOnFocus}
+                  onChange={e => persist({ profile: { ...profile, defRepHigh: e.target.value } })}
+                  onBlur={e => {
+                    const lo = num(profile.defRepLow) || 8;
+                    const v = Math.min(50, Math.max(lo, Math.round(num(e.target.value)) || 12));
+                    persist({ profile: { ...profile, defRepHigh: v } });
+                  }}
+                  style={{ ...cfgInput, width: 56, fontSize: 16 }} /> 回
+              </span>
+            </label>
+            <p style={{ color: C.muted, fontSize: 11, margin: "-6px 0 14px", lineHeight: 1.6 }}>
+              全セットで上限({num(profile.defRepHigh) || 12}回)に到達すると増量、未達なら回数を増やす判定になります。
+            </p>
+
+            <label style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 14 }}>
+              重量の増加幅
+              <span>
+                <input type="text" inputMode="decimal" value={profile.defIncrement} onFocus={selectOnFocus}
+                  onChange={e => persist({ profile: { ...profile, defIncrement: e.target.value } })}
+                  onBlur={e => {
+                    const v = Math.min(50, Math.max(0.5, num(e.target.value) || 2.5));
+                    persist({ profile: { ...profile, defIncrement: v } });
+                  }}
+                  style={{ ...cfgInput, width: 70, fontSize: 16 }} /> kg
+              </span>
+            </label>
+            <p style={{ color: C.muted, fontSize: 11, margin: "8px 0 0", lineHeight: 1.6 }}>
+              増量時に加える重量です。提案される重量はこの単位に丸められます(ダンベルなら2.5kg、プレート環境なら5kgなど)。
+            </p>
+          </div>
+
           <div style={{ background: C.surface, borderRadius: 14, padding: 16, border: `1px solid ${C.border}`, marginBottom: 12 }}>
             <label style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 14 }}>
               インターバルの通知音
