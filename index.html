@@ -496,6 +496,37 @@ const selectOnFocus = (e) => {
   setTimeout(sel, 50);
 };
 
+// 数値入力: iOSでは全選択(select)がタップで解除されるため、
+// 「フォーカス後の最初の入力で既存の値を置き換える」方式にして確実に上書きできるようにする。
+// onChange は通常のinputと同じく event を受け取るので、既存の呼び出し側はそのまま使える。
+function NumInput({ value, onChange, onFocus, onBlur, inputMode = "decimal", style, ...rest }) {
+  const pristine = useRef(false);
+  return (
+    <input
+      type="text"
+      inputMode={inputMode}
+      value={value}
+      style={style}
+      onFocus={(e) => { pristine.current = true; selectOnFocus(e); if (onFocus) onFocus(e); }}
+      onChange={(e) => {
+        let v = e.target.value;
+        if (pristine.current) {
+          pristine.current = false;
+          const old = String(value ?? "");
+          // 全選択が効かず既存値に追記された場合は、今打った分だけを残す
+          if (old && v.length > old.length) {
+            if (v.startsWith(old)) v = v.slice(old.length);
+            else if (v.endsWith(old)) v = v.slice(0, v.length - old.length);
+          }
+        }
+        if (onChange) onChange({ target: { value: v } });
+      }}
+      onBlur={(e) => { pristine.current = false; if (onBlur) onBlur(e); }}
+      {...rest}
+    />
+  );
+}
+
 function JudgeBadge({ type }) {
   const j = JUDGE[type] || JUDGE.insufficient_data;
   return <span style={{ background: j.color, color: "#fff", borderRadius: 999, padding: "3px 11px", fontSize: 12, fontWeight: 800, whiteSpace: "nowrap" }}>{j.label}</span>;
@@ -618,6 +649,7 @@ function App() {
   const [swapSearch, setSwapSearch] = useState("");
   const [openSetKey, setOpenSetKey] = useState(null); // 展開中のセット "exId:index"
   const [openHist, setOpenHist] = useState({});       // 種目カードの履歴パネル開閉
+  const [insertAt, setInsertAt] = useState(null);     // 種目を挿入する位置(nullなら末尾)
   const [histMode, setHistMode] = useState("list"); // list | calendar
   const [calMonth, setCalMonth] = useState(() => { const d = new Date(); return { y: d.getFullYear(), m: d.getMonth() }; });
   const [selectedDate, setSelectedDate] = useState(null); // "YYYY-M-D"
@@ -1022,7 +1054,7 @@ function App() {
   };
 
   // ---- 記録操作 ----
-  const addExercise = (name, meta) => {
+  const addExercise = (name, meta, at = insertAt) => {
     const n = (name || "").trim(); if (!n) return;
     ensureStarted();
     const cfg = meta ? { ...lastConfig(n), ...meta } : lastConfig(n);
@@ -1033,12 +1065,19 @@ function App() {
       n, m: cfg.muscle || "", eq: meta?.eq || customDraft.eq || "その他",
       t: "C", db: !!cfg.isDb, bw: cfg.bwFactor || 0, custom: true,
     }];
-    setToday(t => [...t, {
+    const newEx = {
       id: uid(), name: n, repLow: cfg.repLow, repHigh: cfg.repHigh,
       targetRirLow: cfg.targetRirLow, targetRirHigh: cfg.targetRirHigh, increment: cfg.increment,
       muscle: cfg.muscle, bwFactor: cfg.bwFactor, isDb: cfg.isDb, rom: cfg.rom ?? 1.0, formBroke: false, pain: false,
       sets: [{ weight: w, reps: String(DEFAULT_REPS), rir: "", warmup: false }],
-    }]);
+    };
+    // 挿入位置が指定されていればその位置へ、なければ末尾に追加
+    setToday(t => {
+      if (at == null || at < 0 || at > t.length) return [...t, newEx];
+      const next = [...t];
+      next.splice(at, 0, newEx);
+      return next;
+    });
     const nextRecent = [n, ...recentNames.filter(x => x !== n)].slice(0, 40);
     // 分割の今日のDayに種目テンプレがあり、まだ含まれていなければ追加して次回に引き継ぐ
     let splitPatch = {};
@@ -1051,7 +1090,7 @@ function App() {
       }
     }
     persist({ recentNames: nextRecent, ...(known ? {} : { customExercises: nextCustom }), ...splitPatch });
-    setSearch(""); setCustomDraft({ muscle: "", eq: "ダンベル" });
+    setSearch(""); setCustomDraft({ muscle: "", eq: "ダンベル" }); setInsertAt(null);
   };
   const updEx = (id, patch) => setToday(today.map(ex => ex.id === id ? { ...ex, ...patch } : ex));
   const updateSet = (id, i, field, value) => setToday(today.map(ex => ex.id !== id ? ex : { ...ex, sets: ex.sets.map((s, j) => j === i ? { ...s, [field]: value } : s) }));
@@ -1064,20 +1103,21 @@ function App() {
       return { ...s, [field]: String(v) };
     }),
   }));
-  // このセットの重量・回数を次のセットにコピー(なければ新規セットを作ってコピー)
-  const copyToNext = (id, i) => setToday(today.map(ex => {
-    if (ex.id !== id) return ex;
-    const src = ex.sets[i];
+  // 前のセットの重量・回数をこのセットにコピー
+  const copyFromPrev = (id, i) => setToday(today.map(ex => {
+    if (ex.id !== id || i === 0) return ex;
+    const src = ex.sets[i - 1];
     const sets = [...ex.sets];
-    if (i + 1 < sets.length) {
-      sets[i + 1] = { ...sets[i + 1], weight: src.weight, reps: src.reps };
-    } else {
-      sets.push({ weight: src.weight, reps: src.reps, rir: "", warmup: !!src.warmup, ...(src.assisted ? { assisted: true } : {}) });
-    }
+    sets[i] = { ...sets[i], weight: src.weight, reps: src.reps };
     return { ...ex, sets };
   }));
   const addSet = (id) => setToday(today.map(ex => ex.id !== id ? ex : { ...ex, sets: [...ex.sets, { ...ex.sets[ex.sets.length - 1], rir: "", warmup: false }] }));
-  const removeSet = (id, i) => setToday(today.map(ex => ex.id !== id ? ex : { ...ex, sets: ex.sets.filter((_, j) => j !== i) }).filter(ex => ex.sets.length > 0));
+  const removeSet = (id, i) => setToday(today.map(ex => {
+    if (ex.id !== id) return ex;
+    // 最後の1セットは種目ごと消えないよう、値のクリアに留める
+    if (ex.sets.length <= 1) return { ...ex, sets: [{ weight: "0", reps: String(DEFAULT_REPS), rir: "", warmup: false }] };
+    return { ...ex, sets: ex.sets.filter((_, j) => j !== i) };
+  }));
   // 分割の今日のDayに登録された種目を newName で置き換え(次回の自動メニューに反映)
   const updateSplitDayExercise = (oldName, newName) => {
     if (!split || !todayDay) return;
@@ -1629,7 +1669,7 @@ function App() {
         <div>
           <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: 32, letterSpacing: 1, lineHeight: 1 }}>
             OVERLOAD<span style={{ color: C.red }}>+</span>
-            <span style={{ fontFamily: "'Noto Sans JP', sans-serif", fontSize: 11, fontWeight: 700, color: C.green, marginLeft: 8, verticalAlign: "middle" }}>v34</span>
+            <span style={{ fontFamily: "'Noto Sans JP', sans-serif", fontSize: 11, fontWeight: 700, color: C.green, marginLeft: 8, verticalAlign: "middle" }}>v36</span>
           </div>
         </div>
         {AI_ENABLED && (
@@ -1909,14 +1949,14 @@ function App() {
 
               {openCfg[ex.id] && (
                 <div style={{ background: C.bg, borderRadius: 10, padding: 10, marginBottom: 10, display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center" }}>
-                  <label style={{ fontSize: 12, color: C.muted }}>回数範囲 <input type="text" inputMode="decimal" value={ex.repLow} style={cfgInput} onFocus={selectOnFocus} onChange={e => updEx(ex.id, { repLow: e.target.value })} /><span style={{ margin: "0 4px" }}>–</span><input type="text" inputMode="decimal" value={ex.repHigh} style={cfgInput} onFocus={selectOnFocus} onChange={e => updEx(ex.id, { repHigh: e.target.value })} /></label>
-                  <label style={{ fontSize: 12, color: C.muted }}>目標(あと)回 <input type="text" inputMode="decimal" value={ex.targetRirLow} style={cfgInput} onFocus={selectOnFocus} onChange={e => updEx(ex.id, { targetRirLow: e.target.value })} /><span style={{ margin: "0 4px" }}>–</span><input type="text" inputMode="decimal" value={ex.targetRirHigh} style={cfgInput} onFocus={selectOnFocus} onChange={e => updEx(ex.id, { targetRirHigh: e.target.value })} /></label>
-                  <label style={{ fontSize: 12, color: C.muted }}>増加幅 <input type="text" inputMode="decimal" step="0.5" value={ex.increment} style={cfgInput} onFocus={selectOnFocus} onChange={e => updEx(ex.id, { increment: e.target.value })} />kg</label>
+                  <label style={{ fontSize: 12, color: C.muted }}>回数範囲 <NumInput inputMode="decimal" value={ex.repLow} style={cfgInput} onChange={e => updEx(ex.id, { repLow: e.target.value })} /><span style={{ margin: "0 4px" }}>–</span><NumInput inputMode="decimal" value={ex.repHigh} style={cfgInput} onChange={e => updEx(ex.id, { repHigh: e.target.value })} /></label>
+                  <label style={{ fontSize: 12, color: C.muted }}>目標(あと)回 <NumInput inputMode="decimal" value={ex.targetRirLow} style={cfgInput} onChange={e => updEx(ex.id, { targetRirLow: e.target.value })} /><span style={{ margin: "0 4px" }}>–</span><NumInput inputMode="decimal" value={ex.targetRirHigh} style={cfgInput} onChange={e => updEx(ex.id, { targetRirHigh: e.target.value })} /></label>
+                  <label style={{ fontSize: 12, color: C.muted }}>増加幅 <NumInput inputMode="decimal" value={ex.increment} style={cfgInput} onChange={e => updEx(ex.id, { increment: e.target.value })} />kg</label>
                   <label style={{ fontSize: 12, color: C.muted }}>部位 <select value={ex.muscle} onChange={e => updEx(ex.id, { muscle: e.target.value })} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: "5px 6px", fontSize: 13, fontFamily: "inherit" }}><option value="">未設定</option>{MUSCLES.map(m => <option key={m} value={m}>{m}</option>)}</select></label>
                   <label style={{ fontSize: 12, color: C.muted, display: "flex", alignItems: "center", gap: 4 }}><input type="checkbox" checked={ex.bwFactor > 0} onChange={e => updEx(ex.id, { bwFactor: e.target.checked ? 0.7 : 0 })} />自重(体重換算)</label>
-                  {ex.bwFactor > 0 && <label style={{ fontSize: 12, color: C.muted }}>体重係数 <input type="text" inputMode="decimal" step="0.05" value={ex.bwFactor} style={cfgInput} onFocus={selectOnFocus} onChange={e => updEx(ex.id, { bwFactor: num(e.target.value) })} /></label>}
+                  {ex.bwFactor > 0 && <label style={{ fontSize: 12, color: C.muted }}>体重係数 <NumInput inputMode="decimal" value={ex.bwFactor} style={cfgInput} onChange={e => updEx(ex.id, { bwFactor: num(e.target.value) })} /></label>}
                   <label style={{ fontSize: 12, color: C.muted }}>
-                    可動域係数 <input type="text" inputMode="decimal" step="0.1" min="0.1" max="1" value={ex.rom ?? 1} style={cfgInput} onFocus={selectOnFocus} onChange={e => updEx(ex.id, { rom: num(e.target.value) || 1 })} />
+                    可動域係数 <NumInput inputMode="decimal" value={ex.rom ?? 1} style={cfgInput} onChange={e => updEx(ex.id, { rom: num(e.target.value) || 1 })} />
                     <span style={{ fontSize: 10, marginLeft: 4 }}>(集計ボリュームのみ)</span>
                   </label>
                 </div>
@@ -1945,10 +1985,10 @@ function App() {
                         border: `1px solid ${s.warmup ? C.yellow : C.border}`, background: s.warmup ? C.yellow : "transparent", color: s.warmup ? "#141517" : C.muted }}>
                       {s.warmup ? "W" : wsIndex}
                     </button>
-                    <input type="text" inputMode="decimal" step="0.5" min="0" value={s.weight} placeholder="0" onFocus={selectOnFocus}
+                    <NumInput inputMode="decimal" value={s.weight} placeholder="0"
                       onBlur={() => { if ((num(s.weight) > 0 || num(s.reps) > 0) && isLastInGroup(exIdx)) startRest(); }}
                       onChange={e => updateSet(ex.id, i, "weight", e.target.value)} aria-label={`セット${i + 1}の重量`} style={{ ...numInput, flex: 1.3, opacity: s.warmup ? 0.6 : 1 }} />
-                    <input type="text" inputMode="numeric" step="1" min="1" value={s.reps} placeholder="0" onFocus={selectOnFocus}
+                    <NumInput inputMode="numeric" value={s.reps} placeholder="0"
                       onBlur={() => { if ((num(s.weight) > 0 || num(s.reps) > 0) && isLastInGroup(exIdx)) startRest(); }}
                       onChange={e => updateSet(ex.id, i, "reps", e.target.value)} aria-label={`セット${i + 1}の回数`} style={{ ...numInput, flex: 1, opacity: s.warmup ? 0.6 : 1 }} />
                     <div style={{ flex: 2.4, opacity: s.warmup ? 0.35 : 1, pointerEvents: s.warmup ? "none" : "auto" }}>
@@ -1956,6 +1996,8 @@ function App() {
                     </div>
                     <button onClick={() => setOpenSetKey(expanded ? null : setKey)} aria-label="このセットの調整"
                       style={{ width: 26, height: 26, borderRadius: 8, border: `1px solid ${expanded ? C.blue : C.border}`, background: expanded ? C.blue : C.surface2, color: expanded ? "#fff" : C.muted, fontSize: 13, cursor: "pointer", flexShrink: 0 }}>±</button>
+                    <button onClick={() => removeSet(ex.id, i)} aria-label={`セット${i + 1}を削除`}
+                      style={{ width: 26, height: 26, borderRadius: 8, border: `1px solid ${C.border}`, background: C.surface2, color: C.muted, fontSize: 12, cursor: "pointer", flexShrink: 0 }}>✕</button>
                   </div>
 
                   {expanded && (
@@ -1974,7 +2016,10 @@ function App() {
                         <button onClick={() => adjustSet(ex.id, i, "reps", -1)} style={adjBtn}>-1</button>
                         <button onClick={() => adjustSet(ex.id, i, "reps", 1)} style={adjBtn}>+1</button>
                         <div style={{ flex: 1 }} />
-                        <button onClick={() => copyToNext(ex.id, i)} style={{ ...adjBtn, flex: "none", padding: "6px 12px", color: C.blue, borderColor: C.blue }}>次のセットにコピー</button>
+                        <button onClick={() => copyFromPrev(ex.id, i)} disabled={i === 0}
+                          style={{ ...adjBtn, flex: "none", padding: "6px 12px", color: i === 0 ? C.border : C.blue, borderColor: i === 0 ? C.border : C.blue, cursor: i === 0 ? "default" : "pointer" }}>
+                          前のセットをコピー
+                        </button>
                       </div>
                       {/* 補助あり(1RM・PRに反映しない) */}
                       <button onClick={() => updateSet(ex.id, i, "assisted", !s.assisted)}
@@ -2023,12 +2068,33 @@ function App() {
                   <span style={{ minWidth: 0 }}>{exerciseNotes[ex.name]}</span>
                 </div>
               ) : null}
+
+              {/* この種目の後ろに別の種目を挿入 */}
+              {!(inGroup && !groupEnd) && (
+                <button onClick={() => { setInsertAt(insertAt === exIdx + 1 ? null : exIdx + 1); setSearch(""); }}
+                  style={{
+                    width: "100%", marginTop: 10, padding: "8px 0", borderRadius: 8, cursor: "pointer",
+                    fontSize: 12, fontFamily: "inherit", fontWeight: 700,
+                    border: `1px dashed ${insertAt === exIdx + 1 ? C.red : C.border}`,
+                    background: "transparent", color: insertAt === exIdx + 1 ? C.red : C.muted,
+                  }}>
+                  {insertAt === exIdx + 1 ? "↓ 下の一覧から種目を選ぶとここに入ります(タップで解除)" : "＋ ここに種目を追加"}
+                </button>
+              )}
             </div>
             );
           })}
 
           {/* 種目選択 */}
-          <div style={{ background: C.surface, borderRadius: 14, padding: 14, border: `1px solid ${C.border}` }}>
+          <div style={{ background: C.surface, borderRadius: 14, padding: 14, border: `1px solid ${insertAt != null ? C.red : C.border}` }}>
+            {insertAt != null && (
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, background: C.bg, borderRadius: 8, padding: "8px 10px", marginBottom: 10 }}>
+                <span style={{ fontSize: 12, color: C.red, fontWeight: 700, minWidth: 0 }}>
+                  {insertAt}番目の後ろに挿入します
+                </span>
+                <button onClick={() => setInsertAt(null)} style={{ ...btn("transparent", C.muted), padding: "2px 8px", fontSize: 11, flexShrink: 0 }}>末尾に戻す</button>
+              </div>
+            )}
             <input value={search} onChange={e => setSearch(e.target.value)} onFocus={selectOnFocus}
               onKeyDown={e => e.key === "Enter" && search.trim() && addExercise(search, findExercise(search.trim()) ? undefined : { muscle: customDraft.muscle, eq: customDraft.eq, isDb: customDraft.eq === "ダンベル", bwFactor: customDraft.eq === "自重" ? 0.7 : 0 })}
               placeholder="種目を検索(なければカスタム追加)"
@@ -2412,13 +2478,13 @@ function App() {
                               border: `1px solid ${s.warmup ? C.yellow : C.border}`, background: s.warmup ? C.yellow : "transparent", color: s.warmup ? "#141517" : C.muted }}>
                             {s.warmup ? "W" : setIdx + 1}
                           </button>
-                          <input type="text" inputMode="decimal" step="0.5" min="0" value={s.weight} onFocus={selectOnFocus}
+                          <NumInput inputMode="decimal" value={s.weight}
                             onChange={e => editSet(exIdx, setIdx, "weight", e.target.value)} aria-label="重量"
                             style={{ ...numInput, flex: 1.3, fontSize: 18, padding: "7px 2px" }} />
-                          <input type="text" inputMode="numeric" step="1" min="0" value={s.reps} onFocus={selectOnFocus}
+                          <NumInput inputMode="numeric" value={s.reps}
                             onChange={e => editSet(exIdx, setIdx, "reps", e.target.value)} aria-label="回数"
                             style={{ ...numInput, flex: 1, fontSize: 18, padding: "7px 2px" }} />
-                          <input type="text" inputMode="numeric" step="1" min="0" max="4" value={s.rir} placeholder="–" onFocus={selectOnFocus}
+                          <NumInput inputMode="numeric" value={s.rir} placeholder="–"
                             onChange={e => editSet(exIdx, setIdx, "rir", e.target.value)} aria-label="余力"
                             style={{ ...numInput, flex: 1, fontSize: 18, padding: "7px 2px", color: C.yellow }} />
                           <button onClick={() => editRemoveSet(exIdx, setIdx)} aria-label="セットを削除"
@@ -2479,7 +2545,7 @@ function App() {
           <div style={{ background: C.surface, borderRadius: 14, padding: 16, border: `1px solid ${C.border}`, marginBottom: 12 }}>
             <label style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 14 }}>
               体重(自重換算・カロリー計算に使用)
-              <span><input type="text" inputMode="decimal" step="0.5" value={profile.bodyweight} onFocus={selectOnFocus} onChange={e => persist({ profile: { ...profile, bodyweight: num(e.target.value) } })} style={{ ...cfgInput, width: 70, fontSize: 16 }} /> kg</span>
+              <span><NumInput inputMode="decimal" value={profile.bodyweight} onChange={e => persist({ profile: { ...profile, bodyweight: num(e.target.value) } })} style={{ ...cfgInput, width: 70, fontSize: 16 }} /> kg</span>
             </label>
           </div>
 
@@ -2493,7 +2559,7 @@ function App() {
             <label style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 14, marginBottom: 12 }}>
               回数範囲
               <span>
-                <input type="text" inputMode="numeric" value={profile.defRepLow} onFocus={selectOnFocus}
+                <NumInput inputMode="numeric" value={profile.defRepLow}
                   onChange={e => persist({ profile: { ...profile, defRepLow: e.target.value } })}
                   onBlur={e => {
                     const v = Math.min(50, Math.max(1, Math.round(num(e.target.value)) || 8));
@@ -2501,7 +2567,7 @@ function App() {
                   }}
                   style={{ ...cfgInput, width: 56, fontSize: 16 }} />
                 <span style={{ margin: "0 6px", color: C.muted }}>〜</span>
-                <input type="text" inputMode="numeric" value={profile.defRepHigh} onFocus={selectOnFocus}
+                <NumInput inputMode="numeric" value={profile.defRepHigh}
                   onChange={e => persist({ profile: { ...profile, defRepHigh: e.target.value } })}
                   onBlur={e => {
                     const lo = num(profile.defRepLow) || 8;
@@ -2518,7 +2584,7 @@ function App() {
             <label style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 14 }}>
               重量の増加幅
               <span>
-                <input type="text" inputMode="decimal" value={profile.defIncrement} onFocus={selectOnFocus}
+                <NumInput inputMode="decimal" value={profile.defIncrement}
                   onChange={e => persist({ profile: { ...profile, defIncrement: e.target.value } })}
                   onBlur={e => {
                     const v = Math.min(50, Math.max(0.5, num(e.target.value) || 2.5));
