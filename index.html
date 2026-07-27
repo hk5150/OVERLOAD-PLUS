@@ -304,7 +304,8 @@ const resolveIsDb = (name, storedIsDb) => {
 // 可動域係数: 集計ボリュームのみに適用(判定・1RM・PRには影響させない)。
 // シュラッグ/カーフレイズ/リストカール=0.5、その他=1.0。保存値(ユーザー調整)があれば優先。
 const resolveRom = (name, storedRom) => {
-  if (storedRom != null && !isNaN(storedRom) && storedRom > 0) return storedRom;
+  const v = parseFloat(storedRom);
+  if (!isNaN(v) && v > 0) return v;
   const k = dbLookup(name);
   return k?.rom ?? 1.0;
 };
@@ -783,42 +784,57 @@ function App() {
     return () => clearInterval(id);
   }, [startAt]);
 
-  // ---- 通知音(Web Audio。iOSは初回タップで解錠される) ----
+  // ---- 通知音(Web Audio) ----
+  // iOSは動画撮影・電話・他アプリの音声再生でAudioContextを中断/破棄する。
+  // 壊れていたら作り直す方式にして、鳴らなくなるのを防ぐ。
   const soundOn = profile.soundOn !== false;
   const audioRef = useRef(null);
   const firedMinRef = useRef(0); // 何分の通知まで鳴らしたか(再レンダーでも保持)
 
-  // iOSは「ユーザー操作」を経ないと音が出せない。最初のタップで無音を再生して解錠しておく。
+  // 使える状態のAudioContextを返す(壊れていれば再生成)
+  const getAudioCtx = () => {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return null;
+    let ctx = audioRef.current;
+    // closed / interrupted(iOS独自)は再生成が必要
+    if (!ctx || ctx.state === "closed" || ctx.state === "interrupted") {
+      try { if (ctx && ctx.state !== "closed") ctx.close(); } catch { /* noop */ }
+      try { ctx = new Ctx(); audioRef.current = ctx; } catch { return null; }
+    }
+    return ctx;
+  };
+
+  // ユーザー操作のたびに解錠を試みる(初回だけでなく、中断からの復帰にも効く)
   useEffect(() => {
     const unlock = () => {
       try {
-        const Ctx = window.AudioContext || window.webkitAudioContext;
-        if (!Ctx) return;
-        if (!audioRef.current) audioRef.current = new Ctx();
-        const ctx = audioRef.current;
+        const ctx = getAudioCtx();
+        if (!ctx) return;
         if (ctx.state === "suspended") ctx.resume();
-        // 無音を1回鳴らして解錠を確定させる
         const osc = ctx.createOscillator(), g = ctx.createGain();
         g.gain.setValueAtTime(0.0001, ctx.currentTime);
         osc.connect(g); g.connect(ctx.destination);
         osc.start(); osc.stop(ctx.currentTime + 0.01);
       } catch { /* 無視 */ }
     };
-    document.addEventListener("touchend", unlock, { once: true });
-    document.addEventListener("click", unlock, { once: true });
+    // once を付けず、操作のたびに実行して中断からの復帰を確実にする
+    document.addEventListener("touchend", unlock);
+    document.addEventListener("click", unlock);
+    // 画面に戻ったときも復旧を試みる(動画撮影から戻った直後など)
+    const onVisible = () => { if (document.visibilityState === "visible") unlock(); };
+    document.addEventListener("visibilitychange", onVisible);
     return () => {
       document.removeEventListener("touchend", unlock);
       document.removeEventListener("click", unlock);
+      document.removeEventListener("visibilitychange", onVisible);
     };
   }, []);
 
   const beep = (times = 1) => {
     if (!soundOn) return;
     try {
-      const Ctx = window.AudioContext || window.webkitAudioContext;
-      if (!Ctx) return;
-      if (!audioRef.current) audioRef.current = new Ctx();
-      const ctx = audioRef.current;
+      const ctx = getAudioCtx();
+      if (!ctx) return;
       const play = () => {
         for (let i = 0; i < times; i++) {
           const t = ctx.currentTime + 0.03 + i * 0.32;
@@ -837,8 +853,29 @@ function App() {
           });
         }
       };
-      if (ctx.state === "suspended") ctx.resume().then(play).catch(() => {});
-      else play();
+      if (ctx.state === "running") {
+        play();
+      } else {
+        // 停止中は復帰を待つ。失敗したら作り直して再挑戦。
+        ctx.resume().then(play).catch(() => {
+          try {
+            const Ctx = window.AudioContext || window.webkitAudioContext;
+            const fresh = new Ctx();
+            audioRef.current = fresh;
+            fresh.resume().then(() => {
+              const t = fresh.currentTime + 0.03;
+              const osc = fresh.createOscillator(), gain = fresh.createGain();
+              osc.type = "square"; osc.frequency.setValueAtTime(880, t);
+              gain.gain.setValueAtTime(0.0001, t);
+              gain.gain.exponentialRampToValueAtTime(0.9, t + 0.015);
+              gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.26);
+              osc.connect(gain); gain.connect(fresh.destination);
+              osc.start(t); osc.stop(t + 0.28);
+            }).catch(() => {});
+          } catch { /* noop */ }
+        });
+      }
+      // 音が出せない場合の保険としてバイブも併用
       if (navigator.vibrate) navigator.vibrate(times === 1 ? [300] : [200, 120, 200, 120, 200]);
     } catch { /* 音が出せない環境では無視 */ }
   };
@@ -1209,9 +1246,11 @@ function App() {
       targetRirLow: num(ex.targetRirLow), targetRirHigh: num(ex.targetRirHigh), increment: num(ex.increment) || 2.5,
       formBroke: !!ex.formBroke, pain: !!ex.pain,
       ...(ex.ssGroup ? { ssGroup: ex.ssGroup } : {}),
-      // 回数が未入力(0)のセットは保存しない。空セットが「1回」として履歴に残り判定を汚すのを防ぐ。
+      // 「あと何回できた?」を入力したセットのみ実施済みとみなす。
+      // (提案メニューは重量・回数が最初から入っているため、未実施の種目が記録されるのを防ぐ)
+      // ウォームアップは余力を入力しない運用なので、回数が入っていれば実施とみなす。
       sets: ex.sets
-        .filter(s => Math.round(num(s.reps)) > 0)
+        .filter(s => Math.round(num(s.reps)) > 0 && (s.warmup || (s.rir !== "" && s.rir != null)))
         .map(s => ({
           weight: num(s.weight), reps: Math.round(num(s.reps)), warmup: !!s.warmup,
           ...(s.assisted ? { assisted: true } : {}),
@@ -1219,7 +1258,7 @@ function App() {
         })),
     })).filter(ex => ex.sets.length > 0); // 有効なセットが1つも無い種目は記録しない
     if (exercises.length === 0) {
-      setError("回数が入力されたセットがありません。回数を入力してから保存してください。");
+      setError("実施したセットがありません。「あと何回できた?」を入力したセットが記録対象になります。");
       setSaving(false);
       return;
     }
@@ -1421,6 +1460,67 @@ function App() {
     const next = workouts.map((w, i) => i === index ? updated : w);
     await persist({ workouts: next });
     setEditWorkout(null);
+  };
+
+  // ---- 記録をテキストでコピー ----
+  const [copiedIdx, setCopiedIdx] = useState(null);
+
+  // 1回分の記録を読みやすいテキストに整形
+  const workoutToText = (w) => {
+    const d = new Date(w.date);
+    const lines = [];
+    lines.push(`${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}(${"日月火水木金土"[d.getDay()]})${w.session ? ` ${w.session}` : ""}`);
+
+    const parts = [...new Set(w.exercises.map(e => e.muscle).filter(Boolean))];
+    if (parts.length) lines.push(parts.join("・"));
+
+    const vol = Math.round(w.exercises.reduce((a, ex) => a + exVolume(ex), 0));
+    const meta = [];
+    if (w.durationMin != null) meta.push(`${w.durationMin}分`);
+    meta.push(`総ボリューム ${vol.toLocaleString()}kg`);
+    lines.push(meta.join(" / "));
+    lines.push("");
+
+    w.exercises.forEach((ex, i) => {
+      const prevE = w.exercises[i - 1];
+      const ssStart = ex.ssGroup && (!prevE || prevE.ssGroup !== ex.ssGroup);
+      const prefix = ssStart ? "[スーパーセット] " : (ex.ssGroup ? "  ┗ " : "");
+      lines.push(`■ ${prefix}${ex.name}`);
+      ex.sets.forEach((s, j) => {
+        const tags = [];
+        if (s.warmup) tags.push("W");
+        if (s.assisted) tags.push("補助");
+        const unit = ex.isDb ? "kg(片手)" : "kg";
+        const rir = s.rir != null ? ` 余力${s.rir}` : "";
+        lines.push(`  ${s.warmup ? "W" : j + 1}. ${s.weight}${unit} × ${s.reps}回${rir}${tags.length && !s.warmup ? ` [${tags.join("/")}]` : ""}`);
+      });
+      if (exerciseNotes[ex.name]) lines.push(`  📌 ${exerciseNotes[ex.name]}`);
+      lines.push("");
+    });
+
+    lines.push("— OVERLOAD+");
+    return lines.join("\n");
+  };
+
+  const copyWorkout = async (w, idx) => {
+    const text = workoutToText(w);
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        // 非対応環境向けのフォールバック
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        ta.style.position = "fixed"; ta.style.opacity = "0";
+        document.body.appendChild(ta); ta.select();
+        document.execCommand("copy");
+        document.body.removeChild(ta);
+      }
+      setCopiedIdx(idx);
+      setTimeout(() => setCopiedIdx(c => (c === idx ? null : c)), 2000);
+    } catch {
+      window.prompt("コピーできませんでした。下のテキストを手動でコピーしてください。", text);
+    }
   };
 
   const deleteWorkout = async (index) => {
@@ -1669,7 +1769,7 @@ function App() {
         <div>
           <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: 32, letterSpacing: 1, lineHeight: 1 }}>
             OVERLOAD<span style={{ color: C.red }}>+</span>
-            <span style={{ fontFamily: "'Noto Sans JP', sans-serif", fontSize: 11, fontWeight: 700, color: C.green, marginLeft: 8, verticalAlign: "middle" }}>v36</span>
+            <span style={{ fontFamily: "'Noto Sans JP', sans-serif", fontSize: 11, fontWeight: 700, color: C.green, marginLeft: 8, verticalAlign: "middle" }}>v38</span>
           </div>
         </div>
         {AI_ENABLED && (
@@ -1786,6 +1886,7 @@ function App() {
             const inGroup = !!ex.ssGroup;
             const groupStart = inGroup && (!prevEx || prevEx.ssGroup !== ex.ssGroup);
             const groupEnd = inGroup && (!nextEx || nextEx.ssGroup !== ex.ssGroup);
+            const isLast = exIdx === today.length - 1;
             // グループ内の順番(A/B/C…)
             let ssLetter = "";
             if (inGroup) {
@@ -1794,12 +1895,13 @@ function App() {
               ssLetter = String.fromCharCode(64 + n); // 1→A
             }
             return (
-            <div key={ex.id} style={{
+            <React.Fragment key={ex.id}>
+            <div style={{
               background: C.surface, padding: 14,
               border: `1px solid ${inGroup ? C.blue : C.border}`,
               borderTopWidth: inGroup && !groupStart ? 0 : 1,
               borderRadius: inGroup ? (groupStart ? "14px 14px 0 0" : groupEnd ? "0 0 14px 14px" : 0) : 14,
-              marginBottom: inGroup && !groupEnd ? 0 : 12,
+              marginBottom: inGroup && !groupEnd ? 0 : (isLast ? 12 : 0),
             }}>
               {groupStart && (
                 <div style={{ display: "inline-block", background: C.blue, color: "#fff", fontSize: 10, fontWeight: 800, borderRadius: 6, padding: "2px 8px", marginBottom: 8 }}>
@@ -1954,9 +2056,13 @@ function App() {
                   <label style={{ fontSize: 12, color: C.muted }}>増加幅 <NumInput inputMode="decimal" value={ex.increment} style={cfgInput} onChange={e => updEx(ex.id, { increment: e.target.value })} />kg</label>
                   <label style={{ fontSize: 12, color: C.muted }}>部位 <select value={ex.muscle} onChange={e => updEx(ex.id, { muscle: e.target.value })} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: "5px 6px", fontSize: 13, fontFamily: "inherit" }}><option value="">未設定</option>{MUSCLES.map(m => <option key={m} value={m}>{m}</option>)}</select></label>
                   <label style={{ fontSize: 12, color: C.muted, display: "flex", alignItems: "center", gap: 4 }}><input type="checkbox" checked={ex.bwFactor > 0} onChange={e => updEx(ex.id, { bwFactor: e.target.checked ? 0.7 : 0 })} />自重(体重換算)</label>
-                  {ex.bwFactor > 0 && <label style={{ fontSize: 12, color: C.muted }}>体重係数 <NumInput inputMode="decimal" value={ex.bwFactor} style={cfgInput} onChange={e => updEx(ex.id, { bwFactor: num(e.target.value) })} /></label>}
+                  {ex.bwFactor > 0 && <label style={{ fontSize: 12, color: C.muted }}>体重係数 <NumInput inputMode="decimal" value={ex.bwFactor} style={cfgInput}
+                      onChange={e => updEx(ex.id, { bwFactor: e.target.value })}
+                      onBlur={e => { const v = num(e.target.value); updEx(ex.id, { bwFactor: v > 0 ? v : 0 }); }} /></label>}
                   <label style={{ fontSize: 12, color: C.muted }}>
-                    可動域係数 <NumInput inputMode="decimal" value={ex.rom ?? 1} style={cfgInput} onChange={e => updEx(ex.id, { rom: num(e.target.value) || 1 })} />
+                    可動域係数 <NumInput inputMode="decimal" value={ex.rom ?? 1} style={cfgInput}
+                      onChange={e => updEx(ex.id, { rom: e.target.value })}
+                      onBlur={e => { const v = num(e.target.value); updEx(ex.id, { rom: v > 0 ? Math.min(1, Math.max(0.1, v)) : 1 }); }} />
                     <span style={{ fontSize: 10, marginLeft: 4 }}>(集計ボリュームのみ)</span>
                   </label>
                 </div>
@@ -1975,8 +2081,9 @@ function App() {
                 const setKey = `${ex.id}:${i}`;
                 const expanded = openSetKey === setKey;
                 const inc = num(ex.increment) || 2.5;
+                const done = s.warmup || (s.rir !== "" && s.rir != null); // 実施済みか
                 return (
-                <div key={i} style={{ marginBottom: 8, background: expanded ? C.bg : "transparent", borderRadius: 10, padding: expanded ? 8 : 0 }}>
+                <div key={i} style={{ marginBottom: 8, background: expanded ? C.bg : "transparent", borderRadius: 10, padding: expanded ? 8 : 0, opacity: done ? 1 : 0.55 }}>
                   <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                     <button onClick={() => updateSet(ex.id, i, "warmup", !s.warmup)}
                       title="タップでウォームアップ/ワーキング切替"
@@ -2032,7 +2139,9 @@ function App() {
                 </div>
                 );
               })}
-              <div style={{ fontSize: 10, color: C.muted, marginBottom: 8 }}>※ 左の番号タップでウォームアップ(W)。「±」で重量・回数の微調整・コピー・補助設定ができます。</div>
+              <div style={{ fontSize: 10, color: C.muted, marginBottom: 8, lineHeight: 1.6 }}>
+                ※「あと何回できた?」を入力したセットが実施済みとして記録されます(薄いセットは未実施)。左の番号タップでウォームアップ(W)。
+              </div>
 
               <button onClick={() => { addSet(ex.id); }} style={{ ...btn(C.surface2, C.text), width: "100%", padding: 10, fontSize: 13, marginBottom: 8 }}>＋ セットを追加</button>
 
@@ -2069,19 +2178,26 @@ function App() {
                 </div>
               ) : null}
 
-              {/* この種目の後ろに別の種目を挿入 */}
-              {!(inGroup && !groupEnd) && (
+            </div>
+
+            {/* 種目と種目の間に挿入 */}
+            {!(inGroup && !groupEnd) && !isLast && (
+              <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0 6px" }}>
+                <div style={{ flex: 1, height: 1, background: insertAt === exIdx + 1 ? C.red : C.border }} />
                 <button onClick={() => { setInsertAt(insertAt === exIdx + 1 ? null : exIdx + 1); setSearch(""); }}
                   style={{
-                    width: "100%", marginTop: 10, padding: "8px 0", borderRadius: 8, cursor: "pointer",
-                    fontSize: 12, fontFamily: "inherit", fontWeight: 700,
+                    padding: "5px 14px", borderRadius: 999, cursor: "pointer",
+                    fontSize: 12, fontFamily: "inherit", fontWeight: 700, whiteSpace: "nowrap",
                     border: `1px dashed ${insertAt === exIdx + 1 ? C.red : C.border}`,
-                    background: "transparent", color: insertAt === exIdx + 1 ? C.red : C.muted,
+                    background: insertAt === exIdx + 1 ? C.red : "transparent",
+                    color: insertAt === exIdx + 1 ? "#fff" : C.muted,
                   }}>
-                  {insertAt === exIdx + 1 ? "↓ 下の一覧から種目を選ぶとここに入ります(タップで解除)" : "＋ ここに種目を追加"}
+                  {insertAt === exIdx + 1 ? "ここに挿入中(解除)" : "＋ ここに追加"}
                 </button>
-              )}
-            </div>
+                <div style={{ flex: 1, height: 1, background: insertAt === exIdx + 1 ? C.red : C.border }} />
+              </div>
+            )}
+            </React.Fragment>
             );
           })}
 
@@ -2404,6 +2520,10 @@ function App() {
                     </>
                   ) : (
                     <>
+                      <button onClick={() => copyWorkout(w, idx)}
+                        style={{ ...btn(copiedIdx === idx ? C.green : C.surface2, copiedIdx === idx ? "#fff" : C.muted), padding: "5px 10px", fontSize: 12 }}>
+                        {copiedIdx === idx ? "✓ コピー済" : "コピー"}
+                      </button>
                       <button onClick={() => startEditWorkout(idx)} style={{ ...btn(C.surface2, C.muted), padding: "5px 10px", fontSize: 12 }}>編集</button>
                       <button onClick={() => deleteWorkout(idx)} aria-label="この記録を削除" style={{ ...btn("transparent", C.muted), padding: "5px 6px", fontSize: 12 }}>🗑</button>
                     </>
