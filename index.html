@@ -303,6 +303,16 @@ const resolveIsDb = (name, storedIsDb) => {
 };
 // 可動域係数: 集計ボリュームのみに適用(判定・1RM・PRには影響させない)。
 // シュラッグ/カーフレイズ/リストカール=0.5、その他=1.0。保存値(ユーザー調整)があれば優先。
+// 種目に応じた推奨の増加幅(kg)。小さな単関節種目に2.5kgは大きすぎるため実態に合わせる。
+const recommendedIncrement = (name, fallback = 2.5) => {
+  const k = dbLookup(name);
+  if (!k) return fallback;
+  if (k.inc) return k.inc;                       // 種目ごとの明示指定を最優先
+  if (k.eq === "マシン") return 5;                // マシンは5kg刻みが多い
+  if (k.t === "I") return k.db ? 1 : 2.5;        // 単関節: ダンベルは片手1kg、他は2.5kg
+  return k.db ? 2 : 2.5;                          // 多関節: ダンベル片手2kg、バーベル等2.5kg
+};
+
 const resolveRom = (name, storedRom) => {
   const v = parseFloat(storedRom);
   if (!isNaN(v) && v > 0) return v;
@@ -359,15 +369,20 @@ const JUDGE = {
   pain_warning:     { label: "痛み警告", color: "#FF5A4E" },
   insufficient_data:{ label: "データ不足", color: C.grey },
   new_start:        { label: "初回", color: C.blue },
+  comeback:         { label: "再開", color: C.blue },
 };
 
 // ================= ルールエンジン =================
-function analyzeExercise(name, workouts) {
-  const sessions = workouts.map(w => w.exercises.find(e => e.name === name)).filter(Boolean);
+function analyzeExercise(name, workouts, opts = {}) {
+  const phase = opts.phase || "maintain";  // bulk(増量) / maintain(維持) / cut(減量)
+  // 種目を含むセッションと、その実施日を対応付けて取得
+  const entries = workouts.map(w => ({ date: w.date, ex: w.exercises.find(e => e.name === name) })).filter(x => x.ex);
+  const sessions = entries.map(x => x.ex);
   if (sessions.length === 0) return { type: "insufficient_data", reason: "履歴がありません。" };
+  const lastDate = entries[entries.length - 1].date;
   const latest = sessions[sessions.length - 1];
   const cfg = {
-    repLow: latest.repLow ?? 8, repHigh: latest.repHigh ?? 12,
+    repLow: latest.repLow ?? 10, repHigh: latest.repHigh ?? 10,
     rirLow: latest.targetRirLow ?? 1, rirHigh: latest.targetRirHigh ?? 2, inc: latest.increment ?? 2.5,
   };
   // ワーキングかつ補助なしのセットのみを判定対象に(ウォームアップ・補助ありは増量判定から除外)
@@ -386,7 +401,7 @@ function analyzeExercise(name, workouts) {
           isDb: resolveIsDb(name, latest.isDb), rom: resolveRom(name, latest.rom),
           weight: Math.max(0, Math.round(w0 / inc0) * inc0),
           targetReps: working.map(s => s.reps), sets: working.length,
-          repLow: latest.repLow ?? 8, repHigh: latest.repHigh ?? 12,
+          repLow: latest.repLow ?? 10, repHigh: latest.repHigh ?? 10,
           targetRirLow: latest.targetRirLow ?? 1, targetRirHigh: latest.targetRirHigh ?? 2, increment: inc0,
         },
       };
@@ -396,10 +411,17 @@ function analyzeExercise(name, workouts) {
   const topWeight = Math.max(...sets.map(s => s.weight));
   const reps = sets.map(s => s.reps);
   const totalReps = reps.reduce((a, b) => a + b, 0);
+  const setCount = sets.length;
+  const avgReps = totalReps / setCount;             // 平均回数(セット数の変動に左右されない指標)
+  // 前回のセット数(増量条件に使う。セットを減らして平均を稼ぐのを防ぐ)
+  const prevSets = sessions.length >= 2
+    ? (sessions[sessions.length - 2].sets || []).filter(s => !s.warmup && !s.assisted)
+    : [];
+  const prevSetCount = prevSets.length || setCount;
   const rirs = sets.map(s => s.rir).filter(r => r != null && !isNaN(r));
   const avgRir = rirs.length ? rirs.reduce((a, b) => a + b, 0) / rirs.length : null;
   const db = dbLookup(name);
-  const inc = cfg.inc > 0 ? cfg.inc : 2.5;
+  const inc = cfg.inc > 0 ? cfg.inc : recommendedIncrement(name);
   // 重量は増加幅(increment)の単位に丸める(2.5kg刻みのジムで62.3kg等が出ないように)
   const snap = (w) => Math.max(0, Math.round(w / inc) * inc);
 
@@ -417,24 +439,49 @@ function analyzeExercise(name, workouts) {
 
   if (latest.pain) return presc("pain_warning", topWeight, keep(), "痛みの記録あり。負荷は上げず、必要なら種目を中止して専門家に相談を。");
 
+  // --- ブランク補正: 期間が空いた種目は落ちているので軽めから再開 ---
+  if (lastDate) {
+    const days = Math.floor((Date.now() - new Date(lastDate).getTime()) / 86400000);
+    if (days >= 21) return presc("comeback", topWeight * 0.9, fill(cfg.repLow), `前回から${days}日空いています。10%落として軽めから再開しましょう。`);
+    if (days >= 14) return presc("comeback", topWeight * 0.95, fill(cfg.repLow), `前回から${days}日空いています。5%落として感覚を戻しましょう。`);
+  }
+
+  // --- 停滞のカウント(平均回数ベースで比較) ---
   let stall = 0;
   for (let i = sessions.length - 1; i > 0; i--) {
     const cs = (sessions[i].sets || []).filter(s => !s.warmup && !s.assisted), ps = (sessions[i - 1].sets || []).filter(s => !s.warmup && !s.assisted);
     if (cs.length === 0 || ps.length === 0) break;
     const curTop = Math.max(...cs.map(s => s.weight)), prevTop = Math.max(...ps.map(s => s.weight));
-    const curReps = cs.reduce((a, s) => a + s.reps, 0), prevReps = ps.reduce((a, s) => a + s.reps, 0);
-    if (curTop === prevTop && curReps <= prevReps) stall++; else break;
+    const curAvg = cs.reduce((a, s) => a + s.reps, 0) / cs.length;
+    const prevAvg = ps.reduce((a, s) => a + s.reps, 0) / ps.length;
+    if (curTop === prevTop && curAvg <= prevAvg) stall++; else break;
   }
   const highFatigue = avgRir != null && avgRir <= 0.5;
-  if (stall >= 2 || (stall >= 1 && highFatigue))
-    return presc("deload_candidate", topWeight * 0.9, fill(cfg.repLow), `${stall + 1}回連続で停滞${highFatigue ? "・疲労も高い" : ""}。重量を約10%下げて仕切り直し。`);
+  // 減量期は停滞をデロード扱いしない(維持できていれば十分)
+  const stallLimit = phase === "cut" ? 3 : 2;
+  const allowFatigueDeload = phase !== "cut";
+  if (stall >= stallLimit || (allowFatigueDeload && stall >= 1 && highFatigue)) {
+    return presc("deload_candidate", topWeight * 0.9, fill(cfg.repLow),
+      `${stall + 1}回連続で停滞${highFatigue ? "・疲労も高い" : ""}。重量を約10%下げて仕切り直し。`);
+  }
+  // 減量期に停滞している場合は「維持できている」と評価する
+  if (phase === "cut" && stall >= 1) {
+    return presc("maintain", topWeight, keep(),
+      `減量期は維持できていれば十分です(${stall + 1}回連続で同水準)。同じ重量・回数を狙いましょう。`);
+  }
 
+  // --- パフォーマンス低下(平均回数で比較。セット数の増減に影響されない) ---
   if (sessions.length >= 2) {
     const ps = (sessions[sessions.length - 2].sets || []).filter(s => !s.warmup && !s.assisted);
     if (ps.length > 0) {
-      const prevTop = Math.max(...ps.map(s => s.weight)), prevTotal = ps.reduce((a, s) => a + s.reps, 0);
-      if (topWeight >= prevTop && totalReps < prevTotal - 1)
-        return presc("maintain", topWeight, keep(), "前回よりパフォーマンス低下。睡眠・疲労・食事を確認し、同重量で再挑戦。");
+      const prevTop = Math.max(...ps.map(s => s.weight));
+      const prevAvg = ps.reduce((a, s) => a + s.reps, 0) / ps.length;
+      if (topWeight >= prevTop && avgReps < prevAvg - 0.5) {
+        return presc("maintain", topWeight, keep(),
+          phase === "cut"
+            ? "前回よりやや低下。減量中は起こりやすいので、同じ重量で維持を狙いましょう。"
+            : "前回よりパフォーマンス低下。睡眠・疲労・食事を確認し、同重量で再挑戦。");
+      }
     }
   }
 
@@ -443,16 +490,23 @@ function analyzeExercise(name, workouts) {
     return presc("technique_focus", topWeight, keep(),
       latest.formBroke ? "フォームが崩れた。重量は据え置き、可動域とテンポの再現性を優先。" : `余力が目標(あと${cfg.rirLow}回)を下回った。同重量でフォームを固める。`);
 
-  // ルール1: 全セットで上限達成 → 増量し、下限回数から再スタート
-  if (reps.every(r => r >= cfg.repHigh))
-    return presc("weight_increase", topWeight + inc, fill(cfg.repLow), `全セットで${cfg.repHigh}回達成・余力とフォーム良好。+${inc}kgで${cfg.repLow}回から再スタート。`);
+  // --- 増量条件: 平均回数が上限に到達し、かつセット数が前回以上 ---
+  // (平均を使うことでセット数の変動に左右されず、セット数の条件で「減らして平均を稼ぐ」のを防ぐ)
+  if (avgReps >= cfg.repHigh) {
+    if (setCount >= prevSetCount) {
+      return presc("weight_increase", topWeight + inc, fill(cfg.repLow),
+        `平均${avgReps.toFixed(1)}回で目標${cfg.repHigh}回に到達(${setCount}セット)。+${inc}kgで再スタート。`);
+    }
+    return presc("maintain", topWeight, keep(),
+      `平均${avgReps.toFixed(1)}回で目標に到達していますが、セット数が前回(${prevSetCount})より少ないため据え置きます。同重量で${prevSetCount}セットを狙いましょう。`);
+  }
 
   // ルール2: 上限未達 → 重量維持のまま「合計+1回」。上限に届いていない最初のセットだけ+1する。
   const next = [...reps];
   const idx = next.findIndex(r => r < cfg.repHigh);
   if (idx >= 0) next[idx] = next[idx] + 1;
   return presc("reps_increase", topWeight, next,
-    `回数範囲の上限(${cfg.repHigh}回)に未到達。重量は維持し、${idx + 1}セット目を1回増やして合計+1回。`);
+    `目標${cfg.repHigh}回に未到達(平均${avgReps.toFixed(1)}回)。重量は維持し、${idx + 1}セット目を1回増やします。`);
 }
 
 // ================= 共通スタイル =================
@@ -626,7 +680,7 @@ function App() {
   const [view, setView] = useState("split"); // 起動時は分割タブ(今日どのセッションかを確認してから記録へ)
   const [workouts, setWorkouts] = useState([]);
   const [split, setSplit] = useState(null);
-  const [profile, setProfile] = useState({ bodyweight: 70, aiMode: true, soundOn: true, defRepLow: 8, defRepHigh: 12, defIncrement: 2.5 });
+  const [profile, setProfile] = useState({ bodyweight: 70, aiMode: true, soundOn: true, defTargetReps: 10, defIncrement: 2.5, phase: 'maintain' });
   const [recentNames, setRecentNames] = useState([]); // 選択履歴順
   const [customExercises, setCustomExercises] = useState([]); // 永続保存するカスタム種目 [{n,m,eq,t,db,bw}]
   const [exerciseNotes, setExerciseNotes] = useState({}); // 種目ごとの固定メモ {種目名: "メモ"}
@@ -722,7 +776,8 @@ function App() {
             setWorkouts(migW(p.workouts));
             setSplit(migSplit(p.split));
             setProfile({ bodyweight: p.profile?.bodyweight ?? 70, aiMode: false, soundOn: p.profile?.soundOn ?? true,
-              defRepLow: p.profile?.defRepLow ?? 8, defRepHigh: p.profile?.defRepHigh ?? 12, defIncrement: p.profile?.defIncrement ?? 2.5 });
+              defTargetReps: p.profile?.defTargetReps ?? p.profile?.defRepHigh ?? 10, defIncrement: p.profile?.defIncrement ?? 2.5,
+              phase: p.profile?.phase ?? 'maintain' });
             setRecentNames(p.recentNames || []);
             setCustomExercises(p.customExercises || []);
             setExerciseNotes(p.exerciseNotes || {});
@@ -1037,9 +1092,9 @@ function App() {
     }
     const db = findExercise(name);
     return {
-      repLow: num(profile.defRepLow) || 8, repHigh: num(profile.defRepHigh) || 12,
+      repLow: num(profile.defTargetReps) || 10, repHigh: num(profile.defTargetReps) || 10,
       targetRirLow: db ? (db.t === "C" ? 1 : 0) : 1, targetRirHigh: db ? (db.t === "C" ? 3 : 2) : 2,
-      increment: num(profile.defIncrement) || 2.5, muscle: db?.m ?? customDraft.muscle ?? "", bwFactor: db?.bw ?? 0,
+      increment: recommendedIncrement(name, num(profile.defIncrement) || 2.5), muscle: db?.m ?? customDraft.muscle ?? "", bwFactor: db?.bw ?? 0,
       isDb: db ? !!db.db : (customDraft.eq === "ダンベル"), rom: db?.rom ?? 1.0,
       lastWeight: null,
     };
@@ -1047,7 +1102,7 @@ function App() {
 
   // 種目名 → メニュー1項目(履歴があればルール判定、無ければ初回の既定値)
   const buildMenuItem = (name) => {
-    const res = analyzeExercise(name, workouts);
+    const res = analyzeExercise(name, workouts, { phase: profile.phase });
     if (res.type !== "insufficient_data") return { type: res.type, reason: res.reason, prescription: res.prescription };
     const cfg = lastConfig(name);
     return {
@@ -1242,7 +1297,7 @@ function App() {
     const durationMin = Math.max(1, Math.round((end - start) / 60000));
     const exercises = today.map(ex => ({
       name: ex.name, muscle: ex.muscle || "", bwFactor: ex.bwFactor || 0, isDb: resolveIsDb(ex.name, ex.isDb), rom: resolveRom(ex.name, ex.rom), bwAtLog: profile.bodyweight,
-      repLow: num(ex.repLow) || 8, repHigh: num(ex.repHigh) || 12,
+      repLow: num(ex.repLow) || 10, repHigh: num(ex.repHigh) || 10,
       targetRirLow: num(ex.targetRirLow), targetRirHigh: num(ex.targetRirHigh), increment: num(ex.increment) || 2.5,
       formBroke: !!ex.formBroke, pain: !!ex.pain,
       ...(ex.ssGroup ? { ssGroup: ex.ssGroup } : {}),
@@ -1335,7 +1390,7 @@ function App() {
   // ---- 提案 ----
   const generate = async () => {
     const names = [...new Set(workouts.flatMap(w => w.exercises.map(e => e.name)))];
-    let items = names.map(n => analyzeExercise(n, workouts)).filter(r => r.type !== "insufficient_data");
+    let items = names.map(n => analyzeExercise(n, workouts, { phase: profile.phase })).filter(r => r.type !== "insufficient_data");
     if (split && filterToday) { const f = items.filter(it => muscleMatchesDay(it.prescription.muscle, todayDay)); if (f.length) items = f; }
     if (items.length === 0) { setError("判定できる種目がありません。まず記録してください。"); return; }
     setError(""); setResult({ advice: "", items });
@@ -1582,7 +1637,8 @@ function App() {
         workouts: migW(ws),
         split: p.split ? { ...p.split, days: p.split.days.map(d => ({ ...d, muscles: [...new Set((d.muscles || []).map(normMuscle))] })) } : null,
         profile: { bodyweight: p.profile?.bodyweight ?? 70, aiMode: false, soundOn: p.profile?.soundOn ?? true,
-          defRepLow: p.profile?.defRepLow ?? 8, defRepHigh: p.profile?.defRepHigh ?? 12, defIncrement: p.profile?.defIncrement ?? 2.5 },
+          defTargetReps: p.profile?.defTargetReps ?? p.profile?.defRepHigh ?? 10, defIncrement: p.profile?.defIncrement ?? 2.5,
+          phase: p.profile?.phase ?? 'maintain' },
         recentNames: p.recentNames || [],
         customExercises: p.customExercises || [],
         exerciseNotes: p.exerciseNotes || {},
@@ -1769,7 +1825,7 @@ function App() {
         <div>
           <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: 32, letterSpacing: 1, lineHeight: 1 }}>
             OVERLOAD<span style={{ color: C.red }}>+</span>
-            <span style={{ fontFamily: "'Noto Sans JP', sans-serif", fontSize: 11, fontWeight: 700, color: C.green, marginLeft: 8, verticalAlign: "middle" }}>v38</span>
+            <span style={{ fontFamily: "'Noto Sans JP', sans-serif", fontSize: 11, fontWeight: 700, color: C.green, marginLeft: 8, verticalAlign: "middle" }}>v41</span>
           </div>
         </div>
         {AI_ENABLED && (
@@ -2051,7 +2107,9 @@ function App() {
 
               {openCfg[ex.id] && (
                 <div style={{ background: C.bg, borderRadius: 10, padding: 10, marginBottom: 10, display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center" }}>
-                  <label style={{ fontSize: 12, color: C.muted }}>回数範囲 <NumInput inputMode="decimal" value={ex.repLow} style={cfgInput} onChange={e => updEx(ex.id, { repLow: e.target.value })} /><span style={{ margin: "0 4px" }}>–</span><NumInput inputMode="decimal" value={ex.repHigh} style={cfgInput} onChange={e => updEx(ex.id, { repHigh: e.target.value })} /></label>
+                  <label style={{ fontSize: 12, color: C.muted }}>目標回数 <NumInput inputMode="numeric" value={ex.repHigh} style={cfgInput}
+                    onChange={e => updEx(ex.id, { repHigh: e.target.value, repLow: e.target.value })}
+                    onBlur={e => { const v = Math.min(50, Math.max(1, Math.round(num(e.target.value)) || 10)); updEx(ex.id, { repHigh: v, repLow: v }); }} /> 回</label>
                   <label style={{ fontSize: 12, color: C.muted }}>目標(あと)回 <NumInput inputMode="decimal" value={ex.targetRirLow} style={cfgInput} onChange={e => updEx(ex.id, { targetRirLow: e.target.value })} /><span style={{ margin: "0 4px" }}>–</span><NumInput inputMode="decimal" value={ex.targetRirHigh} style={cfgInput} onChange={e => updEx(ex.id, { targetRirHigh: e.target.value })} /></label>
                   <label style={{ fontSize: 12, color: C.muted }}>増加幅 <NumInput inputMode="decimal" value={ex.increment} style={cfgInput} onChange={e => updEx(ex.id, { increment: e.target.value })} />kg</label>
                   <label style={{ fontSize: 12, color: C.muted }}>部位 <select value={ex.muscle} onChange={e => updEx(ex.id, { muscle: e.target.value })} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: "5px 6px", fontSize: 13, fontFamily: "inherit" }}><option value="">未設定</option>{MUSCLES.map(m => <option key={m} value={m}>{m}</option>)}</select></label>
@@ -2082,6 +2140,25 @@ function App() {
                 const expanded = openSetKey === setKey;
                 const inc = num(ex.increment) || 2.5;
                 const done = s.warmup || (s.rir !== "" && s.rir != null); // 実施済みか
+                // このセットの推定1RM(ウォームアップ・補助は対象外)
+                const setW = num(s.weight), setR = Math.round(num(s.reps));
+                const set1RM = (!s.warmup && !s.assisted && setW > 0 && setR > 0)
+                  ? est1RM(effWeight(setW, resolveIsDb(ex.name, ex.isDb), ex.bwFactor || 0, profile.bodyweight), setR)
+                  : 0;
+                const pastBest1RM = prMap[ex.name]?.best1RM || 0;
+                // このセットが自己ベストを更新しているか(同一セッション内では最も高い1セットのみに印を付ける)
+                const bestIdxInSession = (() => {
+                  let bi = -1, bv = 0;
+                  ex.sets.forEach((x, xi) => {
+                    if (x.warmup || x.assisted) return;
+                    const w = num(x.weight), r = Math.round(num(x.reps));
+                    if (w <= 0 || r <= 0) return;
+                    const v = est1RM(effWeight(w, resolveIsDb(ex.name, ex.isDb), ex.bwFactor || 0, profile.bodyweight), r);
+                    if (v > bv) { bv = v; bi = xi; }
+                  });
+                  return bi;
+                })();
+                const isSetPR = set1RM > 0 && set1RM > pastBest1RM + 0.01 && i === bestIdxInSession;
                 return (
                 <div key={i} style={{ marginBottom: 8, background: expanded ? C.bg : "transparent", borderRadius: 10, padding: expanded ? 8 : 0, opacity: done ? 1 : 0.55 }}>
                   <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -2106,6 +2183,20 @@ function App() {
                     <button onClick={() => removeSet(ex.id, i)} aria-label={`セット${i + 1}を削除`}
                       style={{ width: 26, height: 26, borderRadius: 8, border: `1px solid ${C.border}`, background: C.surface2, color: C.muted, fontSize: 12, cursor: "pointer", flexShrink: 0 }}>✕</button>
                   </div>
+
+                  {/* このセットの推定1RM */}
+                  {set1RM > 0 && (
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, paddingLeft: 30, marginTop: 3 }}>
+                      <span style={{ fontSize: 10, color: isSetPR ? C.green : C.muted }}>
+                        推定1RM {set1RM.toFixed(1)}kg
+                      </span>
+                      {isSetPR && (
+                        <span style={{ background: C.yellow, color: "#141517", borderRadius: 999, padding: "1px 8px", fontSize: 10, fontWeight: 800 }}>
+                          ⚡ 1RM更新 +{(set1RM - pastBest1RM).toFixed(1)}kg
+                        </span>
+                      )}
+                    </div>
+                  )}
 
                   {expanded && (
                     <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 8 }}>
@@ -2555,6 +2646,22 @@ function App() {
               {!editing && w.exercises.map((ex, j) => {
                 const prevE = w.exercises[j - 1];
                 const ssStart = ex.ssGroup && (!prevE || prevE.ssGroup !== ex.ssGroup);
+                // この記録より前の自己ベスト1RMを求め、更新したセットを特定する
+                const priorBest = workouts.slice(0, idx).reduce((best, pw) => {
+                  const pe = pw.exercises.find(e => e.name === ex.name);
+                  if (!pe) return best;
+                  return pe.sets.reduce((b, s) => {
+                    if (s.warmup || s.assisted || !s.reps) return b;
+                    return Math.max(b, est1RM(setEff(pe, s), s.reps));
+                  }, best);
+                }, 0);
+                let prIdx = -1, prVal = 0;
+                ex.sets.forEach((s, si) => {
+                  if (s.warmup || s.assisted || !s.reps) return;
+                  const v = est1RM(setEff(ex, s), s.reps);
+                  if (v > prVal) { prVal = v; prIdx = si; }
+                });
+                const hasPR = prIdx >= 0 && prVal > priorBest + 0.01;
                 return (
                 <div key={j} style={{ fontSize: 13, marginBottom: 8, paddingBottom: 6, borderBottom: j < w.exercises.length - 1 ? `1px solid ${C.border}` : "none" }}>
                   <div style={{ marginBottom: 2, lineHeight: 1.4 }}>
@@ -2563,9 +2670,19 @@ function App() {
                     {ex.name}
                     {ex.pain && <span style={{ color: "#FF5A4E", marginLeft: 4 }}>⚠</span>}
                     {ex.formBroke && <span style={{ color: C.yellow, marginLeft: 4 }}>△</span>}
+                    {hasPR && (
+                      <span style={{ background: C.yellow, color: "#141517", fontSize: 9, fontWeight: 800, borderRadius: 4, padding: "1px 6px", marginLeft: 6 }}>
+                        ⚡1RM {prVal.toFixed(1)}kg
+                      </span>
+                    )}
                   </div>
                   <div style={{ color: C.muted, fontSize: 12, lineHeight: 1.6, wordBreak: "break-word" }}>
-                    {ex.sets.map(s => `${s.warmup ? "W:" : ""}${s.assisted ? "補:" : ""}${s.weight}×${s.reps}${s.rir != null ? `(残${s.rir})` : ""}`).join(" / ")}
+                    {ex.sets.map((s, si) => (
+                      <span key={si} style={hasPR && si === prIdx ? { color: C.yellow, fontWeight: 700 } : undefined}>
+                        {si > 0 && <span style={{ color: C.muted, fontWeight: 400 }}> / </span>}
+                        {hasPR && si === prIdx ? "⚡" : ""}{s.warmup ? "W:" : ""}{s.assisted ? "補:" : ""}{s.weight}×{s.reps}{s.rir != null ? `(残${s.rir})` : ""}
+                      </span>
+                    ))}
                   </div>
                 </div>
                 );
@@ -2669,6 +2786,33 @@ function App() {
             </label>
           </div>
 
+          {/* トレーニング期(フェーズ) */}
+          <div style={{ background: C.surface, borderRadius: 14, padding: 16, border: `1px solid ${C.border}`, marginBottom: 12 }}>
+            <div style={{ fontSize: 14, fontWeight: 900, marginBottom: 4 }}>いまの時期</div>
+            <p style={{ color: C.muted, fontSize: 12, margin: "0 0 12px", lineHeight: 1.6 }}>
+              時期に応じて判定の厳しさが変わります。増量条件(平均回数が上限到達＋セット数が前回以上)は共通です。
+            </p>
+            <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
+              {[["bulk", "増量期"], ["maintain", "維持期"], ["cut", "減量期"]].map(([k, label]) => (
+                <button key={k} onClick={() => persist({ profile: { ...profile, phase: k } })}
+                  style={{
+                    flex: 1, padding: "10px 0", borderRadius: 10, cursor: "pointer",
+                    fontSize: 13, fontWeight: 800, fontFamily: "inherit",
+                    border: `1px solid ${profile.phase === k ? C.red : C.border}`,
+                    background: profile.phase === k ? C.red : C.bg,
+                    color: profile.phase === k ? "#fff" : C.muted,
+                  }}>{label}</button>
+              ))}
+            </div>
+            <p style={{ color: C.muted, fontSize: 11, margin: 0, lineHeight: 1.7 }}>
+              {profile.phase === "cut"
+                ? "減量期: 停滞をデロード扱いしません。維持できていれば「十分」と判定し、無用な重量down提案を出しません。"
+                : profile.phase === "bulk"
+                  ? "増量期: 2回停滞、または疲労が高いとデロードを提案します。積極的に伸ばす設定です。"
+                  : "維持期: 標準設定。2回停滞または高疲労でデロードを提案します。"}
+            </p>
+          </div>
+
           {/* 判定のデフォルト値 */}
           <div style={{ background: C.surface, borderRadius: 14, padding: 16, border: `1px solid ${C.border}`, marginBottom: 12 }}>
             <div style={{ fontSize: 14, fontWeight: 900, marginBottom: 4 }}>次回メニュー判定のデフォルト</div>
@@ -2677,28 +2821,19 @@ function App() {
             </p>
 
             <label style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 14, marginBottom: 12 }}>
-              回数範囲
+              目標回数
               <span>
-                <NumInput inputMode="numeric" value={profile.defRepLow}
-                  onChange={e => persist({ profile: { ...profile, defRepLow: e.target.value } })}
+                <NumInput inputMode="numeric" value={profile.defTargetReps}
+                  onChange={e => persist({ profile: { ...profile, defTargetReps: e.target.value } })}
                   onBlur={e => {
-                    const v = Math.min(50, Math.max(1, Math.round(num(e.target.value)) || 8));
-                    persist({ profile: { ...profile, defRepLow: v, defRepHigh: Math.max(v, num(profile.defRepHigh) || 12) } });
+                    const v = Math.min(50, Math.max(1, Math.round(num(e.target.value)) || 10));
+                    persist({ profile: { ...profile, defTargetReps: v } });
                   }}
-                  style={{ ...cfgInput, width: 56, fontSize: 16 }} />
-                <span style={{ margin: "0 6px", color: C.muted }}>〜</span>
-                <NumInput inputMode="numeric" value={profile.defRepHigh}
-                  onChange={e => persist({ profile: { ...profile, defRepHigh: e.target.value } })}
-                  onBlur={e => {
-                    const lo = num(profile.defRepLow) || 8;
-                    const v = Math.min(50, Math.max(lo, Math.round(num(e.target.value)) || 12));
-                    persist({ profile: { ...profile, defRepHigh: v } });
-                  }}
-                  style={{ ...cfgInput, width: 56, fontSize: 16 }} /> 回
+                  style={{ ...cfgInput, width: 64, fontSize: 16 }} /> 回
               </span>
             </label>
             <p style={{ color: C.muted, fontSize: 11, margin: "-6px 0 14px", lineHeight: 1.6 }}>
-              全セットで上限({num(profile.defRepHigh) || 12}回)に到達すると増量、未達なら回数を増やす判定になります。
+              平均{num(profile.defTargetReps) || 10}回に到達し、セット数が前回以上なら増量します。届かなければ同じ重量で回数を伸ばします。
             </p>
 
             <label style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 14 }}>
