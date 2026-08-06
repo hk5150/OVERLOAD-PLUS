@@ -1833,8 +1833,8 @@ function App() {
         const steps = [
           {
             art: "hero", title: "OVERLOAD+ へようこそ",
-            lead: "「次に何をやるか」を自動で決めてくれる、筋トレ記録アプリです。",
-            body: "多くのアプリは記録するだけ。OVERLOAD+ は前回の結果から、次回の重量・回数をルールで計算して提案します。判定はAIではなく決定論的なルールなので、毎回ブレません。",
+            lead: "前回の内容がそのまま出てくる、筋トレ記録アプリです。",
+            body: "同じ分割の前回の記録(重量・回数・セット数)がそのまま並ぶので、入力の手間なく「前回より上」を狙えます。推定1RMや自己ベストは自動で計算されます。",
           },
           {
             art: "split", title: "① 分割を決める",
@@ -1843,13 +1843,13 @@ function App() {
           },
           {
             art: "record", title: "② 記録する",
-            lead: "「記録」タブで、重量・回数・「あと何回できた?」を入力。",
-            body: "セットの「±」で微調整やコピー、補助ありの指定もできます。ウォームアップは番号タップでW化。連続する種目はスーパーセットにまとめられます。休憩は入力後に自動でタイマーが動き、1分ごとに通知音が鳴ります。",
+            lead: "「記録」タブで、重量・回数・「あと何回できた?(RIR)」を入力。",
+            body: "「あと何回できた?」を入力したセットが実施済みとして記録されます。セット番号のタップでウォームアップ(W)や補助あり(補)に切り替え、連続する種目はスーパーセットにまとめられます。休憩は入力後に自動でタイマーが動き、1分ごとに通知音が鳴ります。",
           },
           {
-            art: "progress", title: "③ 次回は自動で提案",
-            lead: "次にその日を開くと、調整済みのメニューが出ます。",
-            body: "全セットで目標回数に届けば増量、届かなければ回数を増やす、停滞すればデロード——といったルールで処方。推定1RM・PRも自動で記録されます。\n\n⚠️ データは端末内だけに保存されます。設定タブから定期的にバックアップを書き出してください。",
+            art: "progress", title: "③ 伸びを確認する",
+            lead: "Max 1RMと今日の1RMがその場で比較できます。",
+            body: "セットごとに推定1RMが表示され、自己ベストを超えると更新バッジが出ます。何日ベストを更新していないかも分かるので、停滞にすぐ気付けます。\n\n⚠️ データは端末内だけに保存されます。設定タブから定期的にバックアップを書き出してください。",
           },
         ];
         const step = steps[guideStep];
@@ -1938,7 +1938,7 @@ function App() {
         <div>
           <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: 32, letterSpacing: 1, lineHeight: 1 }}>
             OVERLOAD<span style={{ color: C.red }}>+</span>
-            <span style={{ fontFamily: "'Noto Sans JP', sans-serif", fontSize: 11, fontWeight: 700, color: C.green, marginLeft: 8, verticalAlign: "middle" }}>v47</span>
+            <span style={{ fontFamily: "'Noto Sans JP', sans-serif", fontSize: 11, fontWeight: 700, color: C.green, marginLeft: 8, verticalAlign: "middle" }}>v48</span>
           </div>
         </div>
         {AI_ENABLED && (
@@ -2184,7 +2184,7 @@ function App() {
                     <div style={{ display: "flex", alignItems: "stretch", gap: 8 }}>
                       <div style={{ flex: 1, textAlign: "center" }}>
                         <div style={{ fontSize: 9, color: C.muted, marginBottom: 2 }}>
-                          自己ベスト{pr?.date ? `(${fmtDate(pr.date)})` : ""}
+                          Max 1RM{pr?.date ? `(${fmtDate(pr.date)})` : ""}
                         </div>
                         <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 24, fontWeight: 800, color: C.yellow, lineHeight: 1 }}>
                           {best1RM > 0 ? best1RM.toFixed(1) : "—"}<span style={{ fontSize: 10, color: C.muted }}>kg</span>
@@ -2207,11 +2207,11 @@ function App() {
                       </div>
 
                       <div style={{ flex: 1, textAlign: "center" }}>
-                        <div style={{ fontSize: 9, color: C.muted, marginBottom: 2 }}>今日</div>
+                        <div style={{ fontSize: 9, color: C.muted, marginBottom: 2 }}>今日の1RM</div>
                         <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 24, fontWeight: 800, color: isPR1RM ? C.green : C.text, lineHeight: 1 }}>
                           {live1RM > 0 ? live1RM.toFixed(1) : "—"}<span style={{ fontSize: 10, color: C.muted }}>kg</span>
                         </div>
-                        <div style={{ fontSize: 9, color: C.muted, marginTop: 2 }}>推定1RM</div>
+                        <div style={{ fontSize: 9, color: C.muted, marginTop: 2 }}>推定値</div>
                       </div>
                     </div>
 
@@ -2234,7 +2234,7 @@ function App() {
                       )}
                       {isPRw && (
                         <span style={{ background: C.green, color: "#fff", borderRadius: 999, padding: "3px 11px", fontSize: 11, fontWeight: 800 }}>
-                          🏆 重量PR {liveW.toFixed(1)}{unit}
+                          🏆 最大重量 {liveW.toFixed(1)}{unit}
                         </span>
                       )}
                       {!isPR1RM && daysSincePR != null && (
@@ -2278,23 +2278,44 @@ function App() {
               })()}
 
               {openCfg[ex.id] && (
-                <div style={{ background: C.bg, borderRadius: 10, padding: 10, marginBottom: 10, display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center" }}>
-                  <label style={{ fontSize: 12, color: C.muted }}>目標回数 <NumInput inputMode="numeric" value={ex.repHigh} style={cfgInput}
-                    onChange={e => updEx(ex.id, { repHigh: e.target.value, repLow: e.target.value })}
-                    onBlur={e => { const v = Math.min(50, Math.max(1, Math.round(num(e.target.value)) || 10)); updEx(ex.id, { repHigh: v, repLow: v }); }} /> 回</label>
-                  <label style={{ fontSize: 12, color: C.muted }}>目標(あと)回 <NumInput inputMode="decimal" value={ex.targetRirLow} style={cfgInput} onChange={e => updEx(ex.id, { targetRirLow: e.target.value })} /><span style={{ margin: "0 4px" }}>–</span><NumInput inputMode="decimal" value={ex.targetRirHigh} style={cfgInput} onChange={e => updEx(ex.id, { targetRirHigh: e.target.value })} /></label>
-                  <label style={{ fontSize: 12, color: C.muted }}>増加幅 <NumInput inputMode="decimal" value={ex.increment} style={cfgInput} onChange={e => updEx(ex.id, { increment: e.target.value })} />kg</label>
-                  <label style={{ fontSize: 12, color: C.muted }}>部位 <select value={ex.muscle} onChange={e => updEx(ex.id, { muscle: e.target.value })} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: "5px 6px", fontSize: 13, fontFamily: "inherit" }}><option value="">未設定</option>{MUSCLES.map(m => <option key={m} value={m}>{m}</option>)}</select></label>
-                  <label style={{ fontSize: 12, color: C.muted, display: "flex", alignItems: "center", gap: 4 }}><input type="checkbox" checked={ex.bwFactor > 0} onChange={e => updEx(ex.id, { bwFactor: e.target.checked ? 0.7 : 0 })} />自重(体重換算)</label>
-                  {ex.bwFactor > 0 && <label style={{ fontSize: 12, color: C.muted }}>体重係数 <NumInput inputMode="decimal" value={ex.bwFactor} style={cfgInput}
-                      onChange={e => updEx(ex.id, { bwFactor: e.target.value })}
-                      onBlur={e => { const v = num(e.target.value); updEx(ex.id, { bwFactor: v > 0 ? v : 0 }); }} /></label>}
-                  <label style={{ fontSize: 12, color: C.muted }}>
-                    可動域係数 <NumInput inputMode="decimal" value={ex.rom ?? 1} style={cfgInput}
-                      onChange={e => updEx(ex.id, { rom: e.target.value })}
-                      onBlur={e => { const v = num(e.target.value); updEx(ex.id, { rom: v > 0 ? Math.min(1, Math.max(0.1, v)) : 1 }); }} />
-                    <span style={{ fontSize: 10, marginLeft: 4 }}>(集計ボリュームのみ)</span>
-                  </label>
+                <div style={{ background: C.bg, borderRadius: 10, padding: 12, marginBottom: 10 }}>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center", marginBottom: 10 }}>
+                    {!ex.muscle && (
+                      <label style={{ fontSize: 12, color: C.yellow }}>部位(未設定) <select value={ex.muscle} onChange={e => updEx(ex.id, { muscle: e.target.value })} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: "5px 6px", fontSize: 13, fontFamily: "inherit" }}><option value="">未設定</option>{MUSCLES.map(m => <option key={m} value={m}>{m}</option>)}</select></label>
+                    )}
+                    <label style={{ fontSize: 12, color: C.muted, display: "flex", alignItems: "center", gap: 4 }}><input type="checkbox" checked={ex.bwFactor > 0} onChange={e => updEx(ex.id, { bwFactor: e.target.checked ? 0.7 : 0 })} />自重種目</label>
+                  </div>
+
+                  {/* 体重係数(自重種目のみ) */}
+                  {ex.bwFactor > 0 && (
+                    <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 10, marginBottom: 10 }}>
+                      <label style={{ fontSize: 12, color: C.text, display: "flex", alignItems: "center", gap: 6 }}>
+                        体重係数
+                        <NumInput inputMode="decimal" value={ex.bwFactor} style={cfgInput}
+                          onChange={e => updEx(ex.id, { bwFactor: e.target.value })}
+                          onBlur={e => { const v = num(e.target.value); updEx(ex.id, { bwFactor: v > 0 ? v : 0 }); }} />
+                      </label>
+                      <p style={{ fontSize: 10, color: C.muted, margin: "6px 0 0", lineHeight: 1.7 }}>
+                        自重のうち何割が負荷になるかの目安です。重量は「体重×係数＋加重」で計算されます。
+                        懸垂は体重のほぼ全部を持ち上げるので1.0、ディップスは0.95、腕立ては足で支える分を除いて0.65前後が目安です。
+                      </p>
+                    </div>
+                  )}
+
+                  {/* 可動域係数 */}
+                  <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
+                    <label style={{ fontSize: 12, color: C.text, display: "flex", alignItems: "center", gap: 6 }}>
+                      可動域係数
+                      <NumInput inputMode="decimal" value={ex.rom ?? 1} style={cfgInput}
+                        onChange={e => updEx(ex.id, { rom: e.target.value })}
+                        onBlur={e => { const v = num(e.target.value); updEx(ex.id, { rom: v > 0 ? Math.min(1, Math.max(0.1, v)) : 1 }); }} />
+                    </label>
+                    <p style={{ fontSize: 10, color: C.muted, margin: "6px 0 0", lineHeight: 1.7 }}>
+                      動かす距離が短い種目のボリュームを控えめに数えるための係数です。
+                      シュラッグやカーフレイズは重量の割に可動域が数cmしかないため0.5、通常の種目は1.0にしています。
+                      集計ボリュームにのみ影響し、推定1RMやPRには影響しません。
+                    </p>
+                  </div>
                 </div>
               )}
 
@@ -3016,45 +3037,6 @@ function App() {
           </div>
           )}
 
-          {/* 判定のデフォルト値 */}
-          <div style={{ background: C.surface, borderRadius: 14, padding: 16, border: `1px solid ${C.border}`, marginBottom: 12 }}>
-            <div style={{ fontSize: 14, fontWeight: 900, marginBottom: 4 }}>種目のデフォルト</div>
-            <p style={{ color: C.muted, fontSize: 12, margin: "0 0 14px", lineHeight: 1.6 }}>
-              履歴のない種目を追加したときの初期値です。前回の記録がある種目は、そのセット構成がそのまま引き継がれます。
-            </p>
-
-            <label style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 14, marginBottom: 12 }}>
-              目標回数
-              <span>
-                <NumInput inputMode="numeric" value={profile.defTargetReps}
-                  onChange={e => persist({ profile: { ...profile, defTargetReps: e.target.value } })}
-                  onBlur={e => {
-                    const v = Math.min(50, Math.max(1, Math.round(num(e.target.value)) || 10));
-                    persist({ profile: { ...profile, defTargetReps: v } });
-                  }}
-                  style={{ ...cfgInput, width: 64, fontSize: 16 }} /> 回
-              </span>
-            </label>
-            <p style={{ color: C.muted, fontSize: 11, margin: "-6px 0 14px", lineHeight: 1.6 }}>
-              初めて記録する種目の初期回数です。
-            </p>
-
-            <label style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 14 }}>
-              重量の増加幅
-              <span>
-                <NumInput inputMode="decimal" value={profile.defIncrement}
-                  onChange={e => persist({ profile: { ...profile, defIncrement: e.target.value } })}
-                  onBlur={e => {
-                    const v = Math.min(50, Math.max(0.5, num(e.target.value) || 2.5));
-                    persist({ profile: { ...profile, defIncrement: v } });
-                  }}
-                  style={{ ...cfgInput, width: 70, fontSize: 16 }} /> kg
-              </span>
-            </label>
-            <p style={{ color: C.muted, fontSize: 11, margin: "8px 0 0", lineHeight: 1.6 }}>
-              「±」ボタンで重量を増減するときの単位です(ダンベルなら2.5kg、プレート環境なら5kgなど)。
-            </p>
-          </div>
 
           <div style={{ background: C.surface, borderRadius: 14, padding: 16, border: `1px solid ${C.border}`, marginBottom: 12 }}>
             <label style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 14 }}>
