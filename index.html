@@ -153,6 +153,8 @@ const AI_ENABLED = false;
 // ルールエンジンによる重量・回数の自動提案。現在は無効(前回記録をそのまま引き継ぐ運用)。
 // true に戻すと、次回メニューがルール判定(増量/回数増/デロード等)で算出される。
 const RULE_ENGINE_ENABLED = false;
+const fmtDate = (iso) => { const d = new Date(iso); return `${d.getMonth() + 1}/${d.getDate()} (${"日月火水木金土"[d.getDay()]})`; };
+const fmtTime = (iso) => { const d = new Date(iso); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
 const fmtClock = (sec) => {
   const s = Math.max(0, Math.floor(sec));
   const m = Math.floor(s / 60), r = s % 60;
@@ -1720,8 +1722,6 @@ function App() {
     }
   };
 
-  const fmtDate = (iso) => { const d = new Date(iso); return `${d.getMonth() + 1}/${d.getDate()} (${"日月火水木金土"[d.getDay()]})`; };
-  const fmtTime = (iso) => { const d = new Date(iso); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
 
   // ---- グラフ ----
   const exerciseNames = useMemo(() => { const s = new Set(); workouts.forEach(w => w.exercises.forEach(ex => s.add(ex.name))); return [...s]; }, [workouts]);
@@ -1938,7 +1938,7 @@ function App() {
         <div>
           <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: 32, letterSpacing: 1, lineHeight: 1 }}>
             OVERLOAD<span style={{ color: C.red }}>+</span>
-            <span style={{ fontFamily: "'Noto Sans JP', sans-serif", fontSize: 11, fontWeight: 700, color: C.green, marginLeft: 8, verticalAlign: "middle" }}>v46</span>
+            <span style={{ fontFamily: "'Noto Sans JP', sans-serif", fontSize: 11, fontWeight: 700, color: C.green, marginLeft: 8, verticalAlign: "middle" }}>v47</span>
           </div>
         </div>
         {AI_ENABLED && (
