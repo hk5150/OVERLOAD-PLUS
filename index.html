@@ -299,7 +299,17 @@ const ALIASES = {
   "スクワット": "バーベルスクワット", "ショルダープレス": "ダンベルショルダープレス",
   "バーベルロウ": "バーベルベントオーバーロウ", "アームカール": "ダンベルカール",
 };
-const dbLookup = (name) => DB_BY_NAME[name] || DB_BY_NAME[ALIASES[name]] || null;
+// 種目設定の上書き(ユーザーが変更した内蔵種目の設定を保持する)
+// 元データは書き換えず、この上書きを重ねて解決するので「元に戻す」も可能。
+let EXERCISE_OVERRIDES = {};
+const setExerciseOverrides_module = (obj) => { EXERCISE_OVERRIDES = obj || {}; };
+const baseLookup = (name) => DB_BY_NAME[name] || DB_BY_NAME[ALIASES[name]] || null;
+const dbLookup = (name) => {
+  const base = baseLookup(name);
+  const ov = EXERCISE_OVERRIDES[name];
+  if (!base && !ov) return null;
+  return { ...(base || { n: name }), ...(ov || {}) };
+};
 
 // 「片手=ダンベル」判定: 種目マスターに登録があればそれを最優先(保存済みの誤フラグを上書き)
 const resolveIsDb = (name, storedIsDb) => {
@@ -690,6 +700,7 @@ function App() {
   const [recentNames, setRecentNames] = useState([]); // 選択履歴順
   const [customExercises, setCustomExercises] = useState([]); // 永続保存するカスタム種目 [{n,m,eq,t,db,bw}]
   const [exerciseNotes, setExerciseNotes] = useState({}); // 種目ごとの固定メモ {種目名: "メモ"}
+  const [exerciseOverrides, setExerciseOverrides] = useState({}); // 内蔵種目の設定上書き {種目名: {m,eq,db,bw,rom}}
   const [today, setToday] = useState([]);
   const [search, setSearch] = useState("");
   const [pickerMuscle, setPickerMuscle] = useState(null);
@@ -723,6 +734,7 @@ function App() {
   const [hideBackupNag, setHideBackupNag] = useState(false); // このセッション中は非表示
   const [editWorkout, setEditWorkout] = useState(null); // 編集中の記録 {index, draft}
   const [editAddSearch, setEditAddSearch] = useState("");  // 履歴編集で種目を追加するときの検索語
+  const [exSettingSearch, setExSettingSearch] = useState(""); // 設定タブの種目検索
   const [filterToday, setFilterToday] = useState(true);
 
   // タイマー
@@ -790,6 +802,8 @@ function App() {
             setRecentNames(p.recentNames || []);
             setCustomExercises(p.customExercises || []);
             setExerciseNotes(p.exerciseNotes || {});
+            setExerciseOverrides(p.exerciseOverrides || {});
+            setExerciseOverrides_module(p.exerciseOverrides || {});
             setLastBackupAt(p.lastBackupAt || null);
             if (p.guideSeen) setGuideSeen(true);
           }
@@ -826,6 +840,7 @@ function App() {
       recentNames: patch.recentNames ?? recentNames,
       customExercises: patch.customExercises ?? customExercises,
       exerciseNotes: patch.exerciseNotes ?? exerciseNotes,
+      exerciseOverrides: patch.exerciseOverrides ?? exerciseOverrides,
       lastBackupAt: patch.lastBackupAt !== undefined ? patch.lastBackupAt : lastBackupAt,
       guideSeen: patch.guideSeen !== undefined ? patch.guideSeen : guideSeen,
     };
@@ -835,6 +850,7 @@ function App() {
     if (patch.recentNames !== undefined) setRecentNames(next.recentNames);
     if (patch.customExercises !== undefined) setCustomExercises(next.customExercises);
     if (patch.exerciseNotes !== undefined) setExerciseNotes(next.exerciseNotes);
+    if (patch.exerciseOverrides !== undefined) { setExerciseOverrides(next.exerciseOverrides); setExerciseOverrides_module(next.exerciseOverrides); }
     if (patch.lastBackupAt !== undefined) setLastBackupAt(next.lastBackupAt);
     if (patch.guideSeen !== undefined) setGuideSeen(next.guideSeen);
     try { await store.set(STORAGE_KEY, JSON.stringify(next)); }
@@ -1073,7 +1089,9 @@ function App() {
   }, [workouts, split, profile.bodyweight]);
 
   // ---- 種目リスト(内蔵 + 保存済みカスタム) ----
-  const allExercises = useMemo(() => [...EXERCISE_DB, ...customExercises], [customExercises]);
+  const allExercises = useMemo(
+    () => [...EXERCISE_DB, ...customExercises].map(e => ({ ...e, ...(exerciseOverrides[e.n] || {}) })),
+    [customExercises, exerciseOverrides]);
   const findExercise = (name) => allExercises.find(e => e.n === name) || dbLookup(name);
   const pickerList = useMemo(() => {
     const q = search.trim();
@@ -1503,10 +1521,20 @@ function App() {
   };
   const deleteSplit = () => { if (!window.confirm("分割設定を削除します。よろしいですか?(履歴は残ります)")) return; persist({ split: null }); setEditDay(null); };
 
-  // ---- 登録済みカスタム種目の編集 ----
+  // ---- 種目設定の編集(内蔵種目は上書きとして保存、カスタム種目は実体を更新) ----
+  const isCustomExercise = (name) => customExercises.some(e => e.n === name);
   const updateCustomExercise = (name, patch) => {
-    const next = customExercises.map(e => e.n === name ? { ...e, ...patch } : e);
-    persist({ customExercises: next });
+    if (isCustomExercise(name)) {
+      persist({ customExercises: customExercises.map(e => e.n === name ? { ...e, ...patch } : e) });
+    } else {
+      persist({ exerciseOverrides: { ...exerciseOverrides, [name]: { ...(exerciseOverrides[name] || {}), ...patch } } });
+    }
+  };
+  // 内蔵種目の設定を元に戻す
+  const resetExerciseOverride = (name) => {
+    const next = { ...exerciseOverrides };
+    delete next[name];
+    persist({ exerciseOverrides: next });
   };
   const deleteCustomExercise = (name) => {
     const used = workouts.some(w => w.exercises.some(e => e.name === name));
@@ -1520,7 +1548,7 @@ function App() {
   const clearAll = async () => {
     if (!window.confirm("すべての履歴を削除します。よろしいですか?")) return;
     try { await store.del(STORAGE_KEY); await store.del(DRAFT_KEY); localStorage.removeItem(DRAFT_KEY); } catch { /* noop */ }
-    setWorkouts([]); setSplit(null); setResult(null); setChartExercise(""); setRecentNames([]); setCustomExercises([]); setExerciseNotes({}); setLastBackupAt(null);
+    setWorkouts([]); setSplit(null); setResult(null); setChartExercise(""); setRecentNames([]); setCustomExercises([]); setExerciseNotes({}); setExerciseOverrides({}); setExerciseOverrides_module({}); setLastBackupAt(null);
   };
 
   // ---- 履歴の編集・削除 ----
@@ -1570,6 +1598,17 @@ function App() {
       ...ew,
       draft: { ...ew.draft, exercises: ew.draft.exercises.filter((_, i) => i !== exIdx) },
     }));
+  };
+  // 編集中の記録で種目を並べ替え(dir: -1=上へ, +1=下へ)
+  const editMoveExercise = (exIdx, dir) => {
+    setEditWorkout(ew => {
+      const list = ew.draft.exercises;
+      const j = exIdx + dir;
+      if (j < 0 || j >= list.length) return ew;
+      const next = [...list];
+      [next[exIdx], next[j]] = [next[j], next[exIdx]];
+      return { ...ew, draft: { ...ew.draft, exercises: next } };
+    });
   };
   // 編集中の記録にセットを追加
   const editAddSet = (exIdx) => {
@@ -1720,7 +1759,7 @@ function App() {
   const exportBackup = () => {
     const payload = {
       app: "OVERLOAD+", version: 1, exportedAt: new Date().toISOString(),
-      workouts, split, profile, recentNames, customExercises, exerciseNotes,
+      workouts, split, profile, recentNames, customExercises, exerciseNotes, exerciseOverrides,
       lastBackupAt: new Date().toISOString(),
     };
     const d = new Date();
@@ -1763,6 +1802,7 @@ function App() {
         recentNames: p.recentNames || [],
         customExercises: p.customExercises || [],
         exerciseNotes: p.exerciseNotes || {},
+        exerciseOverrides: p.exerciseOverrides || {},
         lastBackupAt: new Date().toISOString(),
       };
       await persist(next);
@@ -1998,7 +2038,7 @@ function App() {
         <div>
           <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: 32, letterSpacing: 1, lineHeight: 1 }}>
             OVERLOAD<span style={{ color: C.red }}>+</span>
-            <span style={{ fontFamily: "'Noto Sans JP', sans-serif", fontSize: 11, fontWeight: 700, color: C.green, marginLeft: 8, verticalAlign: "middle" }}>v51</span>
+            <span style={{ fontFamily: "'Noto Sans JP', sans-serif", fontSize: 11, fontWeight: 700, color: C.green, marginLeft: 8, verticalAlign: "middle" }}>v53</span>
           </div>
         </div>
         {AI_ENABLED && (
@@ -2989,7 +3029,13 @@ function App() {
                     <div key={exIdx} style={{ background: C.bg, borderRadius: 10, padding: 10, marginBottom: 10 }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, gap: 8 }}>
                         <strong style={{ fontSize: 13, minWidth: 0 }}>{ex.name}</strong>
-                        <button onClick={() => editRemoveExercise(exIdx)} style={{ ...btn("transparent", C.muted), padding: 2, fontSize: 11, flexShrink: 0 }}>種目を削除</button>
+                        <div style={{ display: "flex", gap: 4, alignItems: "center", flexShrink: 0 }}>
+                          <button onClick={() => editMoveExercise(exIdx, -1)} disabled={exIdx === 0} aria-label="上へ移動"
+                            style={{ ...btn(C.surface2, exIdx === 0 ? C.border : C.muted), padding: "3px 8px", fontSize: 11, cursor: exIdx === 0 ? "default" : "pointer" }}>▲</button>
+                          <button onClick={() => editMoveExercise(exIdx, 1)} disabled={exIdx === d.exercises.length - 1} aria-label="下へ移動"
+                            style={{ ...btn(C.surface2, exIdx === d.exercises.length - 1 ? C.border : C.muted), padding: "3px 8px", fontSize: 11, cursor: exIdx === d.exercises.length - 1 ? "default" : "pointer" }}>▼</button>
+                          <button onClick={() => editRemoveExercise(exIdx)} style={{ ...btn("transparent", C.muted), padding: 2, fontSize: 11 }}>削除</button>
+                        </div>
                       </div>
                       <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 4 }}>
                         <span style={{ width: 22 }} />
@@ -3154,66 +3200,100 @@ function App() {
           )}
 
 
-          {/* 登録した種目の管理 */}
-          {customExercises.length > 0 && (
-            <div style={{ background: C.surface, borderRadius: 14, padding: 16, border: `1px solid ${C.border}`, marginBottom: 12 }}>
-              <div style={{ fontSize: 14, fontWeight: 900, marginBottom: 4 }}>登録した種目</div>
-              <p style={{ color: C.muted, fontSize: 12, margin: "0 0 12px", lineHeight: 1.6 }}>
-                自分で追加した種目の設定を後から変更できます。部位はボリューム集計に、ダンベル・自重は重量の計算に使われます。
-              </p>
-              {customExercises.map(e => (
-                <div key={e.n} style={{ background: C.bg, borderRadius: 10, padding: 10, marginBottom: 8 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 8 }}>
-                    <strong style={{ fontSize: 13, minWidth: 0 }}>{e.n}</strong>
-                    <button onClick={() => deleteCustomExercise(e.n)}
-                      style={{ ...btn("transparent", C.muted), padding: "2px 6px", fontSize: 11, flexShrink: 0 }}>削除</button>
-                  </div>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
-                    <label style={{ fontSize: 12, color: C.muted }}>
-                      部位{" "}
-                      <select value={e.m || ""} onChange={ev => updateCustomExercise(e.n, { m: ev.target.value })}
-                        style={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: "5px 6px", fontSize: 13, fontFamily: "inherit" }}>
-                        <option value="">未設定</option>
-                        {MUSCLES.map(m => <option key={m} value={m}>{m}</option>)}
-                      </select>
-                    </label>
-                    <label style={{ fontSize: 12, color: C.muted }}>
-                      器具{" "}
-                      <select value={e.eq || ""} onChange={ev => {
-                        const eq = ev.target.value;
-                        updateCustomExercise(e.n, { eq, db: eq === "ダンベル", bw: eq === "自重" ? (e.bw || 0.7) : 0 });
-                      }}
-                        style={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: "5px 6px", fontSize: 13, fontFamily: "inherit" }}>
-                        <option value="">その他</option>
-                        {EQUIPMENT.map(q => <option key={q} value={q}>{q}</option>)}
-                      </select>
-                    </label>
-                    <label style={{ fontSize: 12, color: C.muted, display: "flex", alignItems: "center", gap: 4 }}>
-                      <input type="checkbox" checked={!!e.db} onChange={ev => updateCustomExercise(e.n, { db: ev.target.checked })} />
-                      片手(ダンベル)
-                    </label>
-                    {e.bw > 0 && (
+          {/* 種目の設定 */}
+          <div style={{ background: C.surface, borderRadius: 14, padding: 16, border: `1px solid ${C.border}`, marginBottom: 12 }}>
+            <div style={{ fontSize: 14, fontWeight: 900, marginBottom: 4 }}>種目の設定</div>
+            <p style={{ color: C.muted, fontSize: 12, margin: "0 0 12px", lineHeight: 1.6 }}>
+              内蔵種目も含めて設定を変更できます。部位はボリューム集計に、片手(ダンベル)・自重は重量の計算に使われます。
+            </p>
+            <input value={exSettingSearch} onChange={e => setExSettingSearch(e.target.value)}
+              placeholder="種目を検索(空欄なら使用中の種目)"
+              style={{ width: "100%", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: "9px 10px", fontSize: 14, fontFamily: "inherit", marginBottom: 10 }} />
+
+            {(() => {
+              const q = exSettingSearch.trim();
+              let list;
+              if (q) {
+                list = allExercises.filter(e => e.n.includes(q) || (e.m || "").includes(q) || (e.eq || "").includes(q)).slice(0, 30);
+              } else {
+                // 使用中の種目(履歴・最近使った・カスタム)だけを既定で表示
+                const used = new Set([
+                  ...customExercises.map(e => e.n),
+                  ...recentNames,
+                  ...workouts.flatMap(w => w.exercises.map(e => e.name)),
+                  ...Object.keys(exerciseOverrides),
+                ]);
+                list = allExercises.filter(e => used.has(e.n)).slice(0, 40);
+              }
+              if (list.length === 0) {
+                return <div style={{ color: C.muted, fontSize: 12, textAlign: "center", padding: "12px 0" }}>
+                  {q ? "該当する種目がありません。" : "記録するとここに表示されます。検索すれば全種目から探せます。"}
+                </div>;
+              }
+              return list.map(e => {
+                const custom = customExercises.some(c => c.n === e.n);
+                const edited = !!exerciseOverrides[e.n];
+                return (
+                  <div key={e.n} style={{ background: C.bg, borderRadius: 10, padding: 10, marginBottom: 8 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                      <strong style={{ fontSize: 13, minWidth: 0 }}>
+                        {e.n}
+                        {custom && <span style={{ color: C.blue, fontSize: 10, marginLeft: 6 }}>カスタム</span>}
+                        {edited && <span style={{ color: C.yellow, fontSize: 10, marginLeft: 6 }}>変更済み</span>}
+                      </strong>
+                      {custom ? (
+                        <button onClick={() => deleteCustomExercise(e.n)} style={{ ...btn("transparent", C.muted), padding: "2px 6px", fontSize: 11, flexShrink: 0 }}>削除</button>
+                      ) : edited ? (
+                        <button onClick={() => resetExerciseOverride(e.n)} style={{ ...btn("transparent", C.muted), padding: "2px 6px", fontSize: 11, flexShrink: 0 }}>元に戻す</button>
+                      ) : null}
+                    </div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
                       <label style={{ fontSize: 12, color: C.muted }}>
-                        体重係数{" "}
-                        <NumInput inputMode="decimal" value={e.bw} style={cfgInput}
-                          onChange={ev => updateCustomExercise(e.n, { bw: ev.target.value })}
-                          onBlur={ev => { const v = num(ev.target.value); updateCustomExercise(e.n, { bw: v > 0 ? v : 0.7 }); }} />
+                        部位{" "}
+                        <select value={e.m || ""} onChange={ev => updateCustomExercise(e.n, { m: ev.target.value })}
+                          style={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: "5px 6px", fontSize: 13, fontFamily: "inherit" }}>
+                          <option value="">未設定</option>
+                          {MUSCLES.map(m => <option key={m} value={m}>{m}</option>)}
+                        </select>
                       </label>
-                    )}
-                    <label style={{ fontSize: 12, color: C.muted }}>
-                      可動域{" "}
-                      <NumInput inputMode="decimal" value={e.rom ?? 1} style={cfgInput}
-                        onChange={ev => updateCustomExercise(e.n, { rom: ev.target.value })}
-                        onBlur={ev => { const v = num(ev.target.value); updateCustomExercise(e.n, { rom: v > 0 ? Math.min(1, Math.max(0.1, v)) : 1 }); }} />
-                    </label>
+                      <label style={{ fontSize: 12, color: C.muted }}>
+                        器具{" "}
+                        <select value={e.eq || ""} onChange={ev => {
+                          const eq = ev.target.value;
+                          updateCustomExercise(e.n, { eq, db: eq === "ダンベル", bw: eq === "自重" ? (e.bw || 0.7) : 0 });
+                        }}
+                          style={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: "5px 6px", fontSize: 13, fontFamily: "inherit" }}>
+                          <option value="">その他</option>
+                          {EQUIPMENT.map(qq => <option key={qq} value={qq}>{qq}</option>)}
+                        </select>
+                      </label>
+                      <label style={{ fontSize: 12, color: C.muted, display: "flex", alignItems: "center", gap: 4 }}>
+                        <input type="checkbox" checked={!!e.db} onChange={ev => updateCustomExercise(e.n, { db: ev.target.checked })} />
+                        片手(ダンベル)
+                      </label>
+                      {e.bw > 0 && (
+                        <label style={{ fontSize: 12, color: C.muted }}>
+                          体重係数{" "}
+                          <NumInput inputMode="decimal" value={e.bw} style={cfgInput}
+                            onChange={ev => updateCustomExercise(e.n, { bw: ev.target.value })}
+                            onBlur={ev => { const v = num(ev.target.value); updateCustomExercise(e.n, { bw: v > 0 ? v : 0.7 }); }} />
+                        </label>
+                      )}
+                      <label style={{ fontSize: 12, color: C.muted }}>
+                        可動域{" "}
+                        <NumInput inputMode="decimal" value={e.rom ?? 1} style={cfgInput}
+                          onChange={ev => updateCustomExercise(e.n, { rom: ev.target.value })}
+                          onBlur={ev => { const v = num(ev.target.value); updateCustomExercise(e.n, { rom: v > 0 ? Math.min(1, Math.max(0.1, v)) : 1 }); }} />
+                      </label>
+                    </div>
                   </div>
-                </div>
-              ))}
-              <p style={{ color: C.muted, fontSize: 11, margin: "6px 0 0", lineHeight: 1.6 }}>
-                ※ 設定は今後の記録に反映されます。過去の記録は当時の設定のまま残ります。
-              </p>
-            </div>
-          )}
+                );
+              });
+            })()}
+            <p style={{ color: C.muted, fontSize: 11, margin: "6px 0 0", lineHeight: 1.6 }}>
+              ※ 設定は今後の記録に反映されます。過去の記録は当時の設定のまま残ります。
+            </p>
+          </div>
 
           <div style={{ background: C.surface, borderRadius: 14, padding: 16, border: `1px solid ${C.border}`, marginBottom: 12 }}>
             <label style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 14 }}>
