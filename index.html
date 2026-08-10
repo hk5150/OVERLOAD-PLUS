@@ -1077,16 +1077,64 @@ function App() {
     return a + ex.sets.filter(isDoneSet).reduce((b, s) => b + effWeight(num(s.weight), isDb, ex.bwFactor || 0, profile.bodyweight) * Math.round(num(s.reps)) * rom, 0);
   }, 0), [today, profile.bodyweight]);
 
-  // 比較基準は「同じセッション」の前回。分割中はPush同士・Pull同士で比べる(無ければ直近セッション)。
+  // 比較基準は「同じセッション」の記録。前回1回と直近3回の平均の両方を出す。
+  // (前回がたまたま不調だった場合に備え、平均も見られるようにする)
   const compareBase = useMemo(() => {
     if (workouts.length === 0) return null;
-    const sameName = todayDay ? [...workouts].reverse().find(w => w.session === todayDay.name) : null;
-    const w = sameName ?? workouts[workouts.length - 1];
+    const sameList = todayDay ? workouts.filter(w => w.session === todayDay.name) : [];
+    const list = sameList.length > 0 ? sameList : workouts;
+    const volOf = (w) => w.exercises.reduce((a, ex) => a + exVolume(ex), 0); // 保存値ではなく常に再計算
+    const recent = list.slice(-3);
+    const avg = recent.reduce((a, w) => a + volOf(w), 0) / recent.length;
     return {
-      label: sameName ? `前回の${todayDay.name}` : "前回",
-      volume: w.exercises.reduce((a, ex) => a + exVolume(ex), 0), // 保存値ではなく常に再計算
+      label: sameList.length > 0 ? `前回の${todayDay.name}` : "前回",
+      volume: volOf(list[list.length - 1]),
+      avg,
+      avgCount: recent.length,
+      avgLabel: sameList.length > 0 ? `直近${recent.length}回の${todayDay.name}` : `直近${recent.length}回`,
     };
   }, [workouts, split, profile.bodyweight]);
+
+  // 種目の判断材料: 前回のセット内容(RIR込み)と、同じ重量が何回続いているか
+  const exerciseInsight = (name) => {
+    const entries = [];
+    for (let i = workouts.length - 1; i >= 0; i--) {
+      const ex = workouts[i].exercises.find(e => e.name === name);
+      if (ex) entries.push({ date: workouts[i].date, ex });
+    }
+    if (entries.length === 0) return null;
+
+    const topOf = (ex) => {
+      const ws = (ex.sets || []).filter(s => !s.warmup && !s.assisted && s.reps > 0);
+      if (ws.length === 0) return null;
+      return ws.reduce((best, s) => (s.weight > best.weight ? s : best), ws[0]);
+    };
+
+    const prev = entries[0];
+    const prevTop = topOf(prev.ex);
+    if (!prevTop) return null;
+
+    // 同じトップ重量が何回連続しているか
+    let streak = 0;
+    for (const e of entries) {
+      const t = topOf(e.ex);
+      if (t && t.weight === prevTop.weight) streak++; else break;
+    }
+
+    // 直近のトップ重量の推移(古い順に最大4件)
+    const trend = entries.slice(0, 4).map(e => topOf(e.ex)?.weight).filter(v => v != null).reverse();
+
+    return {
+      date: prev.date,
+      sets: (prev.ex.sets || []).filter(s => !s.warmup),
+      topWeight: prevTop.weight,
+      topReps: prevTop.reps,
+      topRir: prevTop.rir,
+      isDb: resolveIsDb(name, prev.ex.isDb),
+      streak,
+      trend,
+    };
+  };
 
   // ---- 種目リスト(内蔵 + 保存済みカスタム) ----
   const allExercises = useMemo(
@@ -1850,7 +1898,6 @@ function App() {
   useEffect(() => { if (!volMuscle && trainedMuscles.length) setVolMuscle(trainedMuscles[0]); }, [trainedMuscles, volMuscle]);
   useEffect(() => { if (!chartExercise && exerciseNames.length) setChartExercise(exerciseNames[0]); }, [exerciseNames, chartExercise]);
 
-  const volDelta = compareBase ? liveVolume - compareBase.volume : null;
 
   // ---- バックアップ推奨の判定 ----
   // 記録が3件以上あり、①一度もバックアップしていない ②前回から30日以上経過 のいずれかで促す
@@ -2002,16 +2049,23 @@ function App() {
 
             <div style={{ flex: 1, minWidth: 0, textAlign: "center", borderLeft: `1px solid ${C.border}`, borderRight: `1px solid ${C.border}`, padding: "0 6px" }}>
               <div style={{ fontSize: 10, color: C.muted, marginBottom: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                ボリューム{compareBase && liveVolume > 0 ? ` (vs ${compareBase.label})` : ""}
+                ボリューム{compareBase && liveVolume > 0 ? ` (vs ${compareBase.avgLabel})` : ""}
               </div>
               <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: 30, lineHeight: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                 {Math.round(liveVolume).toLocaleString()}<span style={{ fontSize: 13, color: C.muted, marginLeft: 1 }}>kg</span>
               </div>
-              {volDelta != null && liveVolume > 0 && (
-                <div style={{ fontSize: 11, marginTop: 2, fontWeight: 700, color: volDelta >= 0 ? C.green : C.red }}>
-                  {volDelta >= 0 ? "▲" : "▼"}{Math.abs(Math.round(volDelta)).toLocaleString()}
-                </div>
-              )}
+              {compareBase && compareBase.avg > 0 && liveVolume > 0 && (() => {
+                const pct = (liveVolume / compareBase.avg) * 100;
+                const diff = liveVolume - compareBase.avg;
+                return (
+                  <div style={{ fontSize: 11, marginTop: 2, fontWeight: 700, color: pct >= 100 ? C.green : pct >= 90 ? C.yellow : C.red }}>
+                    {pct.toFixed(0)}%
+                    <span style={{ color: C.muted, fontWeight: 400, marginLeft: 4 }}>
+                      平均{Math.round(compareBase.avg).toLocaleString()}
+                    </span>
+                  </div>
+                );
+              })()}
             </div>
 
             {restStartAt != null ? (
@@ -2038,7 +2092,7 @@ function App() {
         <div>
           <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: 32, letterSpacing: 1, lineHeight: 1 }}>
             OVERLOAD<span style={{ color: C.red }}>+</span>
-            <span style={{ fontFamily: "'Noto Sans JP', sans-serif", fontSize: 11, fontWeight: 700, color: C.green, marginLeft: 8, verticalAlign: "middle" }}>v53</span>
+            <span style={{ fontFamily: "'Noto Sans JP', sans-serif", fontSize: 11, fontWeight: 700, color: C.green, marginLeft: 8, verticalAlign: "middle" }}>v54</span>
           </div>
         </div>
         {AI_ENABLED && (
@@ -2262,6 +2316,54 @@ function App() {
                   <button onClick={() => { setSwapEx(null); setSwapSearch(""); }} style={{ ...btn("transparent", C.muted), width: "100%", fontSize: 12, padding: 6, marginTop: 2 }}>キャンセル</button>
                 </div>
               )}
+
+              {/* 判断材料: 前回の内容と重量の推移 */}
+              {(() => {
+                const ins = exerciseInsight(ex.name);
+                if (!ins) return null;
+                const unit = ins.isDb ? "kg(片手)" : "kg";
+                return (
+                  <div style={{ background: C.bg, borderRadius: 10, padding: "8px 10px", marginBottom: 10 }}>
+                    <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
+                      <span style={{ fontSize: 10, color: C.muted, flexShrink: 0 }}>前回 {fmtDate(ins.date)}</span>
+                      <span style={{ fontSize: 13, color: C.text, fontWeight: 700 }}>
+                        {ins.topWeight}{unit} × {ins.topReps}回
+                      </span>
+                      {ins.topRir != null && (
+                        <span style={{
+                          fontSize: 11, fontWeight: 800, borderRadius: 999, padding: "1px 9px",
+                          background: ins.topRir >= 2 ? C.green : ins.topRir === 1 ? C.yellow : C.surface2,
+                          color: ins.topRir >= 1 ? "#141517" : C.muted,
+                        }}>
+                          余力 {ins.topRir}
+                        </span>
+                      )}
+                    </div>
+
+                    <div style={{ fontSize: 11, color: C.muted, marginTop: 4, lineHeight: 1.6 }}>
+                      {ins.sets.map((s, si) => (
+                        <span key={si}>
+                          {si > 0 && " / "}
+                          {s.warmup ? "W:" : ""}{s.assisted ? "補:" : ""}{s.weight}×{s.reps}{s.rir != null ? `(残${s.rir})` : ""}
+                        </span>
+                      ))}
+                    </div>
+
+                    <div style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 6, flexWrap: "wrap" }}>
+                      {ins.streak >= 2 && (
+                        <span style={{ fontSize: 11, color: ins.streak >= 4 ? C.yellow : C.muted }}>
+                          {ins.topWeight}{unit} で <strong>{ins.streak}回連続</strong>
+                        </span>
+                      )}
+                      {ins.trend.length >= 2 && (
+                        <span style={{ fontSize: 11, color: C.muted }}>
+                          推移 {ins.trend.join(" → ")}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* 過去の自分 vs 今日の自分 */}
               {(() => {
