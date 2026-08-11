@@ -1,0 +1,9 @@
+{
+  "appId": "com.hajime5150.overloadplus",
+  "appName": "OVERLOAD+",
+  "webDir": "www",
+  "backgroundColor": "#141517",
+  "ios": {
+    "contentInset": "always"
+  }
+}

@@ -63,18 +63,13 @@
     bootFail('起動時にエラーが発生しました', m + (ev.filename ? ('\n' + ev.filename + ':' + ev.lineno) : ''));
   });
 
-  // ---- ライブラリ読み込み(unpkg → 失敗時 jsdelivr) ----
+  // ---- ライブラリ読み込み(リポジト同梱のローカルファイルから。CDN不使用) ----
   var LIBS = [
-    { key:'react',    urls:['https://unpkg.com/react@18/umd/react.production.min.js',
-                            'https://cdn.jsdelivr.net/npm/react@18/umd/react.production.min.js'] },
-    { key:'reactdom', urls:['https://unpkg.com/react-dom@18/umd/react-dom.production.min.js',
-                            'https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.production.min.js'] },
-    { key:'proptypes',urls:['https://unpkg.com/prop-types@15/prop-types.min.js',
-                            'https://cdn.jsdelivr.net/npm/prop-types@15/prop-types.min.js'] },
-    { key:'recharts', urls:['https://unpkg.com/recharts@2.12.7/umd/Recharts.js',
-                            'https://cdn.jsdelivr.net/npm/recharts@2.12.7/umd/Recharts.js'] },
-    { key:'babel',    urls:['https://unpkg.com/@babel/standalone@7.24.7/babel.min.js',
-                            'https://cdn.jsdelivr.net/npm/@babel/standalone@7.24.7/babel.min.js'] }
+    { key:'react',    urls:['vendor/react.production.min.js'] },
+    { key:'reactdom', urls:['vendor/react-dom.production.min.js'] },
+    { key:'proptypes',urls:['vendor/prop-types.min.js'] },
+    { key:'recharts', urls:['vendor/recharts.js'] },
+    { key:'babel',    urls:['vendor/babel.min.js'] }
   ];
 
   function loadOne(urls, i){
@@ -106,7 +101,7 @@
       (0, eval)(out);
     } catch (e) {
       bootFail('起動できませんでした', (e && e.message ? e.message : String(e)) +
-        '\n\n※このページを Claude のプレビュー内で開いている場合、外部ライブラリが読み込めないため起動できません。GitHub Pages の URL から開いてください。');
+        '\n\n※ vendor/ フォルダを index.html と同じ階層に配置し、file:// ではなく http(s):// 経由で開いてください。');
     }
   })();
 </script>

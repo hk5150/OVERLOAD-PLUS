@@ -1,1 +1,5 @@
 .claude/settings.local.json
+
+# iOSラッパー(Capacitor)のビルド生成物
+node_modules/
+www/

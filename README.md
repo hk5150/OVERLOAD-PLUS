@@ -35,7 +35,7 @@
 ### 2. ファイルをアップロードする
 
 1. できたリポジトリの画面で **Add file** → **Upload files**
-2. 次の **7ファイルすべて** をドラッグ&ドロップ
+2. 次のファイル・フォルダをすべてドラッグ&ドロップ
 
    ```
    index.html
@@ -45,9 +45,12 @@
    icon-512.png
    icon-maskable-512.png
    apple-touch-icon.png
+   vendor/ (フォルダ内の5ファイルすべて)
    ```
 
    (この `README.md` も一緒に上げてよい)
+
+   `vendor/` は React/ReactDOM/Recharts/Babel をローカル同梱したフォルダで、これが無いとアプリが起動しません(CDNからの読み込みは廃止済み)。
 
 3. 下部の **Commit changes** をクリック
 
