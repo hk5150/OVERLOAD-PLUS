@@ -1274,6 +1274,16 @@ function App() {
   };
 
   // ---- 記録操作 ----
+  // 指定した種目の前回記録があれば、セット構成ごと引き継ぐ
+  // (同じ分割Dayでの記録を優先し、無ければ種目単位の直近記録を使う。履歴がなければ0から)
+  const initialSetsFor = (name) => {
+    const prevW = [...workouts].reverse().find(x => todayDay && x.session === todayDay.name && x.exercises.some(e => e.name === name))
+      || [...workouts].reverse().find(x => x.exercises.some(e => e.name === name));
+    const prevEx = prevW?.exercises.find(e => e.name === name);
+    return prevEx
+      ? prevEx.sets.map(x => ({ weight: String(x.weight), reps: String(x.reps), rir: "", warmup: !!x.warmup, ...(x.assisted ? { assisted: true } : {}) }))
+      : [{ weight: "0", reps: "0", rir: "", warmup: false }];
+  };
   const addExercise = (name, meta, at = insertAt) => {
     const n = (name || "").trim(); if (!n) return;
     ensureStarted();
@@ -1285,14 +1295,7 @@ function App() {
       n, m: cfg.muscle || "", eq: meta?.eq || customDraft.eq || "その他",
       t: "C", db: !!cfg.isDb, bw: cfg.bwFactor || 0, custom: true,
     }];
-    // 前回の同種目の記録があれば、セット構成ごと引き継ぐ
-    // (同じ分割Dayでの記録を優先し、無ければ種目単位の直近記録を使う)
-    const prevW = [...workouts].reverse().find(x => todayDay && x.session === todayDay.name && x.exercises.some(e => e.name === n))
-      || [...workouts].reverse().find(x => x.exercises.some(e => e.name === n));
-    const prevEx = prevW?.exercises.find(e => e.name === n);
-    const initialSets = prevEx
-      ? prevEx.sets.map(x => ({ weight: String(x.weight), reps: String(x.reps), rir: "", warmup: !!x.warmup, ...(x.assisted ? { assisted: true } : {}) }))
-      : [{ weight: "0", reps: "0", rir: "", warmup: false }]; // 履歴がない種目は0から入力
+    const initialSets = initialSetsFor(n);
     const newEx = {
       id: uid(), name: n, repLow: cfg.repLow, repHigh: cfg.repHigh,
       targetRirLow: cfg.targetRirLow, targetRirHigh: cfg.targetRirHigh, increment: cfg.increment,
@@ -1377,6 +1380,7 @@ function App() {
       name: n, muscle: cfg.muscle, bwFactor: cfg.bwFactor, isDb: cfg.isDb, rom: cfg.rom ?? 1.0,
       repLow: cfg.repLow, repHigh: cfg.repHigh,
       targetRirLow: cfg.targetRirLow, targetRirHigh: cfg.targetRirHigh, increment: cfg.increment,
+      sets: initialSetsFor(n), // 差し替え前の種目のセットを引き継がず、新しい種目自身の前回記録から入れ直す
     }));
     const nextRecent = [n, ...recentNames.filter(x => x !== n)].slice(0, 40);
     persist({ recentNames: nextRecent });
@@ -2293,11 +2297,11 @@ function App() {
                 </div>
               </div>
 
-              {/* 種目の差し替え(セット内容はそのまま) */}
+              {/* 種目の差し替え(セットは新しい種目の前回記録から入れ直す) */}
               {swapEx === ex.id && (
                 <div style={{ background: C.bg, borderRadius: 10, padding: 10, marginBottom: 10, border: `1px solid ${C.blue}` }}>
                   <div style={{ fontSize: 11, color: C.muted, marginBottom: 8 }}>
-                    別の種目に差し替えます(入力済みのセット内容はそのまま引き継がれます)。
+                    別の種目に差し替えます(入力中のセットは、差し替え先の種目の前回記録に入れ替わります)。
                   </div>
                   <input value={swapSearch} onChange={e => setSwapSearch(e.target.value)} placeholder="種目を検索"
                     style={{ width: "100%", background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: "8px 10px", fontSize: 13, fontFamily: "inherit", marginBottom: 8 }} />
