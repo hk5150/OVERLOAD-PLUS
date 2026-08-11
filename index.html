@@ -1049,19 +1049,32 @@ function App() {
     return out;
   };
 
-  // 直近7日 部位別 セット数+ボリューム
+  // 直近7日 / その前の7日(先週比較用) 部位別 セット数+ボリューム
   const weekly = useMemo(() => {
-    const acc = {}; const cutoff = Date.now() - 7 * 86400000;
+    const acc = {}, prevAcc = {};
+    const cutoff = Date.now() - 7 * 86400000, prevCutoff = Date.now() - 14 * 86400000;
+    let totalVol = 0, prevTotalVol = 0;
     workouts.forEach(w => {
-      if (new Date(w.date).getTime() < cutoff) return;
+      const t = new Date(w.date).getTime();
+      const inThisWeek = t >= cutoff;
+      const inPrevWeek = t >= prevCutoff && t < cutoff;
+      if (!inThisWeek && !inPrevWeek) return;
       w.exercises.forEach(ex => {
         if (!ex.muscle) return;
-        if (!acc[ex.muscle]) acc[ex.muscle] = { sets: 0, vol: 0 };
-        acc[ex.muscle].sets += workingSets(ex).length;
-        acc[ex.muscle].vol += exVolume(ex);
+        const vol = exVolume(ex);
+        if (inThisWeek) {
+          if (!acc[ex.muscle]) acc[ex.muscle] = { sets: 0, vol: 0 };
+          acc[ex.muscle].sets += workingSets(ex).length;
+          acc[ex.muscle].vol += vol;
+          totalVol += vol;
+        } else {
+          if (!prevAcc[ex.muscle]) prevAcc[ex.muscle] = { vol: 0 };
+          prevAcc[ex.muscle].vol += vol;
+          prevTotalVol += vol;
+        }
       });
     });
-    return acc;
+    return { byMuscle: acc, prevByMuscle: prevAcc, totalVol, prevTotalVol };
   }, [workouts, profile.bodyweight]);
 
   const todayDay = split ? split.days[split.cursor % split.days.length] : null;
@@ -2092,7 +2105,7 @@ function App() {
         <div>
           <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: 32, letterSpacing: 1, lineHeight: 1 }}>
             OVERLOAD<span style={{ color: C.red }}>+</span>
-            <span style={{ fontFamily: "'Noto Sans JP', sans-serif", fontSize: 11, fontWeight: 700, color: C.green, marginLeft: 8, verticalAlign: "middle" }}>v54</span>
+            <span style={{ fontFamily: "'Noto Sans JP', sans-serif", fontSize: 11, fontWeight: 700, color: C.green, marginLeft: 8, verticalAlign: "middle" }}>v55</span>
           </div>
         </div>
         {AI_ENABLED && (
@@ -2873,18 +2886,45 @@ function App() {
               <button onClick={addDay} style={{ ...btn(C.surface2, C.text), width: "100%", padding: 12, fontSize: 13, border: `1px dashed ${C.border}` }}>＋ Dayを追加</button>
 
               <div style={{ background: C.surface, borderRadius: 14, padding: 14, border: `1px solid ${C.border}`, marginTop: 16 }}>
-                <h3 style={{ fontSize: 14, fontWeight: 900, margin: "0 0 10px" }}>直近7日間の部位別</h3>
-                {Object.keys(weekly).length === 0 ? <div style={{ color: C.muted, fontSize: 13 }}>種目に部位を設定して記録すると集計されます。</div>
-                  : Object.entries(weekly).sort((a, b) => b[1].vol - a[1].vol).map(([m, v]) => { const d = lastTrained(m); return (
-                    <div key={m} style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 6, gap: 8 }}>
-                      <span>{m}</span>
-                      <span style={{ color: C.muted, textAlign: "right" }}>
-                        <span style={{ color: C.yellow, fontWeight: 700 }}>{v.sets}セット</span>
-                        <span style={{ marginLeft: 8 }}>{Math.round(v.vol).toLocaleString()}kg</span>
-                        {d != null && <span style={{ marginLeft: 8 }}>最終{d === 0 ? "今日" : `${d}日前`}</span>}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
+                  <h3 style={{ fontSize: 14, fontWeight: 900, margin: 0 }}>直近7日間の部位別</h3>
+                  {weekly.totalVol > 0 && (
+                    <div style={{ textAlign: "right" }}>
+                      <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: 18 }}>
+                        {Math.round(weekly.totalVol).toLocaleString()}kg
                       </span>
+                      {weekly.prevTotalVol > 0 && (() => {
+                        const pct = Math.round(((weekly.totalVol - weekly.prevTotalVol) / weekly.prevTotalVol) * 100);
+                        return (
+                          <span style={{ marginLeft: 6, fontSize: 12, fontWeight: 700, color: pct >= 0 ? C.green : C.red }}>
+                            先週比{pct >= 0 ? "+" : ""}{pct}%
+                          </span>
+                        );
+                      })()}
                     </div>
-                  ); })}
+                  )}
+                </div>
+                {Object.keys(weekly.byMuscle).length === 0 ? <div style={{ color: C.muted, fontSize: 13 }}>種目に部位を設定して記録すると集計されます。</div>
+                  : Object.entries(weekly.byMuscle).sort((a, b) => b[1].vol - a[1].vol).map(([m, v]) => {
+                    const d = lastTrained(m);
+                    const prevVol = weekly.prevByMuscle[m]?.vol || 0;
+                    const pct = prevVol > 0 ? Math.round(((v.vol - prevVol) / prevVol) * 100) : null;
+                    return (
+                      <div key={m} style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 6, gap: 8 }}>
+                        <span>{m}</span>
+                        <span style={{ color: C.muted, textAlign: "right" }}>
+                          <span style={{ color: C.yellow, fontWeight: 700 }}>{v.sets}セット</span>
+                          <span style={{ marginLeft: 8 }}>{Math.round(v.vol).toLocaleString()}kg</span>
+                          {pct != null && (
+                            <span style={{ marginLeft: 6, fontWeight: 700, color: pct >= 0 ? C.green : C.red }}>
+                              {pct >= 0 ? "+" : ""}{pct}%
+                            </span>
+                          )}
+                          {d != null && <span style={{ marginLeft: 8 }}>最終{d === 0 ? "今日" : `${d}日前`}</span>}
+                        </span>
+                      </div>
+                    );
+                  })}
               </div>
             </>
           )}
