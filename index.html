@@ -723,6 +723,7 @@ function App() {
   const [openSetKey, setOpenSetKey] = useState(null); // 展開中のセット "exId:index"
   const [openHist, setOpenHist] = useState({});       // 種目カードの履歴パネル開閉
   const [restFull, setRestFull] = useState(false);    // インターバルの全画面表示
+  const [showSplitHistory, setShowSplitHistory] = useState(false); // 上部バーのボリュームタップ→同一分割の履歴一覧
   const [insertAt, setInsertAt] = useState(null);     // 種目を挿入する位置(nullなら末尾)
   const [histMode, setHistMode] = useState("list"); // list | calendar
   const [calMonth, setCalMonth] = useState(() => { const d = new Date(); return { y: d.getFullYear(), m: d.getMonth() }; });
@@ -1115,6 +1116,15 @@ function App() {
       avgCount: recent.length,
       avgLabel: sameList.length > 0 ? `直近${recent.length}回の${todayDay.name}` : `直近${recent.length}回`,
     };
+  }, [workouts, split, profile.bodyweight]);
+
+  // 上部バーのボリュームタップで開く「同一分割の履歴一覧」用データ(新しい順)
+  const sameSplitSessions = useMemo(() => {
+    if (!todayDay) return [];
+    return workouts
+      .filter(w => w.session === todayDay.name)
+      .map(w => ({ date: w.date, volume: w.exercises.reduce((a, ex) => a + exVolume(ex), 0), exercises: w.exercises }))
+      .reverse();
   }, [workouts, split, profile.bodyweight]);
 
   // 種目の判断材料: 前回のセット内容(RIR込み)と、同じ重量が何回続いているか
@@ -2090,7 +2100,8 @@ function App() {
               <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: 30, lineHeight: 1 }}>{fmtClock(elapsed)}</div>
             </div>
 
-            <div style={{ flex: 1, minWidth: 0, textAlign: "center", borderLeft: `1px solid ${C.border}`, borderRight: `1px solid ${C.border}`, padding: "0 6px" }}>
+            <div onClick={() => { if (sameSplitSessions.length > 0) setShowSplitHistory(true); }}
+              style={{ flex: 1, minWidth: 0, textAlign: "center", borderLeft: `1px solid ${C.border}`, borderRight: `1px solid ${C.border}`, padding: "0 6px", cursor: sameSplitSessions.length > 0 ? "pointer" : "default" }}>
               <div style={{ fontSize: 10, color: C.muted, marginBottom: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                 ボリューム{compareBase && liveVolume > 0 ? ` (vs ${compareBase.avgLabel})` : ""}
               </div>
@@ -3527,6 +3538,29 @@ function App() {
             ※カロリーはMETs×体重×時間による概算の目安で、医療・栄養管理用の正確な値ではありません。自重種目のボリュームは体重×係数+加重で換算しています。
             シュラッグ・カーフレイズ・リストカールは可動域が小さいため、集計ボリュームを0.5倍で換算しています(推定1RM・PR・次回メニューの判定には影響しません)。種目ごとに⚙から調整できます。
           </p>
+        </div>
+      )}
+
+      {/* ===== 同一分割の履歴モーダル(上部バーのボリュームタップ) ===== */}
+      {showSplitHistory && todayDay && (
+        <div onClick={() => setShowSplitHistory(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.6)", zIndex: 50, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: C.surface, borderTop: `3px solid ${C.blue}`, borderRadius: "16px 16px 0 0", padding: 20, width: "100%", maxWidth: 520, maxHeight: "70vh", overflowY: "auto" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <strong style={{ fontSize: 15 }}>{todayDay.name}の履歴</strong>
+              <button onClick={() => setShowSplitHistory(false)} style={{ ...btn(C.surface2, C.muted), padding: "4px 12px", fontSize: 13 }}>閉じる</button>
+            </div>
+            {sameSplitSessions.map((s, i) => (
+              <div key={i} style={{ borderTop: i > 0 ? `1px solid ${C.border}` : "none", padding: "10px 0" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
+                  <span style={{ fontWeight: 700, fontSize: 13 }}>{fmtDate(s.date)}</span>
+                  <span style={{ fontSize: 13, color: C.muted }}>{Math.round(s.volume).toLocaleString()}kg</span>
+                </div>
+                <div style={{ fontSize: 12, color: C.muted }}>
+                  {s.exercises.map(ex => ex.name).join("、")}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
