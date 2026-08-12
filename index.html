@@ -1215,9 +1215,21 @@ function App() {
     };
   };
 
+  // ルールエンジンの判定を「提案」として取り出す。記録の中身は一切置き換えず、添えるだけ。
+  // RULE_ENGINE_ENABLED=false のときは常に null なので、UI側は提案行を出さないだけで済む。
+  const suggestionFor = (name) => {
+    if (!RULE_ENGINE_ENABLED) return null;
+    const res = analyzeExercise(name, workouts, { phase: profile.phase });
+    if (res.type === "insufficient_data" || !res.prescription) return null;
+    return {
+      type: res.type, reason: res.reason,
+      weight: res.prescription.weight, targetReps: res.prescription.targetReps,
+    };
+  };
+
   // 種目名 → メニュー1項目
-  // ルールエンジンによる自動提案は現在オフ(RULE_ENGINE_ENABLED=false)。
-  // 同じ分割Dayの前回記録(重量・回数・セット数)をそのまま引き継いで表示する。
+  // ベースは常に「同じ分割Dayの前回記録(重量・回数・セット数)」。
+  // ルールエンジンが有効なときは、それを置き換えず suggestion として添える。
   const buildMenuItem = (name) => {
     // その種目を含む「同じセッション」の直近の記録を探す
     const prevEntry = [...workouts].reverse().find(w =>
@@ -1225,26 +1237,21 @@ function App() {
     ) || [...workouts].reverse().find(w => w.exercises.some(e => e.name === name));
     const prevEx = prevEntry?.exercises.find(e => e.name === name);
     const cfg = lastConfig(name);
-    // 前回のセット構成(ウォームアップ・補助の指定込み)。ルールエンジン有効時も「前回の記録」の
-    // 表示・入力欄への引き継ぎを失わせないよう、判定より先に用意して両方の分岐で使い回す。
+    // 前回のセット構成(ウォームアップ・補助の指定込み)。常にこれをベースにする。
     const prevSets = prevEx ? prevEx.sets.map(s => ({
       weight: s.weight, reps: s.reps, warmup: !!s.warmup, assisted: !!s.assisted,
     })) : null;
-
-    if (RULE_ENGINE_ENABLED) {
-      const res = analyzeExercise(name, workouts, { phase: profile.phase });
-      if (res.type !== "insufficient_data") {
-        // ルールエンジンの判定(増量/回数UP等)は「前回の記録」を置き換えるのではなく注釈として乗せる。
-        // これにより startAutoMenu は引き続き実際の前回セットで入力欄を組み、判定はバッジ表示に使われる。
-        return { type: res.type, reason: res.reason, prescription: { ...res.prescription, prevSets: res.prescription.prevSets ?? prevSets } };
-      }
-    }
+    // ルールエンジンの判定は prescription を差し替えず、suggestion として添えるだけ。
+    // こうすると RULE_ENGINE_ENABLED を切り替えても「前回の内容がそのまま出る」動作は壊れず、
+    // フラグの意味は「提案を出すか出さないか」だけになる。
+    const suggestion = suggestionFor(name);
 
     if (prevEx) {
       const workingW = prevSets.filter(x => !x.warmup).map(x => x.weight);
       return {
         type: "previous",
         reason: `${prevEntry ? fmtDate(prevEntry.date) : "前回"}の記録です。`,
+        suggestion,
         prescription: {
           name, muscle: prevEx.muscle ?? cfg.muscle, bwFactor: prevEx.bwFactor ?? cfg.bwFactor,
           isDb: resolveIsDb(name, prevEx.isDb), rom: prevEx.rom ?? cfg.rom ?? 1.0,
@@ -1261,6 +1268,7 @@ function App() {
     // 履歴がない種目は既定値で開始
     return {
       type: "new_start", reason: "初回。軽めの重量で動作を確認しましょう。",
+      suggestion,
       prescription: {
         name, muscle: cfg.muscle, bwFactor: cfg.bwFactor, isDb: cfg.isDb, rom: cfg.rom ?? 1.0,
         weight: 0,
@@ -1379,6 +1387,11 @@ function App() {
     // 最後の1セットは種目ごと消えないよう、値のクリアに留める
     if (ex.sets.length <= 1) return { ...ex, sets: [{ weight: "0", reps: String(DEFAULT_REPS), rir: "", warmup: false }] };
     return { ...ex, sets: ex.sets.filter((_, j) => j !== i) };
+  }));
+  // ワーキングセット(ウォームアップ以外)の重量をまとめて置き換える。差分チップ用。
+  // ウォームアップは狙う重量と無関係なので触らない。
+  const setWorkingWeight = (id, weight) => setToday(t => t.map(ex => ex.id !== id ? ex : {
+    ...ex, sets: ex.sets.map(s => s.warmup ? s : { ...s, weight: String(weight) }),
   }));
   // 分割の今日のDayに登録された種目を newName で置き換え(次回の自動メニューに反映)
   const updateSplitDayExercise = (oldName, newName) => {
@@ -2158,7 +2171,7 @@ function App() {
         <div>
           <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: 32, letterSpacing: 1, lineHeight: 1 }}>
             OVERLOAD<span style={{ color: C.red }}>+</span>
-            <span style={{ fontFamily: "'Noto Sans JP', sans-serif", fontSize: 11, fontWeight: 700, color: C.green, marginLeft: 8, verticalAlign: "middle" }}>v59</span>
+            <span style={{ fontFamily: "'Noto Sans JP', sans-serif", fontSize: 11, fontWeight: 700, color: C.green, marginLeft: 8, verticalAlign: "middle" }}>v60</span>
           </div>
         </div>
         {AI_ENABLED && (
@@ -2266,6 +2279,16 @@ function App() {
                       <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 18, fontWeight: 600 }}>
                         {p.weight}<span style={{ fontSize: 11, color: C.muted }}>{p.bwFactor > 0 ? "kg加重" : p.isDb ? "kg片手" : "kg"}</span>
                         {" × "}<span style={{ fontSize: 15 }}>{repsLabel(p.targetReps)}</span>
+                      </div>
+                    )}
+                    {/* 提案は前回の記録を置き換えず、下に添える(記録開始後に1タップで反映できる) */}
+                    {it.suggestion && (
+                      <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginTop: 4, flexWrap: "wrap" }}>
+                        <JudgeBadge type={it.suggestion.type} />
+                        <span style={{ fontSize: 12, color: C.text }}>
+                          {it.suggestion.weight}{p.isDb ? "kg(片手)" : "kg"} × {repsLabel(it.suggestion.targetReps)}
+                        </span>
+                        <span style={{ fontSize: 10, color: C.muted }}>提案</span>
                       </div>
                     )}
                   </div>
@@ -2426,6 +2449,44 @@ function App() {
                           推移 {ins.trend.join(" → ")}
                         </span>
                       )}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* 提案(あれば)。前回を基準にした差分チップで、反映も取り消しも1タップにする */}
+              {(() => {
+                const sg = suggestionFor(ex.name);
+                const ins = sg ? exerciseInsight(ex.name) : null;
+                if (!sg || !ins) return null;
+                const inc = num(ex.increment) || 2.5;
+                const base = ins.topWeight;
+                const unit = ins.isDb ? "kg(片手)" : "kg";
+                const cur = num((ex.sets.find(s => !s.warmup) || {}).weight);
+                const same = (a, b) => Math.abs(a - b) < 0.01;
+                const opts = [
+                  { label: `+${inc}kg`, w: base + inc },
+                  { label: "前回のまま", w: base },
+                  { label: `−${inc}kg`, w: Math.max(0, base - inc) },
+                ];
+                // デロード等で提案がこの3択に無い場合も、提案を必ず1タップで選べるようにする
+                if (!opts.some(o => same(o.w, sg.weight))) opts.unshift({ label: `${sg.weight}kg`, w: sg.weight });
+                return (
+                  <div style={{ background: C.bg, borderRadius: 10, padding: "8px 10px", marginBottom: 10 }}>
+                    <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 6, flexWrap: "wrap" }}>
+                      <JudgeBadge type={sg.type} />
+                      <span style={{ fontSize: 11, color: C.muted, lineHeight: 1.6, minWidth: 0 }}>{sg.reason}</span>
+                    </div>
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                      {opts.map(o => (
+                        <button key={o.label} onClick={() => setWorkingWeight(ex.id, o.w)}
+                          style={chip(same(cur, o.w), same(sg.weight, o.w) ? C.green : C.blue)}>
+                          {o.label}{same(sg.weight, o.w) ? " ◎" : ""}
+                        </button>
+                      ))}
+                    </div>
+                    <div style={{ fontSize: 10, color: C.muted, marginTop: 5, lineHeight: 1.6 }}>
+                      前回の {base}{unit} が基準。◎が提案です。タップでワーキングセットの重量をまとめて変更します。
                     </div>
                   </div>
                 );
