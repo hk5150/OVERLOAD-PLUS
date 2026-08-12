@@ -1224,6 +1224,9 @@ function App() {
     return {
       type: res.type, reason: res.reason,
       weight: res.prescription.weight, targetReps: res.prescription.targetReps,
+      // repLow/repHighも持ち回る: 増量ガード(現重量比10%超で増量を見送りレップ上限を伸ばす)等、
+      // 判定によって伸びたレンジをここで捨てると、適用しても次回に反映されず同じ判定が繰り返される。
+      repLow: res.prescription.repLow, repHigh: res.prescription.repHigh,
     };
   };
 
@@ -1392,6 +1395,22 @@ function App() {
   // ウォームアップは狙う重量と無関係なので触らない。
   const setWorkingWeight = (id, weight) => setToday(t => t.map(ex => ex.id !== id ? ex : {
     ...ex, sets: ex.sets.map(s => s.warmup ? s : { ...s, weight: String(weight) }),
+  }));
+  // 提案(suggestion)をまるごと適用する。差分チップの「◎(提案)」用。
+  // 重量だけでなく目標回数・レップレンジ上限まで反映することで、
+  // reps_increase系の提案(回数を伸ばす/上限を広げる)もチップ1つで反映でき、
+  // かつ次回のanalyzeExerciseに正しく持ち越される(repHighを捨てない)。
+  const applySuggestion = (id, sg) => setToday(t => t.map(ex => {
+    if (ex.id !== id) return ex;
+    const targets = Array.isArray(sg.targetReps) ? sg.targetReps : null;
+    let wi = -1;
+    const sets = ex.sets.map(s => {
+      if (s.warmup) return s;
+      wi++;
+      const r = targets ? (targets[wi] ?? targets[targets.length - 1]) : s.reps;
+      return { ...s, weight: String(sg.weight), reps: String(r) };
+    });
+    return { ...ex, sets, repLow: sg.repLow ?? ex.repLow, repHigh: sg.repHigh ?? ex.repHigh };
   }));
   // 分割の今日のDayに登録された種目を newName で置き換え(次回の自動メニューに反映)
   const updateSplitDayExercise = (oldName, newName) => {
@@ -1993,7 +2012,6 @@ function App() {
   return (
     <div style={{ minHeight: "100vh", background: C.bg, color: C.text, fontFamily: "'Noto Sans JP', -apple-system, sans-serif", maxWidth: 520, margin: "0 auto", paddingBottom: restFull && restStartAt != null ? 250 : 90 }}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;800&family=Noto+Sans+JP:wght@400;700;900&display=swap');
         input:focus, button:focus-visible, select:focus { outline: 2px solid ${C.yellow}; outline-offset: 2px; }
         * { box-sizing: border-box; }
         input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; }
@@ -2478,12 +2496,17 @@ function App() {
                       <span style={{ fontSize: 11, color: C.muted, lineHeight: 1.6, minWidth: 0 }}>{sg.reason}</span>
                     </div>
                     <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                      {opts.map(o => (
-                        <button key={o.label} onClick={() => setWorkingWeight(ex.id, o.w)}
-                          style={chip(same(cur, o.w), same(sg.weight, o.w) ? C.green : C.blue)}>
-                          {o.label}{same(sg.weight, o.w) ? " ◎" : ""}
-                        </button>
-                      ))}
+                      {opts.map(o => {
+                        const isSuggested = same(sg.weight, o.w);
+                        // ◎(提案そのもの)は重量だけでなく目標回数・レップレンジ上限もまとめて適用する。
+                        // それ以外の手動チップは重量だけを変える(回数は今の入力を尊重する)。
+                        return (
+                          <button key={o.label} onClick={() => isSuggested ? applySuggestion(ex.id, sg) : setWorkingWeight(ex.id, o.w)}
+                            style={chip(same(cur, o.w), isSuggested ? C.green : C.blue)}>
+                            {o.label}{isSuggested ? " ◎" : ""}
+                          </button>
+                        );
+                      })}
                     </div>
                     <div style={{ fontSize: 10, color: C.muted, marginTop: 5, lineHeight: 1.6 }}>
                       前回の {base}{unit} が基準。◎が提案です。タップでワーキングセットの重量をまとめて変更します。
