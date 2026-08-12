@@ -114,19 +114,21 @@ Chrome でURLを開き、メニュー(⋮)→ **ホーム画面に追加** / **�
 
 `index.html` を差し替えて再アップロードすれば更新されます。
 
-Service Worker のキャッシュが効いているため、更新が反映されない場合は `sw.js` 内の
+Service Worker のキャッシュが効いているため、更新が反映されない場合は `sw.js` 冒頭の
 
 ```js
-const CACHE = "overload-v14";
+const CACHE = "overload-vNN";
 ```
 
-のバージョン番号を上げてください(例: `overload-v15`)。
+のバージョン番号を1つ上げてください(現在の番号は `sw.js` を直接確認してください)。
 
 ---
 
 ## 技術構成
 
-- React 18 + Recharts(CDN読み込み、ビルド不要)
-- Babel Standalone によるブラウザ内トランスパイル
+- React 18 + Recharts。CDNは使わず `vendor/` にローカル同梱(オフライン起動・プライバシーのため)
+- Babel Standalone によるブラウザ内トランスパイル(ビルド不要。`index.html` を直接編集して配信するだけ)
 - Service Worker によるオフライン対応
 - 保存: localStorage
+
+iOSアプリ(Capacitor)版は `ios/` 以下に別途あり、`npm run sync-www` 実行時に `#appsrc` のJSXを事前ビルドして `www/` に出力する(こちらはランタイムBabelを使わない)。詳細は `CLAUDE.md` を参照。
