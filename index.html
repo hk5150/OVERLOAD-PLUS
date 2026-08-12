@@ -393,7 +393,7 @@ function analyzeExercise(name, workouts, opts = {}) {
   const lastDate = entries[entries.length - 1].date;
   const latest = sessions[sessions.length - 1];
   const cfg = {
-    repLow: latest.repLow ?? 10, repHigh: latest.repHigh ?? 10,
+    repLow: latest.repLow ?? 8, repHigh: latest.repHigh ?? 12,
     rirLow: latest.targetRirLow ?? 1, rirHigh: latest.targetRirHigh ?? 2, inc: latest.increment ?? 2.5,
   };
   // ワーキングかつ補助なしのセットのみを判定対象に(ウォームアップ・補助ありは増量判定から除外)
@@ -412,7 +412,7 @@ function analyzeExercise(name, workouts, opts = {}) {
           isDb: resolveIsDb(name, latest.isDb), rom: resolveRom(name, latest.rom),
           weight: Math.max(0, Math.round(w0 / inc0) * inc0),
           targetReps: working.map(s => s.reps), sets: working.length,
-          repLow: latest.repLow ?? 10, repHigh: latest.repHigh ?? 10,
+          repLow: latest.repLow ?? 8, repHigh: latest.repHigh ?? 12,
           targetRirLow: latest.targetRirLow ?? 1, targetRirHigh: latest.targetRirHigh ?? 2, increment: inc0,
         },
       };
@@ -505,6 +505,18 @@ function analyzeExercise(name, workouts, opts = {}) {
   // (平均を使うことでセット数の変動に左右されず、セット数の条件で「減らして平均を稼ぐ」のを防ぐ)
   if (avgReps >= cfg.repHigh) {
     if (setCount >= prevSetCount) {
+      // 増量幅(+inc)が現重量に対して大きすぎる場合(目安10%超)は、増量による負荷急増を避け、
+      // 同重量のままレップレンジの上限を伸ばして稼ぐ方向に倒す(軽い種目ほどincの相対インパクトが大きいため)。
+      const pctInc = topWeight > 0 ? inc / topWeight : 0;
+      if (pctInc > 0.10) {
+        const oldRepHigh = cfg.repHigh;
+        cfg.repHigh = oldRepHigh + 2;
+        const extended = [...reps];
+        const idx = extended.findIndex(r => r < cfg.repHigh);
+        if (idx >= 0) extended[idx] = extended[idx] + 1;
+        return presc("reps_increase", topWeight, extended,
+          `+${inc}kgは現重量の${Math.round(pctInc * 100)}%相当と大きいため増量を見送り、目標回数の上限を${oldRepHigh}→${cfg.repHigh}回に伸ばします。同重量で狙いましょう。`);
+      }
       return presc("weight_increase", topWeight + inc, fill(cfg.repLow),
         `平均${avgReps.toFixed(1)}回で目標${cfg.repHigh}回に到達(${setCount}セット)。+${inc}kgで再スタート。`);
     }
@@ -1195,7 +1207,7 @@ function App() {
     }
     const db = findExercise(name);
     return {
-      repLow: num(profile.defTargetReps) || 10, repHigh: num(profile.defTargetReps) || 10,
+      repLow: num(profile.defTargetReps) || 8, repHigh: num(profile.defTargetReps) || 12,
       targetRirLow: db ? (db.t === "C" ? 1 : 0) : 1, targetRirHigh: db ? (db.t === "C" ? 3 : 2) : 2,
       increment: recommendedIncrement(name, num(profile.defIncrement) || 2.5), muscle: db?.m ?? customDraft.muscle ?? "", bwFactor: db?.bw ?? 0,
       isDb: db ? !!db.db : (customDraft.eq === "ダンベル"), rom: db?.rom ?? 1.0,
@@ -1451,7 +1463,7 @@ function App() {
     const durationMin = Math.max(1, Math.round((end - start) / 60000));
     const exercises = today.map(ex => ({
       name: ex.name, muscle: ex.muscle || "", bwFactor: ex.bwFactor || 0, isDb: resolveIsDb(ex.name, ex.isDb), rom: resolveRom(ex.name, ex.rom), bwAtLog: profile.bodyweight,
-      repLow: num(ex.repLow) || 10, repHigh: num(ex.repHigh) || 10,
+      repLow: num(ex.repLow) || 8, repHigh: num(ex.repHigh) || 12,
       targetRirLow: num(ex.targetRirLow), targetRirHigh: num(ex.targetRirHigh), increment: num(ex.increment) || 2.5,
       formBroke: !!ex.formBroke, pain: !!ex.pain,
       ...(ex.ssGroup ? { ssGroup: ex.ssGroup } : {}),
@@ -1718,7 +1730,7 @@ function App() {
           isDb: !!db?.db,
           rom: db?.rom ?? 1.0,
           bwAtLog: profile.bodyweight,
-          repLow: 10, repHigh: 10, increment: recommendedIncrement(n),
+          repLow: 8, repHigh: 12, increment: recommendedIncrement(n),
           formBroke: false, pain: false,
           sets: [{ weight: "0", reps: "0", rir: "", warmup: false }],
         }],
