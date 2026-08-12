@@ -1225,18 +1225,23 @@ function App() {
     ) || [...workouts].reverse().find(w => w.exercises.some(e => e.name === name));
     const prevEx = prevEntry?.exercises.find(e => e.name === name);
     const cfg = lastConfig(name);
+    // 前回のセット構成(ウォームアップ・補助の指定込み)。ルールエンジン有効時も「前回の記録」の
+    // 表示・入力欄への引き継ぎを失わせないよう、判定より先に用意して両方の分岐で使い回す。
+    const prevSets = prevEx ? prevEx.sets.map(s => ({
+      weight: s.weight, reps: s.reps, warmup: !!s.warmup, assisted: !!s.assisted,
+    })) : null;
 
     if (RULE_ENGINE_ENABLED) {
       const res = analyzeExercise(name, workouts, { phase: profile.phase });
-      if (res.type !== "insufficient_data") return { type: res.type, reason: res.reason, prescription: res.prescription };
+      if (res.type !== "insufficient_data") {
+        // ルールエンジンの判定(増量/回数UP等)は「前回の記録」を置き換えるのではなく注釈として乗せる。
+        // これにより startAutoMenu は引き続き実際の前回セットで入力欄を組み、判定はバッジ表示に使われる。
+        return { type: res.type, reason: res.reason, prescription: { ...res.prescription, prevSets: res.prescription.prevSets ?? prevSets } };
+      }
     }
 
     if (prevEx) {
-      // 前回のセット構成をそのまま複製(ウォームアップ・補助の指定も引き継ぐ)
-      const sets = prevEx.sets.map(s => ({
-        weight: s.weight, reps: s.reps, warmup: !!s.warmup, assisted: !!s.assisted,
-      }));
-      const workingW = sets.filter(x => !x.warmup).map(x => x.weight);
+      const workingW = prevSets.filter(x => !x.warmup).map(x => x.weight);
       return {
         type: "previous",
         reason: `${prevEntry ? fmtDate(prevEntry.date) : "前回"}の記録です。`,
@@ -1244,8 +1249,8 @@ function App() {
           name, muscle: prevEx.muscle ?? cfg.muscle, bwFactor: prevEx.bwFactor ?? cfg.bwFactor,
           isDb: resolveIsDb(name, prevEx.isDb), rom: prevEx.rom ?? cfg.rom ?? 1.0,
           weight: workingW.length ? Math.max(...workingW) : 0,
-          prevSets: sets, sets: sets.length,
-          targetReps: sets.map(x => x.reps),
+          prevSets, sets: prevSets.length,
+          targetReps: prevSets.map(x => x.reps),
           repLow: prevEx.repLow ?? cfg.repLow, repHigh: prevEx.repHigh ?? cfg.repHigh,
           targetRirLow: prevEx.targetRirLow ?? cfg.targetRirLow, targetRirHigh: prevEx.targetRirHigh ?? cfg.targetRirHigh,
           increment: prevEx.increment ?? cfg.increment,
