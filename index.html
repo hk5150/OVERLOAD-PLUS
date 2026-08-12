@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>OVERLOAD+</title>
 <meta name="description" content="プログレッシブオーバーロードに基づくトレーニング記録アプリ" />
 
@@ -121,6 +121,7 @@ const C = {
 
 const STORAGE_KEY = "workout-log-v1";
 const DRAFT_KEY = "workout-draft-v1"; // 入力途中の記録(アプリが落ちても復元できるように)
+const PRE_IMPORT_BACKUP_KEY = "workout-log-v1-pre-import"; // バックアップ復元前のデータ退避(復元に失敗した場合の保険)
 // 保存: window.storage(この環境)優先、失敗時はブラウザのlocalStorageに退避。どちらも例外を握り潰して落ちないようにする。
 const store = {
   async get(key) {
@@ -698,6 +699,57 @@ function RirSelect({ value, onChange }) {
   );
 }
 
+// 種目固定メモ: 入力中はローカルstateのみ更新し、書き込み(persist)は入力停止後にデバウンスして行う
+function ExerciseNoteEditor({ value, onSave }) {
+  const [text, setText] = useState(value);
+  useEffect(() => {
+    if (text === value) return;
+    const t = setTimeout(() => onSave(text), 600);
+    return () => clearTimeout(t);
+  }, [text]);
+  return (
+    <textarea
+      value={text}
+      onChange={e => setText(e.target.value)}
+      placeholder="例:シート高さ4、肩甲骨を寄せる、グリップは肩幅より拳1つ外"
+      rows={2}
+      style={{ width: "100%", background: C.bg, border: `1px solid ${C.yellow}`, borderRadius: 8, color: C.text, padding: "8px 10px", fontSize: 13, fontFamily: "inherit", resize: "vertical", lineHeight: 1.6 }} />
+  );
+}
+
+// マウント後の例外で画面が白くならないよう捕捉する(記録データはlocalStorageに残るので再読み込みで復帰できる)
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { error };
+  }
+  componentDidCatch(error, info) {
+    console.error("Uncaught error in App:", error, info);
+  }
+  render() {
+    if (!this.state.error) return this.props.children;
+    return (
+      <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 14, padding: 24, textAlign: "center", background: C.bg, color: C.text, fontFamily: "'Noto Sans JP', sans-serif" }}>
+        <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: 34, letterSpacing: 1 }}>
+          OVERLOAD<span style={{ color: C.red }}>+</span>
+        </div>
+        <div style={{ color: C.muted, fontSize: 13, lineHeight: 1.7 }}>
+          予期しないエラーが発生しました。記録データは保存されたままです。<br />再読み込みしてお試しください。
+        </div>
+        <div style={{ color: "#F5B8B3", background: "#3A2224", borderRadius: 10, padding: 12, fontSize: 12, textAlign: "left", maxWidth: 420, wordBreak: "break-all", lineHeight: 1.7 }}>
+          {this.state.error.message || String(this.state.error)}
+        </div>
+        <button onClick={() => window.location.reload()} style={{ background: C.red, color: "#fff", border: "none", borderRadius: 10, padding: "12px 20px", fontSize: 14, fontWeight: 700, fontFamily: "inherit", cursor: "pointer" }}>
+          再読み込み
+        </button>
+      </div>
+    );
+  }
+}
+
 // ================= アプリ本体 =================
 function App() {
   const [view, setView] = useState("split"); // 起動時は分割タブ(今日どのセッションかを確認してから記録へ)
@@ -759,17 +811,21 @@ function App() {
   // 他アプリに切り替えてブラウザが破棄されても、記録が消えないようにする。
   useEffect(() => {
     if (!loaded) return; // 初期読み込み前は書かない
-    (async () => {
-      try {
-        if (today.length === 0 && !startAt) {
-          await store.del(DRAFT_KEY); // 記録がなければ下書きも消す
-        } else {
-          await store.set(DRAFT_KEY, JSON.stringify({
-            today, startAt, restStartAt, savedAt: Date.now(),
-          }));
-        }
-      } catch { /* 保存できなくても操作は続行 */ }
-    })();
+    // セット入力のたびに毎回書き込むと重いので、入力が止まってから書き込む(デバウンス)
+    const t = setTimeout(() => {
+      (async () => {
+        try {
+          if (today.length === 0 && !startAt) {
+            await store.del(DRAFT_KEY); // 記録がなければ下書きも消す
+          } else {
+            await store.set(DRAFT_KEY, JSON.stringify({
+              today, startAt, restStartAt, savedAt: Date.now(),
+            }));
+          }
+        } catch { /* 保存できなくても操作は続行 */ }
+      })();
+    }, 800);
+    return () => clearTimeout(t);
   }, [today, startAt, restStartAt, loaded]);
 
   // 画面を離れる直前にも保存(iOSでのバックグラウンド破棄対策)
@@ -789,6 +845,13 @@ function App() {
       window.removeEventListener("pagehide", flush);
     };
   }, [today, startAt, restStartAt]);
+
+  // ブラウザの容量逼迫時に記録がストレージごと消去されないよう、永続化を要求する(対応ブラウザのみ・拒否されても致命的ではない)
+  useEffect(() => {
+    if (navigator.storage?.persist) {
+      navigator.storage.persist().catch(() => {});
+    }
+  }, []);
 
   // ---- 読み込み ----
   useEffect(() => {
@@ -1036,7 +1099,7 @@ function App() {
       });
     }));
     return m;
-  }, [workouts, profile.bodyweight]);
+  }, [workouts, profile.bodyweight, exerciseOverrides]);
 
   // 記録中の種目の現在の最高推定1RM(PR更新判定に使う。補助ありは除外)
   const liveBest1RM = (ex) => {
@@ -1092,7 +1155,7 @@ function App() {
       });
     });
     return { byMuscle: acc, prevByMuscle: prevAcc, totalVol, prevTotalVol };
-  }, [workouts, profile.bodyweight]);
+  }, [workouts, profile.bodyweight, exerciseOverrides]);
 
   const todayDay = split ? split.days[split.cursor % split.days.length] : null;
   const muscleMatchesDay = (muscle, day) => !!day && (day.muscles.includes("全身") || muscle === "全身" || day.muscles.includes(muscle));
@@ -1105,7 +1168,7 @@ function App() {
     const isDb = resolveIsDb(ex.name, ex.isDb);
     const rom = resolveRom(ex.name, ex.rom);
     return a + ex.sets.filter(isDoneSet).reduce((b, s) => b + effWeight(num(s.weight), isDb, ex.bwFactor || 0, profile.bodyweight) * Math.round(num(s.reps)) * rom, 0);
-  }, 0), [today, profile.bodyweight]);
+  }, 0), [today, profile.bodyweight, exerciseOverrides]);
 
   // 比較基準は「同じセッション」の記録。前回1回と直近3回の平均の両方を出す。
   // (前回がたまたま不調だった場合に備え、平均も見られるようにする)
@@ -1123,7 +1186,7 @@ function App() {
       avgCount: recent.length,
       avgLabel: sameList.length > 0 ? `直近${recent.length}回の${todayDay.name}` : `直近${recent.length}回`,
     };
-  }, [workouts, split, profile.bodyweight]);
+  }, [workouts, split, profile.bodyweight, exerciseOverrides]);
 
   // 上部バーのボリュームタップで開く「同一分割の履歴一覧」用データ(新しい順)
   const sameSplitSessions = useMemo(() => {
@@ -1132,7 +1195,7 @@ function App() {
       .filter(w => w.session === todayDay.name)
       .map(w => ({ date: w.date, volume: w.exercises.reduce((a, ex) => a + exVolume(ex), 0), exercises: w.exercises }))
       .reverse();
-  }, [workouts, split, profile.bodyweight]);
+  }, [workouts, split, profile.bodyweight, exerciseOverrides]);
 
   // 種目の判断材料: 前回のセット内容(RIR込み)と、同じ重量が何回続いているか
   const exerciseInsight = (name) => {
@@ -1923,8 +1986,25 @@ function App() {
       const text = await file.text();
       const p = JSON.parse(text);
       const ws = p.workouts ?? (Array.isArray(p) ? p : null);
-      if (!Array.isArray(ws)) throw new Error("形式が違います");
+      if (!Array.isArray(ws)) throw new Error("形式が違います(workoutsが配列ではありません)");
+      // 壊れたデータで上書きしないよう、最低限の構造を検証してから確認ダイアログに進む
+      ws.forEach((w, i) => {
+        if (!w || typeof w !== "object") throw new Error(`${i + 1}件目の記録の形式が不正です`);
+        if (typeof w.date !== "string") throw new Error(`${i + 1}件目の記録に日付がありません`);
+        if (!Array.isArray(w.exercises)) throw new Error(`${i + 1}件目の記録の種目データが配列ではありません`);
+        w.exercises.forEach((ex, j) => {
+          if (!ex || typeof ex.name !== "string") throw new Error(`${i + 1}件目の記録・${j + 1}種目目の名前が不正です`);
+          if (!Array.isArray(ex.sets)) throw new Error(`${i + 1}件目の記録・${j + 1}種目目のセットデータが配列ではありません`);
+        });
+      });
       if (!window.confirm(`バックアップを復元します(記録 ${ws.length}件)。\n現在のデータはすべて置き換わります。よろしいですか?`)) return;
+
+      // 復元前に現在のデータをスナップショットとして退避(復元後に問題があった場合の保険)
+      try {
+        const cur = await store.get(STORAGE_KEY);
+        if (cur?.value) await store.set(PRE_IMPORT_BACKUP_KEY, cur.value);
+      } catch { /* スナップショットに失敗しても復元自体は続行する */ }
+
       const migW = (arr) => arr.map(w => ({ ...w, exercises: (w.exercises || []).map(ex => ({ ...ex, muscle: normMuscle(ex.muscle) })) }));
       const next = {
         workouts: migW(ws),
@@ -2194,7 +2274,7 @@ function App() {
         <div>
           <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: 32, letterSpacing: 1, lineHeight: 1 }}>
             OVERLOAD<span style={{ color: C.red }}>+</span>
-            <span style={{ fontFamily: "'Noto Sans JP', sans-serif", fontSize: 11, fontWeight: 700, color: C.green, marginLeft: 8, verticalAlign: "middle" }}>v63</span>
+            <span style={{ fontFamily: "'Noto Sans JP', sans-serif", fontSize: 11, fontWeight: 700, color: C.green, marginLeft: 8, verticalAlign: "middle" }}>v64</span>
           </div>
         </div>
         {AI_ENABLED && (
@@ -2807,12 +2887,10 @@ function App() {
               {openNote[ex.id] ? (
                 <div style={{ marginTop: 8 }}>
                   <div style={{ fontSize: 10, color: C.muted, marginBottom: 4 }}>この種目の固定メモ(次回も表示されます)</div>
-                  <textarea
+                  <ExerciseNoteEditor
+                    key={ex.name}
                     value={exerciseNotes[ex.name] || ""}
-                    onChange={e => persist({ exerciseNotes: { ...exerciseNotes, [ex.name]: e.target.value } })}
-                    placeholder="例:シート高さ4、肩甲骨を寄せる、グリップは肩幅より拳1つ外"
-                    rows={2}
-                    style={{ width: "100%", background: C.bg, border: `1px solid ${C.yellow}`, borderRadius: 8, color: C.text, padding: "8px 10px", fontSize: 13, fontFamily: "inherit", resize: "vertical", lineHeight: 1.6 }} />
+                    onSave={v => persist({ exerciseNotes: { ...exerciseNotes, [ex.name]: v } })} />
                 </div>
               ) : exerciseNotes[ex.name] ? (
                 <div onClick={() => setOpenNote({ ...openNote, [ex.id]: true })}
@@ -3693,7 +3771,7 @@ function App() {
 
 // ---- マウント ----
 const root = ReactDOM.createRoot(document.getElementById("root"));
-root.render(<App />);
+root.render(<ErrorBoundary><App /></ErrorBoundary>);
 
 </script>
 

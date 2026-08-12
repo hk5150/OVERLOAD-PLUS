@@ -60,10 +60,10 @@ GitHub Pages配信用の`index.html`本体は対象外(後述)。
 
 ### 外部レビューで指摘され、まだ着手していない項目
 1. ~~**Service Worker**: `vendor/*`をキャッシュ優先にする、`fetch`にタイムアウトを設け電波が弱い環境でのハングを防ぐ、同一origin以外(Google Fonts等)を捕捉しないようスコープを絞る~~ → 対応済み(`sw.js`, CACHE v63)。vendor/\*はキャッシュ優先+ネットワークからの補充、アプリ本体は`AbortController`で4秒タイムアウト後キャッシュへフォールバック、同一origin以外はfetchハンドラで捕捉しないよう`return`で除外。
-2. **データ安全性**: `navigator.storage.persist()`の呼び出し、`importBackup`の事前スナップショット退避+検証強化
-3. **Reactの整合性**: `EXERCISE_OVERRIDES`(モジュールレベル`let`)が`liveVolume`/`weekly`/`prMap`の`useMemo`依存配列に含まれておらず、可動域係数等を変更しても集計に即反映されない
-4. **パフォーマンス**: 種目メモ欄が1文字ごとに全データを`persist`(JSON.stringify+localStorage書き込み)している。下書き保存の`useEffect`も同様。デバウンス化が必要
-5. **堅牢性**: React ErrorBoundaryが無く、マウント後の例外で画面が白くなると復旧手段がない
-6. **アクセシビリティ**: viewportの`maximum-scale=1`がピンチズームを殺している
+2. ~~**データ安全性**: `navigator.storage.persist()`の呼び出し、`importBackup`の事前スナップショット退避+検証強化~~ → 対応済み(CACHE v64)。起動時に`navigator.storage.persist()`を呼ぶuseEffectを追加。`importBackup`はワークアウト配列/日付/種目名/セット配列の最低限の構造検証を先に行い、確認ダイアログを通過した後に現在のデータを`workout-log-v1-pre-import`へスナップショット退避してから復元するように変更。
+3. ~~**Reactの整合性**: `EXERCISE_OVERRIDES`(モジュールレベル`let`)が`liveVolume`/`weekly`/`prMap`の`useMemo`依存配列に含まれておらず、可動域係数等を変更しても集計に即反映されない~~ → 対応済み(CACHE v64)。`prMap`/`weekly`/`liveVolume`に加えて、同じく`exVolume`経由でROM上書きを参照している`compareBase`/`sameSplitSessions`の依存配列にも`exerciseOverrides`を追加。
+4. ~~**パフォーマンス**: 種目メモ欄が1文字ごとに全データを`persist`(JSON.stringify+localStorage書き込み)している。下書き保存の`useEffect`も同様。デバウンス化が必要~~ → 対応済み(CACHE v64)。種目メモ欄は`ExerciseNoteEditor`コンポーネントを新設し、入力中はローカルstateのみ更新、600ms入力が止まってから`persist`を呼ぶように変更。下書き保存の`useEffect`(today/startAt/restStartAt)も800msデバウンス化(`visibilitychange`/`pagehide`での即時flushは変更なし)。
+5. ~~**堅牢性**: React ErrorBoundaryが無く、マウント後の例外で画面が白くなると復旧手段がない~~ → 対応済み(CACHE v64)。`ErrorBoundary`クラスコンポーネントを追加し、`<App />`をラップ。例外発生時は再読み込みを促すフォールバック画面を表示(記録データ自体はlocalStorageに残るため消えない)。
+6. ~~**アクセシビリティ**: viewportの`maximum-scale=1`がピンチズームを殺している~~ → 対応済み(CACHE v64)。viewport metaから`maximum-scale=1`を削除。
 
-2〜6は今回のセッションでは着手していない(優先度は都度相談して決める)。
+すべて対応済み。次にやるとすれば「ビルド化まわり」の2件(実機起動時間の実測、`www/`のminify検討)。
