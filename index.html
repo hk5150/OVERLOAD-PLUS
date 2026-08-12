@@ -1436,8 +1436,13 @@ function App() {
   // 種目の差し替え(セット内容は維持したまま種目だけ変更)
   const swapExercise = (id, newName) => {
     const n = (newName || "").trim(); if (!n) return;
-    const cfg = lastConfig(n);
     const oldEx = today.find(e => e.id === id);
+    // 差し替え元にすでに実施済み(RIR入力済み)のセットがあるなら、消える前に一声かける。
+    // 種目を間違えてタップした/前回の記録が新しい種目のものに静かに置き換わるのに気づけないまま
+    // 保存されてしまう事故(誤タップで別種目の重量が紛れ込む)を防ぐため。
+    const hasEntered = oldEx?.sets?.some(s => !s.warmup && s.rir !== "" && s.rir != null);
+    if (hasEntered && !window.confirm(`「${oldEx.name}」の入力済みの記録が消え、新しい種目の前回記録に置き換わります。よろしいですか?`)) return;
+    const cfg = lastConfig(n);
     setToday(t => t.map(ex => ex.id !== id ? ex : {
       ...ex,
       name: n, muscle: cfg.muscle, bwFactor: cfg.bwFactor, isDb: cfg.isDb, rom: cfg.rom ?? 1.0,
@@ -2189,7 +2194,7 @@ function App() {
         <div>
           <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: 32, letterSpacing: 1, lineHeight: 1 }}>
             OVERLOAD<span style={{ color: C.red }}>+</span>
-            <span style={{ fontFamily: "'Noto Sans JP', sans-serif", fontSize: 11, fontWeight: 700, color: C.green, marginLeft: 8, verticalAlign: "middle" }}>v61</span>
+            <span style={{ fontFamily: "'Noto Sans JP', sans-serif", fontSize: 11, fontWeight: 700, color: C.green, marginLeft: 8, verticalAlign: "middle" }}>v62</span>
           </div>
         </div>
         {AI_ENABLED && (
