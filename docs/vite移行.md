@@ -59,11 +59,11 @@ GitHub Pages配信用の`index.html`本体は対象外(後述)。
 - `www/`をさらに圧縮・minifyするかは未検討(esbuildの`minify`オプションは現状オフ)
 
 ### 外部レビューで指摘され、まだ着手していない項目
-1. **Service Worker**: `vendor/*`をキャッシュ優先にする、`fetch`にタイムアウトを設け電波が弱い環境でのハングを防ぐ、同一origin以外(Google Fonts等)を捕捉しないようスコープを絞る
+1. ~~**Service Worker**: `vendor/*`をキャッシュ優先にする、`fetch`にタイムアウトを設け電波が弱い環境でのハングを防ぐ、同一origin以外(Google Fonts等)を捕捉しないようスコープを絞る~~ → 対応済み(`sw.js`, CACHE v63)。vendor/\*はキャッシュ優先+ネットワークからの補充、アプリ本体は`AbortController`で4秒タイムアウト後キャッシュへフォールバック、同一origin以外はfetchハンドラで捕捉しないよう`return`で除外。
 2. **データ安全性**: `navigator.storage.persist()`の呼び出し、`importBackup`の事前スナップショット退避+検証強化
 3. **Reactの整合性**: `EXERCISE_OVERRIDES`(モジュールレベル`let`)が`liveVolume`/`weekly`/`prMap`の`useMemo`依存配列に含まれておらず、可動域係数等を変更しても集計に即反映されない
 4. **パフォーマンス**: 種目メモ欄が1文字ごとに全データを`persist`(JSON.stringify+localStorage書き込み)している。下書き保存の`useEffect`も同様。デバウンス化が必要
 5. **堅牢性**: React ErrorBoundaryが無く、マウント後の例外で画面が白くなると復旧手段がない
 6. **アクセシビリティ**: viewportの`maximum-scale=1`がピンチズームを殺している
 
-これらは今回のセッションでは着手していない(優先度は都度相談して決める)。
+2〜6は今回のセッションでは着手していない(優先度は都度相談して決める)。
