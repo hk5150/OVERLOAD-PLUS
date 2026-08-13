@@ -2274,7 +2274,7 @@ function App() {
         <div>
           <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: 32, letterSpacing: 1, lineHeight: 1 }}>
             OVERLOAD<span style={{ color: C.red }}>+</span>
-            <span style={{ fontFamily: "'Noto Sans JP', sans-serif", fontSize: 11, fontWeight: 700, color: C.green, marginLeft: 8, verticalAlign: "middle" }}>v64</span>
+            <span style={{ fontFamily: "'Noto Sans JP', sans-serif", fontSize: 11, fontWeight: 700, color: C.green, marginLeft: 8, verticalAlign: "middle" }}>v65</span>
           </div>
         </div>
         {AI_ENABLED && (
@@ -2371,7 +2371,7 @@ function App() {
                           <span key={si}>
                             {si > 0 && " / "}
                             {s.warmup ? "W:" : ""}{s.assisted ? "補:" : ""}
-                            <span style={{ color: s.warmup ? C.muted : C.text, fontWeight: s.warmup ? 400 : 700 }}>
+                            <span style={{ color: C.muted, fontWeight: s.warmup ? 400 : 700 }}>
                               {s.weight}{p.isDb ? "(片手)" : ""}×{s.reps}
                             </span>
                           </span>
@@ -2379,7 +2379,7 @@ function App() {
                         <span style={{ color: C.muted, marginLeft: 6 }}>({p.sets}セット)</span>
                       </div>
                     ) : (
-                      <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 18, fontWeight: 600 }}>
+                      <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 18, fontWeight: 600, color: C.muted }}>
                         {p.weight}<span style={{ fontSize: 11, color: C.muted }}>{p.bwFactor > 0 ? "kg加重" : p.isDb ? "kg片手" : "kg"}</span>
                         {" × "}<span style={{ fontSize: 15 }}>{repsLabel(p.targetReps)}</span>
                       </div>
@@ -2674,7 +2674,7 @@ function App() {
                           YOU WIN!
                         </div>
                         <div style={{ fontSize: 11, color: C.text, marginTop: 5 }}>
-                          過去の自分勝利(<strong style={{ color: C.yellow }}>+{(live1RM - best1RM).toFixed(1)}kg</strong>)
+                          過去の自分に勝利(<strong style={{ color: C.yellow }}>+{(live1RM - best1RM).toFixed(1)}kg</strong>)
                         </div>
                       </div>
                     )}
@@ -3730,13 +3730,24 @@ function App() {
             </div>
             {sameSplitSessions.map((s, i) => (
               <div key={i} style={{ borderTop: i > 0 ? `1px solid ${C.border}` : "none", padding: "10px 0" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
                   <span style={{ fontWeight: 700, fontSize: 13 }}>{fmtDate(s.date)}</span>
                   <span style={{ fontSize: 13, color: C.muted }}>{Math.round(s.volume).toLocaleString()}kg</span>
                 </div>
-                <div style={{ fontSize: 12, color: C.muted }}>
-                  {s.exercises.map(ex => ex.name).join("、")}
-                </div>
+                {s.exercises.map((ex, j) => (
+                  <div key={j} style={{ marginBottom: 6 }}>
+                    <div style={{ fontSize: 12, color: C.text }}>{ex.name}</div>
+                    <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.6, wordBreak: "break-word" }}>
+                      {ex.sets.map((st, si) => (
+                        <span key={si}>
+                          {si > 0 && " / "}
+                          {st.warmup ? "W:" : ""}{st.assisted ? "補:" : ""}
+                          {st.weight}{resolveIsDb(ex.name, ex.isDb) ? "(片手)" : ""}×{st.reps}{st.rir !== "" && st.rir != null ? `(残${st.rir})` : ""}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ))}
               </div>
             ))}
           </div>
