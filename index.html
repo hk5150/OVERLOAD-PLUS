@@ -71,7 +71,8 @@
     { key:'recharts', urls:['vendor/recharts.js'] },
     { key:'babel',    urls:['vendor/babel.min.js'] },
     // ドメインロジック(純粋関数)。テストで使い回すため#appsrcの外へ切り出したもの。
-    { key:'oneRm',    urls:['src/domain/oneRm.js'] }
+    { key:'oneRm',       urls:['src/domain/oneRm.js'] },
+    { key:'progression', urls:['src/domain/progression.js'] }
   ];
 
   function loadOne(urls, i){
@@ -400,7 +401,7 @@ function analyzeExercise(name, workouts, opts = {}) {
         prescription: {
           name, muscle: latest.muscle ?? db0?.m ?? "", bwFactor: latest.bwFactor ?? db0?.bw ?? 0,
           isDb: resolveIsDb(name, latest.isDb), rom: resolveRom(name, latest.rom),
-          weight: Math.max(0, Math.round(w0 / inc0) * inc0),
+          weight: roundToIncrement(w0, inc0),
           targetReps: working.map(s => s.reps), sets: working.length,
           repLow: latest.repLow ?? 8, repHigh: latest.repHigh ?? 12,
           targetRirLow: latest.targetRirLow ?? 1, targetRirHigh: latest.targetRirHigh ?? 2, increment: inc0,
@@ -423,8 +424,9 @@ function analyzeExercise(name, workouts, opts = {}) {
   const avgRir = rirs.length ? rirs.reduce((a, b) => a + b, 0) / rirs.length : null;
   const db = dbLookup(name);
   const inc = cfg.inc > 0 ? cfg.inc : recommendedIncrement(name);
-  // 重量は増加幅(increment)の単位に丸める(2.5kg刻みのジムで62.3kg等が出ないように)
-  const snap = (w) => Math.max(0, Math.round(w / inc) * inc);
+  // 重量は増加幅(increment)の単位に丸める(2.5kg刻みのジムで62.3kg等が出ないように)。
+  // 丸めロジック自体は src/domain/progression.js の roundToIncrement へ移設済み。
+  const snap = (w) => roundToIncrement(w, inc);
 
   // targetReps は「セットごとの目標回数の配列」。UI側もこれを使う。
   const presc = (type, weight, targetReps, reason) => ({

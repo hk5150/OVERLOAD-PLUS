@@ -28,6 +28,7 @@ const VENDOR_FILES = [
 // #appsrcの外へ切り出したドメインロジック(純粋関数)。<script src>でapp.bundle.jsより先に読み込む必要がある。
 const DOMAIN_FILES = [
   "oneRm.js",
+  "progression.js",
 ];
 
 fs.rmSync(DEST, { recursive: true, force: true });
@@ -82,6 +83,7 @@ const bootScript = `<script>
 <script src="vendor/prop-types.min.js"></script>
 <script src="vendor/recharts.js"></script>
 <script src="src/domain/oneRm.js"></script>
+<script src="src/domain/progression.js"></script>
 <script src="app.bundle.js"></script>`;
 
 // <body>直後の起動診断〜CDNローダーのブロック(元は「アプリ本体」コメントの手前まで)を上のbootScriptに差し替える
