@@ -69,7 +69,9 @@
     { key:'reactdom', urls:['vendor/react-dom.production.min.js'] },
     { key:'proptypes',urls:['vendor/prop-types.min.js'] },
     { key:'recharts', urls:['vendor/recharts.js'] },
-    { key:'babel',    urls:['vendor/babel.min.js'] }
+    { key:'babel',    urls:['vendor/babel.min.js'] },
+    // ドメインロジック(純粋関数)。テストで使い回すため#appsrcの外へ切り出したもの。
+    { key:'oneRm',    urls:['src/domain/oneRm.js'] }
   ];
 
   function loadOne(urls, i){
@@ -330,21 +332,8 @@ const resolveRom = (name, storedRom) => {
   const k = dbLookup(name);
   return k?.rom ?? 1.0;
 };
-// 1セットの実効重量(自重換算+加重、ダンベルは両手ぶん)を返す
-// 推定1RM(Epley式): 重量 × (1 + 回数/30)。1回なら重量そのもの。
-// 高回数ほど誤差が大きくなるため、12回超は目安として扱う。
-const est1RM = (weight, reps) => {
-  if (!weight || !reps || reps < 1) return 0;
-  if (reps === 1) return weight;
-  return weight * (1 + reps / 30);
-};
-
-function effWeight(weight, isDb, bwFactor, bodyweight) {
-  let w = weight;
-  if (bwFactor > 0) w = bodyweight * bwFactor + weight; // 自重+加重
-  if (isDb) w = w * 2; // ダンベルは片手入力→両手
-  return w;
-}
+// est1RM(推定1RM, Epley式)・effWeight(実効重量)は src/domain/oneRm.js へ移設(テストのため)。
+// LIBSで<script src>読み込み済みなのでグローバル関数としてそのまま参照できる。
 
 // ================= 分割プリセット =================
 const SPLIT_PRESETS = [

@@ -25,16 +25,24 @@ const VENDOR_FILES = [
   "prop-types.min.js",
   "recharts.js",
 ];
+// #appsrcの外へ切り出したドメインロジック(純粋関数)。<script src>でapp.bundle.jsより先に読み込む必要がある。
+const DOMAIN_FILES = [
+  "oneRm.js",
+];
 
 fs.rmSync(DEST, { recursive: true, force: true });
 fs.mkdirSync(DEST, { recursive: true });
 fs.mkdirSync(path.join(DEST, "vendor"), { recursive: true });
+fs.mkdirSync(path.join(DEST, "src", "domain"), { recursive: true });
 
 for (const file of STATIC_FILES) {
   fs.copyFileSync(path.join(ROOT, file), path.join(DEST, file));
 }
 for (const file of VENDOR_FILES) {
   fs.copyFileSync(path.join(ROOT, "vendor", file), path.join(DEST, "vendor", file));
+}
+for (const file of DOMAIN_FILES) {
+  fs.copyFileSync(path.join(ROOT, "src", "domain", file), path.join(DEST, "src", "domain", file));
 }
 
 // ---- #appsrc のJSXを取り出して事前トランスパイル ----
@@ -73,6 +81,7 @@ const bootScript = `<script>
 <script src="vendor/react-dom.production.min.js"></script>
 <script src="vendor/prop-types.min.js"></script>
 <script src="vendor/recharts.js"></script>
+<script src="src/domain/oneRm.js"></script>
 <script src="app.bundle.js"></script>`;
 
 // <body>直後の起動診断〜CDNローダーのブロック(元は「アプリ本体」コメントの手前まで)を上のbootScriptに差し替える
