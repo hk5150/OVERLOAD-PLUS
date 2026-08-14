@@ -2273,7 +2273,7 @@ function App() {
         <div>
           <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: 32, letterSpacing: 1, lineHeight: 1 }}>
             OVERLOAD<span style={{ color: C.red }}>+</span>
-            <span style={{ fontFamily: "'Noto Sans JP', sans-serif", fontSize: 11, fontWeight: 700, color: C.green, marginLeft: 8, verticalAlign: "middle" }}>v69</span>
+            <span style={{ fontFamily: "'Noto Sans JP', sans-serif", fontSize: 11, fontWeight: 700, color: C.green, marginLeft: 8, verticalAlign: "middle" }}>v70</span>
           </div>
         </div>
         {AI_ENABLED && (
@@ -3039,15 +3039,17 @@ function App() {
               <button onClick={deleteSplit} style={{ ...btn("transparent", C.muted), fontSize: 12, padding: "0 0 10px" }}>分割を削除</button>
               {split.days.map((d, i) => {
                 const isNext = i === split.cursor % split.days.length; const editing = editDay === i;
+                const goToLog = isNext && !editing;
                 return (
-                  <div key={i} style={{ background: C.surface, borderRadius: 14, padding: 14, marginBottom: 8, border: `1px solid ${isNext ? C.blue : C.border}` }}>
+                  <div key={i} onClick={goToLog ? () => setView("log") : undefined}
+                    style={{ background: C.surface, borderRadius: 14, padding: 14, marginBottom: 8, border: `1px solid ${isNext ? C.blue : C.border}`, cursor: goToLog ? "pointer" : "default" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, minWidth: 0 }}>
                         <span style={{ color: C.muted, fontSize: 12, flexShrink: 0 }}>Day {i + 1}</span>
                         {editing ? <input value={d.name} onChange={e => updDay(i, { name: e.target.value })} onFocus={selectOnFocus} aria-label="Day名" style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: "4px 8px", fontSize: 16, fontFamily: "inherit", width: "100%" }} /> : <strong style={{ fontSize: 15 }}>{d.name}</strong>}
                         {isNext && <span style={{ background: C.blue, color: "#fff", borderRadius: 999, padding: "2px 8px", fontSize: 10, fontWeight: 800, flexShrink: 0 }}>今日</span>}
                       </div>
-                      <div style={{ display: "flex", gap: 4, flexShrink: 0, alignItems: "center" }}>
+                      <div style={{ display: "flex", gap: 4, flexShrink: 0, alignItems: "center" }} onClick={e => e.stopPropagation()}>
                         <button onClick={() => moveDay(i, -1)} disabled={i === 0} aria-label="上へ移動"
                           style={{ ...btn(C.surface2, i === 0 ? C.border : C.muted), padding: "4px 8px", fontSize: 12, cursor: i === 0 ? "default" : "pointer" }}>▲</button>
                         <button onClick={() => moveDay(i, 1)} disabled={i === split.days.length - 1} aria-label="下へ移動"
@@ -3094,6 +3096,7 @@ function App() {
                       </div>
                     )}
 
+                    {goToLog && <div style={{ marginTop: 10, fontSize: 12, color: C.blue, fontWeight: 700 }}>タップして記録を始める →</div>}
                     {editing && <button onClick={() => removeDay(i)} style={{ ...btn("transparent", "#FF5A4E"), fontSize: 12, padding: "8px 0 0" }}>このDayを削除</button>}
                   </div>
                 );
@@ -3766,7 +3769,7 @@ function App() {
 
       {/* タブバー */}
       <nav style={{ position: "fixed", bottom: 0, left: 0, right: 0, maxWidth: 520, margin: "0 auto", display: "flex", background: C.surface, borderTop: `1px solid ${C.border}`, paddingBottom: "env(safe-area-inset-bottom)" }}>
-        {[["log", "記録"], ["split", "分割"], ["history", "履歴"], ["settings", "設定"]].map(([k, label]) => (
+        {[["split", "分割"], ["log", "記録"], ["history", "履歴"], ["settings", "設定"]].map(([k, label]) => (
           <button key={k} onClick={() => setView(k)} style={{ flex: 1, padding: "14px 0 18px", background: "none", border: "none", color: view === k ? C.red : C.muted, fontWeight: view === k ? 900 : 400, fontSize: 13, cursor: "pointer", fontFamily: "inherit", borderTop: view === k ? `2px solid ${C.red}` : "2px solid transparent" }}>{label}</button>
         ))}
       </nav>
