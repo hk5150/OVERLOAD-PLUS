@@ -1,6 +1,6 @@
 // OVERLOAD+ Service Worker
 // アプリ本体をキャッシュし、オフラインでも起動できるようにする。ライブラリもすべてローカル同梱(CDN不使用)。
-const CACHE = "overload-v74";
+const CACHE = "overload-v77";
 
 // ネットワーク優先フェッチのタイムアウト(電波が弱い環境でハングし続けるのを防ぐ)
 const NETWORK_TIMEOUT_MS = 4000;
@@ -20,6 +20,9 @@ const APP_ASSETS = [
   "./vendor/recharts.js",
   "./vendor/babel.min.js",
   "./src/domain/oneRm.js",
+  "./src/domain/storage.js",
+  "./fonts/barlow-condensed-600-latin.woff2",
+  "./fonts/barlow-condensed-800-latin.woff2",
 ];
 
 self.addEventListener("install", (e) => {
@@ -53,11 +56,13 @@ self.addEventListener("fetch", (e) => {
   const req = e.request;
   if (req.method !== "GET") return;
 
-  // 同一origin以外(Google Fontsなど)は捕捉しない。ブラウザの通常のfetchに任せる
+  // 同一origin以外は捕捉しない。ブラウザの通常のfetchに任せる
+  // (現状すべて同梱なので外部リクエスト自体が無いはずだが、将来足された場合の保険)
   if (new URL(req.url).origin !== self.location.origin) return;
 
-  // vendor同梱ライブラリ: サイズが大きく更新頻度も低いのでキャッシュ優先。無ければネットワークから取得してキャッシュに補充
-  if (req.url.includes("/vendor/")) {
+  // 同梱ライブラリとフォント: サイズが大きく中身も変わらないのでキャッシュ優先。
+  // 無ければネットワークから取得してキャッシュに補充する。
+  if (req.url.includes("/vendor/") || req.url.includes("/fonts/")) {
     e.respondWith(
       caches.match(req).then((hit) => {
         if (hit) return hit;

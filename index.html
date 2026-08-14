@@ -14,12 +14,29 @@
 <meta name="apple-mobile-web-app-title" content="OVERLOAD+" />
 <meta name="mobile-web-app-capable" content="yes" />
 
-<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;800&family=Noto+Sans+JP:wght@400;700;900&display=swap" rel="stylesheet">
-
 <style>
+  /* 数字・ロゴ用のBarlow Condensedはローカル同梱(fonts/、SIL OFL)。
+     機内モードや電波の悪いジムでも字面が崩れないよう、外部CDNは使わない。
+     日本語本文は端末の標準日本語フォント(iOSならHiragino Sans)に任せる:
+     Noto Sans JPを同梱すると全ウェイトで数MBになり、ネイティブアプリの起動を重くするため。 */
+  @font-face {
+    font-family: 'Barlow Condensed';
+    font-style: normal;
+    font-weight: 600;
+    font-display: swap;
+    src: url(fonts/barlow-condensed-600-latin.woff2) format('woff2');
+  }
+  @font-face {
+    font-family: 'Barlow Condensed';
+    font-style: normal;
+    font-weight: 800;
+    font-display: swap;
+    src: url(fonts/barlow-condensed-800-latin.woff2) format('woff2');
+  }
+
   html, body { margin: 0; padding: 0; background: #141517; color: #F2F0EB; }
   body {
-    font-family: 'Noto Sans JP', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic', Meiryo, sans-serif;
     -webkit-font-smoothing: antialiased;
     overscroll-behavior-y: contain;
   }
@@ -63,7 +80,7 @@
     bootFail('起動時にエラーが発生しました', m + (ev.filename ? ('\n' + ev.filename + ':' + ev.lineno) : ''));
   });
 
-  // ---- ライブラリ読み込み(リポジト同梱のローカルファイルから。CDN不使用) ----
+  // ---- ライブラリ読み込み(リポジトリ同梱のローカルファイルから。CDN不使用) ----
   var LIBS = [
     { key:'react',    urls:['vendor/react.production.min.js'] },
     { key:'reactdom', urls:['vendor/react-dom.production.min.js'] },
@@ -71,7 +88,8 @@
     { key:'recharts', urls:['vendor/recharts.js'] },
     { key:'babel',    urls:['vendor/babel.min.js'] },
     // ドメインロジック(純粋関数)。テストで使い回すため#appsrcの外へ切り出したもの。
-    { key:'oneRm', urls:['src/domain/oneRm.js'] }
+    { key:'oneRm',   urls:['src/domain/oneRm.js'] },
+    { key:'storage', urls:['src/domain/storage.js'] }
   ];
 
   function loadOne(urls, i){
@@ -79,7 +97,6 @@
       if (i >= urls.length) return reject(new Error('全ての配信元から読み込めません: ' + urls[0]));
       var s = document.createElement('script');
       s.src = urls[i];
-      s.crossOrigin = 'anonymous';
       s.onload = resolve;
       s.onerror = function(){ loadOne(urls, i+1).then(resolve, reject); };
       document.head.appendChild(s);
@@ -120,34 +137,19 @@ const C = {
   text: "#F2F0EB", muted: "#8E939A",
   red: "#E2453C", blue: "#3D7BD9", yellow: "#E8B33C", green: "#4CAF6E", grey: "#5A6069",
 };
+// 本文用フォント。<head>のbodyと同じ指定。Barlow Condensed(数字用)の中に
+// 日本語を戻したいときだけ明示的に使う(それ以外はbodyから継承させる)。
+const FONT_UI = "-apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic', Meiryo, sans-serif";
 
 const STORAGE_KEY = "workout-log-v1";
 const DRAFT_KEY = "workout-draft-v1"; // 入力途中の記録(アプリが落ちても復元できるように)
 const PRE_IMPORT_BACKUP_KEY = "workout-log-v1-pre-import"; // バックアップ復元前のデータ退避(復元に失敗した場合の保険)
-// 保存: window.storage(この環境)優先、失敗時はブラウザのlocalStorageに退避。どちらも例外を握り潰して落ちないようにする。
-const store = {
-  async get(key) {
-    try { if (typeof window !== "undefined" && window.storage) { const r = await window.storage.get(key); if (r) return r; } } catch { /* fallthrough */ }
-    try { const v = localStorage.getItem(key); return v != null ? { value: v } : null; } catch { return null; }
-  },
-  async set(key, value) {
-    let ok = false;
-    try { if (typeof window !== "undefined" && window.storage) { await window.storage.set(key, value); ok = true; } } catch { /* fallthrough */ }
-    try { localStorage.setItem(key, value); ok = true; } catch { /* ignore */ }
-    if (!ok) throw new Error("no storage available");
-  },
-  async del(key) {
-    try { if (typeof window !== "undefined" && window.storage) await window.storage.delete(key); } catch { /* ignore */ }
-    try { localStorage.removeItem(key); } catch { /* ignore */ }
-  },
-};
+// store(保存レイヤ)は src/domain/storage.js へ移設(テストのため)。
+// LIBSで<script src>読み込み済みなのでグローバルの store をそのまま参照できる。
 const uid = () => Math.random().toString(36).slice(2, 8);
 const num = (v) => { const n = parseFloat(v); return isNaN(n) ? 0 : n; };
 const round = (n) => Math.round(n * 2) / 2;
 const DEFAULT_REPS = 10; // 種目追加時の初期回数
-// AI機能の表示切り替え。この環境ではAI呼び出しが通らないため一旦false(UIから非表示)。
-// 将来ブラウザ版や自前APIキーで復活させる際はtrueにするだけでよい(関数は残してある)。
-const AI_ENABLED = false;
 const fmtDate = (iso) => { const d = new Date(iso); return `${d.getMonth() + 1}/${d.getDate()} (${"日月火水木金土"[d.getDay()]})`; };
 const fmtTime = (iso) => { const d = new Date(iso); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
 const fmtClock = (sec) => {
@@ -558,7 +560,7 @@ class ErrorBoundary extends React.Component {
   render() {
     if (!this.state.error) return this.props.children;
     return (
-      <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 14, padding: 24, textAlign: "center", background: C.bg, color: C.text, fontFamily: "'Noto Sans JP', sans-serif" }}>
+      <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 14, padding: 24, textAlign: "center", background: C.bg, color: C.text }}>
         <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: 34, letterSpacing: 1 }}>
           OVERLOAD<span style={{ color: C.red }}>+</span>
         </div>
@@ -577,7 +579,7 @@ class ErrorBoundary extends React.Component {
 }
 
 // 新規インストール時、および全データ削除後の既定値(clearAllで再利用し、削除直後に古いprofileが復活しないようにする)
-const DEFAULT_PROFILE = { bodyweight: 70, aiMode: true, soundOn: true, defTargetReps: 10, defIncrement: 2.5 };
+const DEFAULT_PROFILE = { bodyweight: 70, soundOn: true, defTargetReps: 10, defIncrement: 2.5 };
 
 // ================= アプリ本体 =================
 function App() {
@@ -630,7 +632,6 @@ function App() {
   const [restElapsed, setRestElapsed] = useState(0);
 
   // AIモーダル
-  const [aiModal, setAiModal] = useState(null); // {title, body, loading}
   const [draftRestored, setDraftRestored] = useState(false); // 復元した旨の通知
 
   // ---- 入力途中の記録を自動保存 ----
@@ -693,7 +694,7 @@ function App() {
           else {
             setWorkouts(migW(p.workouts));
             setSplit(migSplit(p.split));
-            setProfile({ bodyweight: p.profile?.bodyweight ?? 70, aiMode: false, soundOn: p.profile?.soundOn ?? true,
+            setProfile({ bodyweight: p.profile?.bodyweight ?? 70, soundOn: p.profile?.soundOn ?? true,
               defTargetReps: p.profile?.defTargetReps ?? p.profile?.defRepHigh ?? 10, defIncrement: p.profile?.defIncrement ?? 2.5 });
             setRecentNames(p.recentNames || []);
             setCustomExercises(p.customExercises || []);
@@ -1379,7 +1380,6 @@ function App() {
     const nextSplit = split ? { ...split, cursor: (split.cursor + 1) % split.days.length } : split;
     await persist({ workouts: [...workouts, entry], split: nextSplit });
     // 終了コメント
-    if (AI_ENABLED) endCoachComment(entry);
     setToday([]); setSaving(false);
     setStartAt(null); setElapsed(0); stopRest();
     setDraftRestored(false);
@@ -1387,59 +1387,11 @@ function App() {
     setView("history");
   };
 
-  // ---- AI呼び出し(共通) ----
-  const callAI = async (prompt, maxTokens = 400) => {
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 25000); // 25秒でタイムアウト
-    try {
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: maxTokens, messages: [{ role: "user", content: prompt }] }),
-        signal: ctrl.signal,
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      return (data.content || []).map(i => i.text || "").join("").trim();
-    } finally { clearTimeout(timer); }
-  };
-
-  const openAI = async (title, prompt, maxTokens) => {
-    setAiModal({ title, body: "", loading: true });
-    try {
-      const t = await callAI(prompt, maxTokens);
-      setAiModal({ title, body: t || "回答が空でした。もう一度お試しください。", loading: false });
-    } catch (e) {
-      const msg = e?.name === "AbortError"
-        ? "AIの応答が時間内に返りませんでした。この環境ではAI機能が利用できない可能性があります(下記参照)。"
-        : `AIの呼び出しに失敗しました(${e?.message || "不明なエラー"})。この環境ではAI機能が利用できない可能性があります。`;
-      setAiModal({ title, body: msg + "\n\n※AI機能はブラウザ版(claude.ai)のアーティファクトで最も安定して動作します。アプリで動かない場合は、同じチャットをPCのブラウザで開いてお試しください。", loading: false });
-    }
-  };
-
-  const startCoach = () => {
-    const day = todayDay ? `今日は「${todayDay.name}」(${todayDay.muscles.join("、")})の日です。` : "";
-    const last = workouts.length ? `前回のトレーニングは${daysSince(workouts[workouts.length - 1].date)}日前です。` : "初回のトレーニングです。";
-    openAI("開始コーチ", `あなたは親しみやすいトレーニングコーチです。${day}${last}これから始めるユーザーへ、ウォームアップの一言と今日の心構えを、80字以内の日本語で1〜2文、前向きに声かけしてください。本文のみ。`);
-  };
-  const endCoachComment = (entry) => {
-    const summary = entry.exercises.map(e => `${e.name}:${e.sets.map(s => `${s.weight}×${s.reps}`).join(",")}`).join(" / ");
-    openAI("お疲れさま", `あなたは親しみやすいトレーニングコーチです。ユーザーが今日のトレーニングを完了しました。所要${entry.durationMin}分、総ボリューム${Math.round(entry.totalVolume).toLocaleString()}kg。内容: ${summary}。良かった点を1つ具体的に褒め、次回への一言を添えて、100字以内の日本語で温かくコメントしてください。数値の指示や新しいメニュー提案はしないこと。本文のみ。`);
-  };
-  const howToDo = (exName) => {
-    const db = dbLookup(exName);
-    openAI(`${exName} のやり方`, `トレーニング種目「${exName}」${db ? `(${db.m}・${db.eq})` : ""}のやり方を、初心者にもわかるように日本語で説明してください。①セットアップ ②動作 ③よくある間違い ④効かせるコツ の4点を、各1〜2文で簡潔に。合計250字以内。本文のみ。`, 500);
-  };
   // YouTubeで種目のやり方動画を検索(APIキー不要・新しいタブで開く)
   const openYouTube = (exName) => {
     const q = encodeURIComponent(`${exName} やり方 フォーム`);
     window.open(`https://www.youtube.com/results?search_query=${q}`, "_blank", "noopener,noreferrer");
   };
-  const askCoach = () => {
-    const ctx = todayDay ? `今日は「${todayDay.name}」の日。` : "";
-    const vol = liveVolume > 0 ? `現在の記録中ボリュームは${Math.round(liveVolume).toLocaleString()}kg。` : "";
-    openAI("AIコーチ", `あなたは親しみやすいトレーニングコーチです。${ctx}${vol}ユーザーがトレーニング中に気軽に相談できるよう、今の状況に合わせた励ましと、あれば一般的なワンポイントアドバイスを、120字以内の日本語で返してください。本文のみ。`);
-  };
-
 
   // ---- 分割操作 ----
   const applyPreset = (preset) => {
@@ -1769,7 +1721,7 @@ function App() {
       const next = {
         workouts: migW(ws),
         split: p.split ? { ...p.split, days: p.split.days.map(d => ({ ...d, muscles: [...new Set((d.muscles || []).map(normMuscle))] })) } : null,
-        profile: { bodyweight: p.profile?.bodyweight ?? 70, aiMode: false, soundOn: p.profile?.soundOn ?? true,
+        profile: { bodyweight: p.profile?.bodyweight ?? 70, soundOn: p.profile?.soundOn ?? true,
           defTargetReps: p.profile?.defTargetReps ?? p.profile?.defRepHigh ?? 10, defIncrement: p.profile?.defIncrement ?? 2.5 },
         recentNames: p.recentNames || [],
         customExercises: p.customExercises || [],
@@ -1854,7 +1806,7 @@ function App() {
   const showBar = true; // 経過・ボリューム・インターバルは常時表示
 
   return (
-    <div style={{ minHeight: "100vh", background: C.bg, color: C.text, fontFamily: "'Noto Sans JP', -apple-system, sans-serif", maxWidth: 520, margin: "0 auto", paddingBottom: restFull && restStartAt != null ? 250 : 90 }}>
+    <div style={{ minHeight: "100vh", background: C.bg, color: C.text, maxWidth: 520, margin: "0 auto", paddingBottom: restFull && restStartAt != null ? 250 : 90 }}>
       <style>{`
         input:focus, button:focus-visible, select:focus { outline: 2px solid ${C.yellow}; outline-offset: 2px; }
         * { box-sizing: border-box; }
@@ -2033,12 +1985,9 @@ function App() {
         <div>
           <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: 32, letterSpacing: 1, lineHeight: 1 }}>
             OVERLOAD<span style={{ color: C.red }}>+</span>
-            <span style={{ fontFamily: "'Noto Sans JP', sans-serif", fontSize: 12, fontWeight: 700, color: C.green, marginLeft: 8, verticalAlign: "middle" }}>v74</span>
+            <span style={{ fontFamily: FONT_UI, fontSize: 12, fontWeight: 700, color: C.green, marginLeft: 8, verticalAlign: "middle" }}>v77</span>
           </div>
         </div>
-        {AI_ENABLED && (
-          <button onClick={askCoach} style={{ ...btn(C.blue), padding: "8px 12px", fontSize: 13 }}>AIコーチ</button>
-        )}
       </header>
 
       {error && <div style={{ margin: "0 16px 12px", padding: 12, borderRadius: 10, background: "#3A2224", color: "#F5B8B3", fontSize: 13 }}>{error}</div>}
@@ -2096,7 +2045,6 @@ function App() {
             <div style={{ background: C.surface, border: `1px solid ${C.blue}`, borderRadius: 14, padding: 14, marginBottom: 14 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <div style={{ fontSize: 12, color: C.blue, fontWeight: 800 }}>今日のセッション(Day {split.cursor % split.days.length + 1}/{split.days.length}・{split.name})</div>
-                {AI_ENABLED && <button onClick={startCoach} style={{ ...btn(C.surface2, C.muted), padding: "4px 10px", fontSize: 12 }}>開始コメント</button>}
               </div>
               <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 26, fontWeight: 800, margin: "4px 0 8px" }}>{todayDay.name}</div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
@@ -2210,7 +2158,6 @@ function App() {
                     style={{ ...btn(C.surface2, exIdx === 0 ? C.border : C.muted), padding: "4px 8px", fontSize: 13, cursor: exIdx === 0 ? "default" : "pointer" }}>▲</button>
                   <button onClick={() => moveExercise(ex.id, 1)} disabled={exIdx === today.length - 1} aria-label="下へ移動"
                     style={{ ...btn(C.surface2, exIdx === today.length - 1 ? C.border : C.muted), padding: "4px 8px", fontSize: 13, cursor: exIdx === today.length - 1 ? "default" : "pointer" }}>▼</button>
-                  {AI_ENABLED && <button onClick={() => howToDo(ex.name)} style={{ ...btn(C.surface2, C.blue), padding: "4px 8px", fontSize: 13 }}>やり方</button>}
                   <button onClick={() => openYouTube(ex.name)} aria-label="YouTubeでフォームを検索" style={{ ...btn(C.surface2, C.red), padding: "4px 8px", fontSize: 12, fontWeight: 700 }}>YouTube</button>
                   <button onClick={() => { setSwapEx(swapEx === ex.id ? null : ex.id); setSwapSearch(""); setSwapMuscle(""); }}
                     style={{ ...btn(C.surface2, swapEx === ex.id ? C.blue : C.muted), padding: "4px 9px", fontSize: 13 }}>変更</button>
@@ -3425,21 +3372,6 @@ function App() {
                 ))}
               </div>
             ))}
-          </div>
-        </div>
-      )}
-
-      {/* ===== AIモーダル ===== */}
-      {aiModal && (
-        <div onClick={() => setAiModal(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.6)", zIndex: 50, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
-          <div onClick={e => e.stopPropagation()} style={{ background: C.surface, borderTop: `3px solid ${C.blue}`, borderRadius: "16px 16px 0 0", padding: 20, width: "100%", maxWidth: 520, maxHeight: "70vh", overflowY: "auto" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-              <strong style={{ fontSize: 15 }}>🏋 {aiModal.title}</strong>
-              <button onClick={() => setAiModal(null)} style={{ ...btn(C.surface2, C.muted), padding: "4px 12px", fontSize: 13 }}>閉じる</button>
-            </div>
-            <div style={{ fontSize: 14, lineHeight: 1.8, color: aiModal.loading ? C.muted : C.text, whiteSpace: "pre-wrap" }}>
-              {aiModal.loading ? "AIが考えています…" : aiModal.body}
-            </div>
           </div>
         </div>
       )}

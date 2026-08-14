@@ -1,53 +1,76 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+このファイルは、コードを読めば分かることを書き写す場所ではない。
+**「なぜそうなっているか」と「触るときに踏み抜きやすい罠」だけを書く。**
+実装の説明を散文で複製すると必ず実装より先に腐り、実際に一度そうなった
+(「sw.jsにvendorのcache-first経路はない」と書いてあったが、実際にはあった)。
 
-## What this is
+## これは何か
 
-OVERLOAD+ (`overload`) is a progressive-overload workout logging PWA. Its primary UX is that each exercise card shows the previous session's actual sets (including a per-set RIR ghost with the delta from last time) so you can log "the same, or a bit more" with minimal typing. There is no automated coaching/suggestion layer — an earlier deterministic rule engine (`analyzeExercise`) that judged weight/reps increases and deloads was removed (see git history around the commit removing `RULE_ENGINE_ENABLED` if you need to resurrect it); progression judgment is left entirely to the user. No backend — everything runs client-side and persists to `localStorage`.
+OVERLOAD+ は漸進性過負荷にもとづく筋トレ記録PWA。**中心にある考え方は「前回の実績をそのまま見せて、判断はユーザーに委ねる」**。
+各セット行に前回の同じ番手のセット(重量×回数×RIRと、同一負荷なら余力の差分)を並べるのが主機能で、
+自動でメニューを判定する層は持たない。以前あった決定論的ルールエンジン(`analyzeExercise`)は
+削除済み(コミット `6af3353`)。復活させたくなったらgit履歴から。
 
-## Build / run / deploy
+バックエンドなし。全てクライアントで動く。
 
-There is no build step, package manager, or test suite — this is a single static HTML file loaded directly by the browser.
+## 配布経路が2つあり、実行のしかたが違う
 
-- **Local dev**: serve the directory over HTTP (not `file://`, since the service worker and manifest need a real origin) and open `index.html`, e.g. `python3 -m http.server 8000`.
-- **Deploy**: push to GitHub and serve via GitHub Pages. Deploying the web app just means committing and pushing `index.html` (and any changed assets) to `main`.
-- **Cache busting**: `sw.js`'s `fetch` handler is network-first, uncached-content-falls-back-to-cache for *every* same-origin GET (app shell and `vendor/*` alike — there is currently no cache-first path for the vendor libs, despite what older comments in this file used to say). When you change `index.html`, bump the `CACHE` version string at the top of `sw.js` or returning users may see a stale cached copy. Also bump the version badge string hardcoded in the header near the top of `App()` (search for the `v` + number span) — keep the two in sync.
-- **No linter/formatter/tests are configured** for the web app. Verify changes by opening the page in a browser and exercising the UI directly — Babel does transform errors at runtime and surfaces them in the on-page boot error UI, so a runtime syntax error will show up as a boot failure screen rather than a build failure.
-- **iOS app (Capacitor)**: `ios/` holds the native wrapper project; `www/` is generated output (gitignored, do not edit by hand). `npm run sync-www` (also run automatically by `npm run ios:sync`) reads `#appsrc` out of `index.html`, pre-transpiles the JSX with esbuild (see `scripts/sync-www.js`), and writes it to `www/app.bundle.js` — the generated `www/index.html` loads that bundle via a plain `<script src>` with no runtime Babel and no `eval()`. `vendor/babel.min.js` (2.87MB) is intentionally excluded from `www/vendor/`. This build step is scoped to the iOS output only; the root `index.html` used for GitHub Pages stays zero-build, per the point below.
+| | Web (GitHub Pages) | iOS (Capacitor) |
+|---|---|---|
+| 配信元 | リポジトリ直下の `index.html` | `www/`(生成物・gitignore) |
+| JSX変換 | ブラウザ上でランタイムBabel + `eval` | esbuildで事前ビルド → `app.bundle.js` |
+| Service Worker | 使う (`sw.js`) | **使わない**(バンドル内配信なので不要) |
+| 保存先 | localStorage | Capacitor Preferences (UserDefaults) |
 
-## Architecture
+**Webをビルド不要に保つのは意図的**(単一ファイルをpushすれば配信される手軽さを優先)。
+その代償として、実行経路がiOSと分岐している。片方だけで動作確認して満足しないこと。
 
-Everything lives in `index.html`, which has two layers:
+- Web: `python3 -m http.server` などで配信して `index.html`(`file://`不可、SWとmanifestに実オリジンが要る)
+- iOS: `npm run ios:sync` → Xcode。`www/` は手で編集しない
+- `npx cap sync ios` がCocoaPodsのエンコーディングエラーで落ちるときは `LANG=en_US.UTF-8` を付ける
 
-1. **Bootstrap script** (top of `<body>`, runs immediately): loads React 18, ReactDOM, prop-types, and Recharts from `vendor/` (local files, not CDN — this was migrated off unpkg/jsdelivr; see git history around the Capacitor work if you need the old CDN URLs), then reads the app source out of `<script type="text/plain" id="appsrc">`, transpiles it with `Babel.transform(src, { presets: ['react'] })` (also loaded from `vendor/babel.min.js`, ~2.87MB), and `eval`s the result. This indirection exists so the JSX/ES6+ app code can ship as a single file with zero build tooling for the web deploy target. If you edit app logic, edit the contents of the `#appsrc` block — the code isn't executed directly by the browser, so JSX syntax errors won't show up as normal parse errors until Babel runs. **This bootstrap/runtime-Babel path is intentionally NOT how the iOS build works** — see the Capacitor bullet above.
-2. **App source** (inside `#appsrc`, ~3400 lines of JSX): a single large `App()` function component holding most UI state, plus supporting data/logic defined above it in this order:
-   - Design tokens (`C`), muscle group taxonomy, the exercise database (`EXERCISE_DB`, ~95 built-in exercises), split presets, a small `JUDGE` label map (just `previous`/`new_start`, used to badge whether today's auto-menu item for an exercise is carried over from last time or a fresh start).
-   - Shared style helper objects, small presentational components (`NumInput`, `JudgeBadge`, `GuideArt`, `RirSelect`).
-   - `App()`: owns all state via `useState` (workouts, split, profile, UI toggles, edit/history modals, timers, etc.) and renders four tab views gated by a `view` state string: `"split"`, `"log"`, `"history"`, `"settings"`.
+## 踏み抜きやすい罠
 
-Key domain concepts:
-- **Workout record**: a day's session = `{ date, exercises: [...] }`, each exercise has `sets` with `{weight, reps, rir, warmup, assisted, ...}`.
-- **Storage**: `store.{get,set,del}` wraps `window.storage` (used when embedded in certain host environments) with a `localStorage` fallback; both paths are attempted and failures are swallowed so the app never crashes on persistence. Main keys: `workout-log-v1` (saved history) and `workout-draft-v1` (in-progress entry, so an in-progress set survives an accidental reload/crash).
-- **AI features are disabled**: `const AI_ENABLED = false` near the top of `#appsrc` gates the AI coach comment / exercise how-to features, which call `https://api.anthropic.com/v1/messages` directly from the client (see `callAI`). Re-enabling this in a real deployment requires proxying the API key server-side (e.g. via a Vercel function) rather than calling Anthropic directly from the browser — do not just flip `AI_ENABLED` to `true` without adding a proxy.
-- **ROM factor**: exercises with small range of motion (shrugs, calf raises) get their logged volume halved for volume charts only — this does not affect 1RM estimates.
-- **Dumbbell exercises**: logged as single-hand weight; total/effective load is computed as double that for volume/1RM purposes. **Bodyweight exercises**: effective load is `bodyweight × exercise factor + added weight`.
-- **A set only counts as "completed" once its RIR (余力/reps-in-reserve) is entered.** Sets without RIR are treated as not-yet-logged, not as zero-RIR.
-- **State updates on `today`/session-in-progress state must use the functional updater form** (`setToday(t => ...)`, not `setToday(newValue)` derived from a stale closure) — a prior bug where in-progress records silently disappeared was caused by non-functional updates racing with other state changes.
+- **`#appsrc` の中を編集する。** アプリ本体は `<script type="text/plain" id="appsrc">` の中にある。
+  ブラウザは直接実行しないので、**JSXの構文エラーはBabelが走るまで表面化しない**(白画面ではなく起動エラー画面に出る)。
+- **バージョンは2箇所ある。** `sw.js` の `CACHE` と、ヘッダーのバッジ。
+  片方だけ上げると、SWが古い `index.html` を配り続けて「直したはずの変更が返ってこない」という無症状の不具合になる。
+  `tests/version.test.js` が一致を強制しているので、忘れてもテストが落ちる。
+- **`today`(記録中の状態)の更新は必ず関数形式で。** `setToday(t => ...)`。
+  ステートの取り違えで記録中の内容が消えるバグを実際に出したことがある。
+- **RIRが入って初めて「実施済み」。** RIR未入力のセットは「まだやっていない」であって「余力0」ではない。
+- **`www/` に新しいファイルを足したら、参照元3箇所を揃える。** `index.html` の `LIBS` /
+  `sw.js` の `APP_ASSETS` / `scripts/sync-www.js` の `DOMAIN_FILES`。
+  ここがズレて `cache.addAll()` が落ち、iOS版のSWが永久にactivateしない状態で出荷されかけた
+  (`addAll` は1つでも失敗すると全体がrejectする)。`tests/sync-www.test.js` が生成物を実際にビルドして検証している。
+- **外部ホストへのリクエストを足さない。** フォントもライブラリも同梱済み。
+  電波の悪いジムや機内モードが主戦場なので、外部依存は実用上の欠陥になる。テストで縛ってある。
 
-## This repo gets edited from multiple places — always check state before trusting your memory of it
+## ドメインの約束事
 
-Development on this project happens from several sources that don't share context with each other: an earlier claude.ai chat (Artifact-based, pre-dates this git repo and isn't accessible from here), and — as of the iOS work — multiple separate Claude Code chat sessions working the same repo concurrently (e.g. a "機能修正" feature-work session and an "App Store販売準備" iOS-submission session). Any of them can commit and push between your turns. Concretely this has already happened once: mid-session, `git log` showed two Capacitor-related commits neither the user nor the active session had made.
+- 記録の単位: `{ date, exercises: [{ name, sets: [{weight, reps, rir, warmup, assisted}] }] }`
+- **ダンベル種目は片手の重量で記録**し、ボリューム・1RM計算では2倍する
+- **自重種目**の実効重量は `体重 × 係数 + 加重`
+- **ROM係数**: シュラッグ・カーフレイズなど可動域の小さい種目はボリューム集計だけ半分にする(1RM推定には影響させない)
+- 保存キー: `workout-log-v1`(履歴)、`workout-draft-v1`(入力途中。事故ってもセットが消えないように)
 
-Consequences for how you work here:
-- **Don't trust line numbers, version strings, or "current state" claims from earlier in a long conversation, or from this file's own prose, without re-checking.** Run `git log --oneline -10` and `git status` at the start of a work session and again if a lot of time/turns have passed. Re-`grep` for the thing you're about to edit rather than assuming a remembered line number still points at it.
-- If the user pastes design discussion or a diff from "another chat," treat it as authoritative *intent*, but verify the actual file contents before acting — the other session's work may or may not already be in this repo's git history.
-- If you're about to do multi-step work that would conflict with concurrent edits elsewhere (large refactors, renames), it's worth surfacing that risk to the user rather than assuming you have exclusive access to the repo.
+## このリポジトリは複数の場所から編集される
 
-## Other files
+過去のclaude.aiチャット(このリポジトリ以前)と、複数のClaude Codeセッションが同じリポジトリを触る。
+実際に、どのセッションも身に覚えのないコミットが `git log` に現れたことがある。
 
-- `manifest.json`: PWA manifest (icons, theme color, standalone display).
-- `sw.js`: service worker, see cache-busting note above.
-- `icon-*.png`, `apple-touch-icon.png`: PWA icons, referenced by `manifest.json`/`index.html`.
-- `vendor/`: locally-vendored React/ReactDOM/prop-types/Recharts/Babel Standalone, committed to the repo (not gitignored) since both the web app and the iOS build depend on them and there's no package-manager step for the web target.
-- `ios/`, `www/`, `scripts/sync-www.js`, `package.json`: the Capacitor iOS wrapper and its build pipeline. `www/` and `node_modules/` are gitignored (generated); everything else is committed. See the iOS bullet under Build/run/deploy above.
+- **作業開始時と、時間が空いたときは `git log --oneline -10` と `git status` を見る。**
+  会話の前半で得た行番号やバージョン文字列を信用せず、編集直前に `grep` し直す。
+- 他のチャットの差分を貼られたら、**意図としては正**として扱いつつ、実ファイルを確認してから動く。
+- 大きめのリファクタや改名に入る前は、衝突の可能性をユーザーに伝える。
+
+## ファイル
+
+- `src/domain/*.js`: `#appsrc` の外に出した純粋ロジック。**テストしたいものはここに置く**
+  (素のグローバルスクリプトとして `<script src>` で読む。importもmodule.exportsも使わない)
+- `tests/`: `npm test`(vitest)。生成物・バージョン整合・保存レイヤの移行までカバーしている
+- `vendor/`: React等をローカル同梱(CDN不使用)。gitignoreせずコミットする
+- `fonts/`: Barlow Condensed(数字・ロゴ用、SIL OFL)。日本語本文は端末標準フォントに任せる
+  (Noto Sans JPを同梱すると数MBになるため)
+- `ios/`, `www/`, `scripts/sync-www.js`: Capacitorラッパーとそのビルド。`www/` と `node_modules/` は生成物
