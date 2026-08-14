@@ -7,11 +7,13 @@
     "sync-www": "node scripts/sync-www.js",
     "ios:add": "npm run sync-www && npx cap add ios",
     "ios:sync": "npm run sync-www && npx cap sync ios",
-    "ios:open": "npx cap open ios"
+    "ios:open": "npx cap open ios",
+    "test": "vitest run"
   },
   "devDependencies": {
     "@capacitor/cli": "^6.0.0",
-    "esbuild": "^0.28.2"
+    "esbuild": "^0.28.2",
+    "vitest": "^4.1.10"
   },
   "dependencies": {
     "@capacitor/core": "^6.0.0",
