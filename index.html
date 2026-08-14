@@ -741,12 +741,15 @@ class ErrorBoundary extends React.Component {
   }
 }
 
+// 新規インストール時、および全データ削除後の既定値(clearAllで再利用し、削除直後に古いprofileが復活しないようにする)
+const DEFAULT_PROFILE = { bodyweight: 70, aiMode: true, soundOn: true, defTargetReps: 10, defIncrement: 2.5, phase: 'maintain' };
+
 // ================= アプリ本体 =================
 function App() {
   const [view, setView] = useState("split"); // 起動時は分割タブ(今日どのセッションかを確認してから記録へ)
   const [workouts, setWorkouts] = useState([]);
   const [split, setSplit] = useState(null);
-  const [profile, setProfile] = useState({ bodyweight: 70, aiMode: true, soundOn: true, defTargetReps: 10, defIncrement: 2.5, phase: 'maintain' });
+  const [profile, setProfile] = useState(DEFAULT_PROFILE);
   const [recentNames, setRecentNames] = useState([]); // 選択履歴順
   const [customExercises, setCustomExercises] = useState([]); // 永続保存するカスタム種目 [{n,m,eq,t,db,bw}]
   const [exerciseNotes, setExerciseNotes] = useState({}); // 種目ごとの固定メモ {種目名: "メモ"}
@@ -1737,6 +1740,9 @@ function App() {
     if (!window.confirm("すべての履歴を削除します。よろしいですか?")) return;
     try { await store.del(STORAGE_KEY); await store.del(DRAFT_KEY); localStorage.removeItem(DRAFT_KEY); } catch { /* noop */ }
     setWorkouts([]); setSplit(null); setResult(null); setChartExercise(""); setRecentNames([]); setCustomExercises([]); setExerciseNotes({}); setExerciseOverrides({}); setExerciseOverrides_module({}); setLastBackupAt(null);
+    // profile/guideSeenもメモリ上でリセットしないと、削除後に何か保存すると
+    // persist()がpatch未指定分を現在stateから引き継ぐため、古いprofileが復活してしまう。
+    setProfile(DEFAULT_PROFILE); setGuideSeen(false);
   };
 
   // ---- 履歴の編集・削除 ----
@@ -2267,7 +2273,7 @@ function App() {
         <div>
           <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: 32, letterSpacing: 1, lineHeight: 1 }}>
             OVERLOAD<span style={{ color: C.red }}>+</span>
-            <span style={{ fontFamily: "'Noto Sans JP', sans-serif", fontSize: 11, fontWeight: 700, color: C.green, marginLeft: 8, verticalAlign: "middle" }}>v67</span>
+            <span style={{ fontFamily: "'Noto Sans JP', sans-serif", fontSize: 11, fontWeight: 700, color: C.green, marginLeft: 8, verticalAlign: "middle" }}>v68</span>
           </div>
         </div>
         {AI_ENABLED && (
