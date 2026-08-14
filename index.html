@@ -71,8 +71,7 @@
     { key:'recharts', urls:['vendor/recharts.js'] },
     { key:'babel',    urls:['vendor/babel.min.js'] },
     // ドメインロジック(純粋関数)。テストで使い回すため#appsrcの外へ切り出したもの。
-    { key:'oneRm',       urls:['src/domain/oneRm.js'] },
-    { key:'progression', urls:['src/domain/progression.js'] }
+    { key:'oneRm', urls:['src/domain/oneRm.js'] }
   ];
 
   function loadOne(urls, i){
@@ -149,9 +148,6 @@ const DEFAULT_REPS = 10; // 種目追加時の初期回数
 // AI機能の表示切り替え。この環境ではAI呼び出しが通らないため一旦false(UIから非表示)。
 // 将来ブラウザ版や自前APIキーで復活させる際はtrueにするだけでよい(関数は残してある)。
 const AI_ENABLED = false;
-// ルールエンジンによる重量・回数の自動提案。現在は無効(前回記録をそのまま引き継ぐ運用)。
-// true に戻すと、次回メニューがルール判定(増量/回数増/デロード等)で算出される。
-const RULE_ENGINE_ENABLED = false;
 const fmtDate = (iso) => { const d = new Date(iso); return `${d.getMonth() + 1}/${d.getDate()} (${"日月火水木金土"[d.getDay()]})`; };
 const fmtTime = (iso) => { const d = new Date(iso); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
 const fmtClock = (sec) => {
@@ -357,172 +353,11 @@ const SPLIT_PRESETS = [
   ]},
 ];
 
-// ================= 判定タイプ =================
+// ================= 判定タイプ(今日のメニューが前回記録の引き継ぎか初回かのバッジ) =================
 const JUDGE = {
-  weight_increase:  { label: "増量", color: C.red },
-  reps_increase:    { label: "回数UP", color: C.blue },
-  maintain:         { label: "維持", color: C.grey },
-  technique_focus:  { label: "フォーム重視", color: C.yellow },
-  load_reduction:   { label: "減量", color: C.green },
-  volume_reduction: { label: "セット減", color: C.green },
-  deload_candidate: { label: "デロード", color: C.green },
-  exercise_review:  { label: "種目見直し", color: C.yellow },
-  pain_warning:     { label: "痛み警告", color: "#FF5A4E" },
-  insufficient_data:{ label: "データ不足", color: C.grey },
-  new_start:        { label: "初回", color: C.blue },
-  previous:         { label: "前回", color: C.grey },
-  comeback:         { label: "再開", color: C.blue },
+  new_start: { label: "初回", color: C.blue },
+  previous:  { label: "前回", color: C.grey },
 };
-
-// ================= ルールエンジン =================
-function analyzeExercise(name, workouts, opts = {}) {
-  const phase = opts.phase || "maintain";  // bulk(増量) / maintain(維持) / cut(減量)
-  // 種目を含むセッションと、その実施日を対応付けて取得
-  const entries = workouts.map(w => ({ date: w.date, ex: w.exercises.find(e => e.name === name) })).filter(x => x.ex);
-  const sessions = entries.map(x => x.ex);
-  if (sessions.length === 0) return { type: "insufficient_data", reason: "履歴がありません。" };
-  const lastDate = entries[entries.length - 1].date;
-  const latest = sessions[sessions.length - 1];
-  const cfg = {
-    repLow: latest.repLow ?? 8, repHigh: latest.repHigh ?? 12,
-    rirLow: latest.targetRirLow ?? 1, rirHigh: latest.targetRirHigh ?? 2, inc: latest.increment ?? 2.5,
-  };
-  // ワーキングかつ補助なしのセットのみを判定対象に(ウォームアップ・補助ありは増量判定から除外)
-  const sets = (latest.sets || []).filter(s => !s.warmup && !s.assisted);
-  if (sets.length === 0) {
-    const working = (latest.sets || []).filter(s => !s.warmup);
-    if (working.length > 0) {
-      // 補助ありのみ → 重量・回数は据え置き(補助での伸びは増量に反映しない)
-      const db0 = dbLookup(name);
-      const inc0 = (latest.increment ?? 2.5) > 0 ? (latest.increment ?? 2.5) : 2.5;
-      const w0 = Math.max(...working.map(s => s.weight));
-      return {
-        type: "maintain", reason: "補助ありのセットのみでした。補助での伸びは増量に反映せず、同重量で自力挙上を狙います。",
-        prescription: {
-          name, muscle: latest.muscle ?? db0?.m ?? "", bwFactor: latest.bwFactor ?? db0?.bw ?? 0,
-          isDb: resolveIsDb(name, latest.isDb), rom: resolveRom(name, latest.rom),
-          weight: roundToIncrement(w0, inc0),
-          targetReps: working.map(s => s.reps), sets: working.length,
-          repLow: latest.repLow ?? 8, repHigh: latest.repHigh ?? 12,
-          targetRirLow: latest.targetRirLow ?? 1, targetRirHigh: latest.targetRirHigh ?? 2, increment: inc0,
-        },
-      };
-    }
-    return { type: "insufficient_data", reason: "ワーキングセットの記録がありません。" };
-  }
-  const topWeight = Math.max(...sets.map(s => s.weight));
-  const reps = sets.map(s => s.reps);
-  const totalReps = reps.reduce((a, b) => a + b, 0);
-  const setCount = sets.length;
-  const avgReps = totalReps / setCount;             // 平均回数(セット数の変動に左右されない指標)
-  // 前回のセット数(増量条件に使う。セットを減らして平均を稼ぐのを防ぐ)
-  const prevSets = sessions.length >= 2
-    ? (sessions[sessions.length - 2].sets || []).filter(s => !s.warmup && !s.assisted)
-    : [];
-  const prevSetCount = prevSets.length || setCount;
-  const rirs = sets.map(s => s.rir).filter(r => r != null && !isNaN(r));
-  const avgRir = rirs.length ? rirs.reduce((a, b) => a + b, 0) / rirs.length : null;
-  const db = dbLookup(name);
-  const inc = cfg.inc > 0 ? cfg.inc : recommendedIncrement(name);
-  // 重量は増加幅(increment)の単位に丸める(2.5kg刻みのジムで62.3kg等が出ないように)。
-  // 丸めロジック自体は src/domain/progression.js の roundToIncrement へ移設済み。
-  const snap = (w) => roundToIncrement(w, inc);
-
-  // targetReps は「セットごとの目標回数の配列」。UI側もこれを使う。
-  const presc = (type, weight, targetReps, reason) => ({
-    type, reason, prescription: {
-      name, muscle: latest.muscle ?? db?.m ?? "", bwFactor: latest.bwFactor ?? db?.bw ?? 0,
-      isDb: resolveIsDb(name, latest.isDb), rom: resolveRom(name, latest.rom),
-      weight: snap(weight), targetReps, sets: targetReps.length,
-      repLow: cfg.repLow, repHigh: cfg.repHigh, targetRirLow: cfg.rirLow, targetRirHigh: cfg.rirHigh, increment: inc,
-    },
-  });
-  const fill = (n) => reps.map(() => n);            // 全セット同じ目標回数
-  const keep = () => [...reps];                     // 前回と同じ回数を維持
-
-  if (latest.pain) return presc("pain_warning", topWeight, keep(), "痛みの記録あり。負荷は上げず、必要なら種目を中止して専門家に相談を。");
-
-  // --- ブランク補正: 期間が空いた種目は落ちているので軽めから再開 ---
-  if (lastDate) {
-    const days = Math.floor((Date.now() - new Date(lastDate).getTime()) / 86400000);
-    if (days >= 21) return presc("comeback", topWeight * 0.9, fill(cfg.repLow), `前回から${days}日空いています。10%落として軽めから再開しましょう。`);
-    if (days >= 14) return presc("comeback", topWeight * 0.95, fill(cfg.repLow), `前回から${days}日空いています。5%落として感覚を戻しましょう。`);
-  }
-
-  // --- 停滞のカウント(平均回数ベースで比較) ---
-  let stall = 0;
-  for (let i = sessions.length - 1; i > 0; i--) {
-    const cs = (sessions[i].sets || []).filter(s => !s.warmup && !s.assisted), ps = (sessions[i - 1].sets || []).filter(s => !s.warmup && !s.assisted);
-    if (cs.length === 0 || ps.length === 0) break;
-    const curTop = Math.max(...cs.map(s => s.weight)), prevTop = Math.max(...ps.map(s => s.weight));
-    const curAvg = cs.reduce((a, s) => a + s.reps, 0) / cs.length;
-    const prevAvg = ps.reduce((a, s) => a + s.reps, 0) / ps.length;
-    if (curTop === prevTop && curAvg <= prevAvg) stall++; else break;
-  }
-  const highFatigue = avgRir != null && avgRir <= 0.5;
-  // 減量期は停滞をデロード扱いしない(維持できていれば十分)
-  const stallLimit = phase === "cut" ? 3 : 2;
-  const allowFatigueDeload = phase !== "cut";
-  if (stall >= stallLimit || (allowFatigueDeload && stall >= 1 && highFatigue)) {
-    return presc("deload_candidate", topWeight * 0.9, fill(cfg.repLow),
-      `${stall + 1}回連続で停滞${highFatigue ? "・疲労も高い" : ""}。重量を約10%下げて仕切り直し。`);
-  }
-  // 減量期に停滞している場合は「維持できている」と評価する
-  if (phase === "cut" && stall >= 1) {
-    return presc("maintain", topWeight, keep(),
-      `減量期は維持できていれば十分です(${stall + 1}回連続で同水準)。同じ重量・回数を狙いましょう。`);
-  }
-
-  // --- パフォーマンス低下(平均回数で比較。セット数の増減に影響されない) ---
-  if (sessions.length >= 2) {
-    const ps = (sessions[sessions.length - 2].sets || []).filter(s => !s.warmup && !s.assisted);
-    if (ps.length > 0) {
-      const prevTop = Math.max(...ps.map(s => s.weight));
-      const prevAvg = ps.reduce((a, s) => a + s.reps, 0) / ps.length;
-      if (topWeight >= prevTop && avgReps < prevAvg - 0.5) {
-        return presc("maintain", topWeight, keep(),
-          phase === "cut"
-            ? "前回よりやや低下。減量中は起こりやすいので、同じ重量で維持を狙いましょう。"
-            : "前回よりパフォーマンス低下。睡眠・疲労・食事を確認し、同重量で再挑戦。");
-      }
-    }
-  }
-
-  const belowRir = rirs.length > 0 && rirs.some(r => r < cfg.rirLow);
-  if (latest.formBroke || belowRir)
-    return presc("technique_focus", topWeight, keep(),
-      latest.formBroke ? "フォームが崩れた。重量は据え置き、可動域とテンポの再現性を優先。" : `余力が目標(あと${cfg.rirLow}回)を下回った。同重量でフォームを固める。`);
-
-  // --- 増量条件: 平均回数が上限に到達し、かつセット数が前回以上 ---
-  // (平均を使うことでセット数の変動に左右されず、セット数の条件で「減らして平均を稼ぐ」のを防ぐ)
-  if (avgReps >= cfg.repHigh) {
-    if (setCount >= prevSetCount) {
-      // 増量幅(+inc)が現重量に対して大きすぎる場合(目安10%超)は、増量による負荷急増を避け、
-      // 同重量のままレップレンジの上限を伸ばして稼ぐ方向に倒す(軽い種目ほどincの相対インパクトが大きいため)。
-      const pctInc = topWeight > 0 ? inc / topWeight : 0;
-      if (pctInc > 0.10) {
-        const oldRepHigh = cfg.repHigh;
-        cfg.repHigh = oldRepHigh + 2;
-        const extended = [...reps];
-        const idx = extended.findIndex(r => r < cfg.repHigh);
-        if (idx >= 0) extended[idx] = extended[idx] + 1;
-        return presc("reps_increase", topWeight, extended,
-          `+${inc}kgは現重量の${Math.round(pctInc * 100)}%相当と大きいため増量を見送り、目標回数の上限を${oldRepHigh}→${cfg.repHigh}回に伸ばします。同重量で狙いましょう。`);
-      }
-      return presc("weight_increase", topWeight + inc, fill(cfg.repLow),
-        `平均${avgReps.toFixed(1)}回で目標${cfg.repHigh}回に到達(${setCount}セット)。+${inc}kgで再スタート。`);
-    }
-    return presc("maintain", topWeight, keep(),
-      `平均${avgReps.toFixed(1)}回で目標に到達していますが、セット数が前回(${prevSetCount})より少ないため据え置きます。同重量で${prevSetCount}セットを狙いましょう。`);
-  }
-
-  // ルール2: 上限未達 → 重量維持のまま「合計+1回」。上限に届いていない最初のセットだけ+1する。
-  const next = [...reps];
-  const idx = next.findIndex(r => r < cfg.repHigh);
-  if (idx >= 0) next[idx] = next[idx] + 1;
-  return presc("reps_increase", topWeight, next,
-    `目標${cfg.repHigh}回に未到達(平均${avgReps.toFixed(1)}回)。重量は維持し、${idx + 1}セット目を1回増やします。`);
-}
 
 // ================= 共通スタイル =================
 const btn = (bg, color = "#fff") => ({
@@ -598,7 +433,7 @@ function NumInput({ value, onChange, onFocus, onBlur, inputMode = "decimal", sty
 }
 
 function JudgeBadge({ type }) {
-  const j = JUDGE[type] || JUDGE.insufficient_data;
+  const j = JUDGE[type] || { label: "―", color: C.grey };
   return <span style={{ background: j.color, color: "#fff", borderRadius: 999, padding: "3px 11px", fontSize: 12, fontWeight: 800, whiteSpace: "nowrap" }}>{j.label}</span>;
 }
 
@@ -742,7 +577,7 @@ class ErrorBoundary extends React.Component {
 }
 
 // 新規インストール時、および全データ削除後の既定値(clearAllで再利用し、削除直後に古いprofileが復活しないようにする)
-const DEFAULT_PROFILE = { bodyweight: 70, aiMode: true, soundOn: true, defTargetReps: 10, defIncrement: 2.5, phase: 'maintain' };
+const DEFAULT_PROFILE = { bodyweight: 70, aiMode: true, soundOn: true, defTargetReps: 10, defIncrement: 2.5 };
 
 // ================= アプリ本体 =================
 function App() {
@@ -758,8 +593,6 @@ function App() {
   const [search, setSearch] = useState("");
   const [pickerMuscle, setPickerMuscle] = useState(null);
   const [customDraft, setCustomDraft] = useState({ muscle: "", eq: "ダンベル" });
-  const [result, setResult] = useState(null);
-  const [aiLoading, setAiLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [loaded, setLoaded] = useState(false);
@@ -789,7 +622,6 @@ function App() {
   const [editWorkout, setEditWorkout] = useState(null); // 編集中の記録 {index, draft}
   const [editAddSearch, setEditAddSearch] = useState("");  // 履歴編集で種目を追加するときの検索語
   const [exSettingSearch, setExSettingSearch] = useState(""); // 設定タブの種目検索
-  const [filterToday, setFilterToday] = useState(true);
 
   // タイマー
   const [startAt, setStartAt] = useState(null);   // セッション開始(ms)
@@ -862,8 +694,7 @@ function App() {
             setWorkouts(migW(p.workouts));
             setSplit(migSplit(p.split));
             setProfile({ bodyweight: p.profile?.bodyweight ?? 70, aiMode: false, soundOn: p.profile?.soundOn ?? true,
-              defTargetReps: p.profile?.defTargetReps ?? p.profile?.defRepHigh ?? 10, defIncrement: p.profile?.defIncrement ?? 2.5,
-              phase: p.profile?.phase ?? 'maintain' });
+              defTargetReps: p.profile?.defTargetReps ?? p.profile?.defRepHigh ?? 10, defIncrement: p.profile?.defIncrement ?? 2.5 });
             setRecentNames(p.recentNames || []);
             setCustomExercises(p.customExercises || []);
             setExerciseNotes(p.exerciseNotes || {});
@@ -1272,24 +1103,7 @@ function App() {
     };
   };
 
-  // ルールエンジンの判定を「提案」として取り出す。記録の中身は一切置き換えず、添えるだけ。
-  // RULE_ENGINE_ENABLED=false のときは常に null なので、UI側は提案行を出さないだけで済む。
-  const suggestionFor = (name) => {
-    if (!RULE_ENGINE_ENABLED) return null;
-    const res = analyzeExercise(name, workouts, { phase: profile.phase });
-    if (res.type === "insufficient_data" || !res.prescription) return null;
-    return {
-      type: res.type, reason: res.reason,
-      weight: res.prescription.weight, targetReps: res.prescription.targetReps,
-      // repLow/repHighも持ち回る: 増量ガード(現重量比10%超で増量を見送りレップ上限を伸ばす)等、
-      // 判定によって伸びたレンジをここで捨てると、適用しても次回に反映されず同じ判定が繰り返される。
-      repLow: res.prescription.repLow, repHigh: res.prescription.repHigh,
-    };
-  };
-
-  // 種目名 → メニュー1項目
-  // ベースは常に「同じ分割Dayの前回記録(重量・回数・セット数)」。
-  // ルールエンジンが有効なときは、それを置き換えず suggestion として添える。
+  // 種目名 → メニュー1項目。ベースは常に「同じ分割Dayの前回記録(重量・回数・セット数)」。
   const buildMenuItem = (name) => {
     // その種目を含む「同じセッション」の直近の記録を探す
     const prevEntry = [...workouts].reverse().find(w =>
@@ -1301,17 +1115,12 @@ function App() {
     const prevSets = prevEx ? prevEx.sets.map(s => ({
       weight: s.weight, reps: s.reps, warmup: !!s.warmup, assisted: !!s.assisted,
     })) : null;
-    // ルールエンジンの判定は prescription を差し替えず、suggestion として添えるだけ。
-    // こうすると RULE_ENGINE_ENABLED を切り替えても「前回の内容がそのまま出る」動作は壊れず、
-    // フラグの意味は「提案を出すか出さないか」だけになる。
-    const suggestion = suggestionFor(name);
 
     if (prevEx) {
       const workingW = prevSets.filter(x => !x.warmup).map(x => x.weight);
       return {
         type: "previous",
         reason: `${prevEntry ? fmtDate(prevEntry.date) : "前回"}の記録です。`,
-        suggestion,
         prescription: {
           name, muscle: prevEx.muscle ?? cfg.muscle, bwFactor: prevEx.bwFactor ?? cfg.bwFactor,
           isDb: resolveIsDb(name, prevEx.isDb), rom: prevEx.rom ?? cfg.rom ?? 1.0,
@@ -1328,7 +1137,6 @@ function App() {
     // 履歴がない種目は既定値で開始
     return {
       type: "new_start", reason: "初回。軽めの重量で動作を確認しましょう。",
-      suggestion,
       prescription: {
         name, muscle: cfg.muscle, bwFactor: cfg.bwFactor, isDb: cfg.isDb, rom: cfg.rom ?? 1.0,
         weight: 0,
@@ -1447,27 +1255,6 @@ function App() {
     // 最後の1セットは種目ごと消えないよう、値のクリアに留める
     if (ex.sets.length <= 1) return { ...ex, sets: [{ weight: "0", reps: String(DEFAULT_REPS), rir: "", warmup: false }] };
     return { ...ex, sets: ex.sets.filter((_, j) => j !== i) };
-  }));
-  // ワーキングセット(ウォームアップ以外)の重量をまとめて置き換える。差分チップ用。
-  // ウォームアップは狙う重量と無関係なので触らない。
-  const setWorkingWeight = (id, weight) => setToday(t => t.map(ex => ex.id !== id ? ex : {
-    ...ex, sets: ex.sets.map(s => s.warmup ? s : { ...s, weight: String(weight) }),
-  }));
-  // 提案(suggestion)をまるごと適用する。差分チップの「◎(提案)」用。
-  // 重量だけでなく目標回数・レップレンジ上限まで反映することで、
-  // reps_increase系の提案(回数を伸ばす/上限を広げる)もチップ1つで反映でき、
-  // かつ次回のanalyzeExerciseに正しく持ち越される(repHighを捨てない)。
-  const applySuggestion = (id, sg) => setToday(t => t.map(ex => {
-    if (ex.id !== id) return ex;
-    const targets = Array.isArray(sg.targetReps) ? sg.targetReps : null;
-    let wi = -1;
-    const sets = ex.sets.map(s => {
-      if (s.warmup) return s;
-      wi++;
-      const r = targets ? (targets[wi] ?? targets[targets.length - 1]) : s.reps;
-      return { ...s, weight: String(sg.weight), reps: String(r) };
-    });
-    return { ...ex, sets, repLow: sg.repLow ?? ex.repLow, repHigh: sg.repHigh ?? ex.repHigh };
   }));
   // 分割の今日のDayに登録された種目を newName で置き換え(次回の自動メニューに反映)
   const updateSplitDayExercise = (oldName, newName) => {
@@ -1593,7 +1380,7 @@ function App() {
     await persist({ workouts: [...workouts, entry], split: nextSplit });
     // 終了コメント
     if (AI_ENABLED) endCoachComment(entry);
-    setToday([]); setSaving(false); setResult(null);
+    setToday([]); setSaving(false);
     setStartAt(null); setElapsed(0); stopRest();
     setDraftRestored(false);
     try { await store.del(DRAFT_KEY); localStorage.removeItem(DRAFT_KEY); } catch { /* noop */ }
@@ -1653,32 +1440,6 @@ function App() {
     openAI("AIコーチ", `あなたは親しみやすいトレーニングコーチです。${ctx}${vol}ユーザーがトレーニング中に気軽に相談できるよう、今の状況に合わせた励ましと、あれば一般的なワンポイントアドバイスを、120字以内の日本語で返してください。本文のみ。`);
   };
 
-  // ---- 提案 ----
-  const generate = async () => {
-    const names = [...new Set(workouts.flatMap(w => w.exercises.map(e => e.name)))];
-    let items = names.map(n => analyzeExercise(n, workouts, { phase: profile.phase })).filter(r => r.type !== "insufficient_data");
-    if (split && filterToday) { const f = items.filter(it => muscleMatchesDay(it.prescription.muscle, todayDay)); if (f.length) items = f; }
-    if (items.length === 0) { setError("判定できる種目がありません。まず記録してください。"); return; }
-    setError(""); setResult({ advice: "", items });
-    if (!AI_ENABLED) return;
-    setAiLoading(true);
-    try {
-      const summary = items.map(it => ({ name: it.prescription.name, judgment: it.type, next: `${it.prescription.weight}kg × ${repsLabel(it.prescription.targetReps)}` }));
-      const text = await callAI(`あなたはストレングスコーチです。次回メニューの数値判定は既にルールエンジンで確定しています(下記)。数値を変えず、全体への短い総括を書くことだけが役割です。\n判定結果: ${JSON.stringify(summary)}\n${todayDay ? `今日のセッション: ${todayDay.name}` : ""}\n80字以内の日本語で総括を1文だけ。数値・種目の増減提案はしない。本文のみ。`, 300);
-      if (text) setResult(prev => prev ? { ...prev, advice: text } : prev);
-    } catch { /* コード判定のみ */ }
-    setAiLoading(false);
-  };
-  const loadPrescription = () => {
-    ensureStarted();
-    setToday(result.items.map(it => {
-      const p = it.prescription;
-      return { id: uid(), name: p.name, muscle: p.muscle, bwFactor: p.bwFactor, isDb: p.isDb, rom: p.rom ?? 1.0,
-        repLow: p.repLow, repHigh: p.repHigh, targetRirLow: p.targetRirLow, targetRirHigh: p.targetRirHigh, increment: p.increment,
-        formBroke: false, pain: false, sets: p.targetReps.map(r => ({ weight: String(p.weight), reps: String(r), rir: "", warmup: false })) };
-    }));
-    setView("log");
-  };
 
   // ---- 分割操作 ----
   const applyPreset = (preset) => {
@@ -1739,7 +1500,7 @@ function App() {
   const clearAll = async () => {
     if (!window.confirm("すべての履歴を削除します。よろしいですか?")) return;
     try { await store.del(STORAGE_KEY); await store.del(DRAFT_KEY); localStorage.removeItem(DRAFT_KEY); } catch { /* noop */ }
-    setWorkouts([]); setSplit(null); setResult(null); setChartExercise(""); setRecentNames([]); setCustomExercises([]); setExerciseNotes({}); setExerciseOverrides({}); setExerciseOverrides_module({}); setLastBackupAt(null);
+    setWorkouts([]); setSplit(null); setChartExercise(""); setRecentNames([]); setCustomExercises([]); setExerciseNotes({}); setExerciseOverrides({}); setExerciseOverrides_module({}); setLastBackupAt(null);
     // profile/guideSeenもメモリ上でリセットしないと、削除後に何か保存すると
     // persist()がpatch未指定分を現在stateから引き継ぐため、古いprofileが復活してしまう。
     setProfile(DEFAULT_PROFILE); setGuideSeen(false);
@@ -2009,8 +1770,7 @@ function App() {
         workouts: migW(ws),
         split: p.split ? { ...p.split, days: p.split.days.map(d => ({ ...d, muscles: [...new Set((d.muscles || []).map(normMuscle))] })) } : null,
         profile: { bodyweight: p.profile?.bodyweight ?? 70, aiMode: false, soundOn: p.profile?.soundOn ?? true,
-          defTargetReps: p.profile?.defTargetReps ?? p.profile?.defRepHigh ?? 10, defIncrement: p.profile?.defIncrement ?? 2.5,
-          phase: p.profile?.phase ?? 'maintain' },
+          defTargetReps: p.profile?.defTargetReps ?? p.profile?.defRepHigh ?? 10, defIncrement: p.profile?.defIncrement ?? 2.5 },
         recentNames: p.recentNames || [],
         customExercises: p.customExercises || [],
         exerciseNotes: p.exerciseNotes || {},
@@ -2273,7 +2033,7 @@ function App() {
         <div>
           <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: 32, letterSpacing: 1, lineHeight: 1 }}>
             OVERLOAD<span style={{ color: C.red }}>+</span>
-            <span style={{ fontFamily: "'Noto Sans JP', sans-serif", fontSize: 11, fontWeight: 700, color: C.green, marginLeft: 8, verticalAlign: "middle" }}>v70</span>
+            <span style={{ fontFamily: "'Noto Sans JP', sans-serif", fontSize: 11, fontWeight: 700, color: C.green, marginLeft: 8, verticalAlign: "middle" }}>v71</span>
           </div>
         </div>
         {AI_ENABLED && (
@@ -2381,16 +2141,6 @@ function App() {
                       <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 18, fontWeight: 600, color: C.muted }}>
                         {p.weight}<span style={{ fontSize: 11, color: C.muted }}>{p.bwFactor > 0 ? "kg加重" : p.isDb ? "kg片手" : "kg"}</span>
                         {" × "}<span style={{ fontSize: 15 }}>{repsLabel(p.targetReps)}</span>
-                      </div>
-                    )}
-                    {/* 提案は前回の記録を置き換えず、下に添える(記録開始後に1タップで反映できる) */}
-                    {it.suggestion && (
-                      <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginTop: 4, flexWrap: "wrap" }}>
-                        <JudgeBadge type={it.suggestion.type} />
-                        <span style={{ fontSize: 12, color: C.text }}>
-                          {it.suggestion.weight}{p.isDb ? "kg(片手)" : "kg"} × {repsLabel(it.suggestion.targetReps)}
-                        </span>
-                        <span style={{ fontSize: 10, color: C.muted }}>提案</span>
                       </div>
                     )}
                   </div>
@@ -2527,49 +2277,6 @@ function App() {
                         推移 {ins.trend.join(" → ")}
                       </span>
                     )}
-                  </div>
-                );
-              })()}
-
-              {/* 提案(あれば)。前回を基準にした差分チップで、反映も取り消しも1タップにする */}
-              {(() => {
-                const sg = suggestionFor(ex.name);
-                const ins = sg ? exerciseInsight(ex.name) : null;
-                if (!sg || !ins) return null;
-                const inc = num(ex.increment) || 2.5;
-                const base = ins.topWeight;
-                const unit = ins.isDb ? "kg(片手)" : "kg";
-                const cur = num((ex.sets.find(s => !s.warmup) || {}).weight);
-                const same = (a, b) => Math.abs(a - b) < 0.01;
-                const opts = [
-                  { label: `+${inc}kg`, w: base + inc },
-                  { label: "前回のまま", w: base },
-                  { label: `−${inc}kg`, w: Math.max(0, base - inc) },
-                ];
-                // デロード等で提案がこの3択に無い場合も、提案を必ず1タップで選べるようにする
-                if (!opts.some(o => same(o.w, sg.weight))) opts.unshift({ label: `${sg.weight}kg`, w: sg.weight });
-                return (
-                  <div style={{ background: C.bg, borderRadius: 10, padding: "8px 10px", marginBottom: 10 }}>
-                    <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 6, flexWrap: "wrap" }}>
-                      <JudgeBadge type={sg.type} />
-                      <span style={{ fontSize: 11, color: C.muted, lineHeight: 1.6, minWidth: 0 }}>{sg.reason}</span>
-                    </div>
-                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                      {opts.map(o => {
-                        const isSuggested = same(sg.weight, o.w);
-                        // ◎(提案そのもの)は重量だけでなく目標回数・レップレンジ上限もまとめて適用する。
-                        // それ以外の手動チップは重量だけを変える(回数は今の入力を尊重する)。
-                        return (
-                          <button key={o.label} onClick={() => isSuggested ? applySuggestion(ex.id, sg) : setWorkingWeight(ex.id, o.w)}
-                            style={chip(same(cur, o.w), isSuggested ? C.green : C.blue)}>
-                            {o.label}{isSuggested ? " ◎" : ""}
-                          </button>
-                        );
-                      })}
-                    </div>
-                    <div style={{ fontSize: 10, color: C.muted, marginTop: 5, lineHeight: 1.6 }}>
-                      前回の {base}{unit} が基準。◎が提案です。タップでワーキングセットの重量をまとめて変更します。
-                    </div>
                   </div>
                 );
               })()}
@@ -3542,36 +3249,6 @@ function App() {
               <span><NumInput inputMode="decimal" value={profile.bodyweight} onChange={e => persist({ profile: { ...profile, bodyweight: num(e.target.value) } })} style={{ ...cfgInput, width: 70, fontSize: 16 }} /> kg</span>
             </label>
           </div>
-
-          {/* トレーニング期(フェーズ): ルールエンジン有効時のみ */}
-          {RULE_ENGINE_ENABLED && (
-          <div style={{ background: C.surface, borderRadius: 14, padding: 16, border: `1px solid ${C.border}`, marginBottom: 12 }}>
-            <div style={{ fontSize: 14, fontWeight: 900, marginBottom: 4 }}>いまの時期</div>
-            <p style={{ color: C.muted, fontSize: 12, margin: "0 0 12px", lineHeight: 1.6 }}>
-              時期に応じて判定の厳しさが変わります。増量条件(平均回数が上限到達＋セット数が前回以上)は共通です。
-            </p>
-            <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
-              {[["bulk", "増量期"], ["maintain", "維持期"], ["cut", "減量期"]].map(([k, label]) => (
-                <button key={k} onClick={() => persist({ profile: { ...profile, phase: k } })}
-                  style={{
-                    flex: 1, padding: "10px 0", borderRadius: 10, cursor: "pointer",
-                    fontSize: 13, fontWeight: 800, fontFamily: "inherit",
-                    border: `1px solid ${profile.phase === k ? C.red : C.border}`,
-                    background: profile.phase === k ? C.red : C.bg,
-                    color: profile.phase === k ? "#fff" : C.muted,
-                  }}>{label}</button>
-              ))}
-            </div>
-            <p style={{ color: C.muted, fontSize: 11, margin: 0, lineHeight: 1.7 }}>
-              {profile.phase === "cut"
-                ? "減量期: 停滞をデロード扱いしません。維持できていれば「十分」と判定し、無用な重量down提案を出しません。"
-                : profile.phase === "bulk"
-                  ? "増量期: 2回停滞、または疲労が高いとデロードを提案します。積極的に伸ばす設定です。"
-                  : "維持期: 標準設定。2回停滞または高疲労でデロードを提案します。"}
-            </p>
-          </div>
-          )}
-
 
           {/* 種目の設定 */}
           <div style={{ background: C.surface, borderRadius: 14, padding: 16, border: `1px solid ${C.border}`, marginBottom: 12 }}>

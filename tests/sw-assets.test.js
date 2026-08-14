@@ -52,10 +52,6 @@ describe("sw.js APP_ASSETS のキャッシュ対象整合性(P0-3)", () => {
     expect(appAssets).toContain("./src/domain/oneRm.js");
   });
 
-  it("APP_ASSETSにsrc/domain/progression.jsが含まれる", () => {
-    expect(appAssets).toContain("./src/domain/progression.js");
-  });
-
   it("APP_ASSETSに列挙したファイルがすべて実在する", () => {
     const missingFiles = appAssets
       .filter((u) => u !== "./") // ルートはindex.html相当なのでファイルとしては存在しなくてよい

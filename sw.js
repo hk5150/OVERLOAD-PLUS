@@ -1,6 +1,6 @@
 // OVERLOAD+ Service Worker
 // アプリ本体をキャッシュし、オフラインでも起動できるようにする。ライブラリもすべてローカル同梱(CDN不使用)。
-const CACHE = "overload-v70";
+const CACHE = "overload-v71";
 
 // ネットワーク優先フェッチのタイムアウト(電波が弱い環境でハングし続けるのを防ぐ)
 const NETWORK_TIMEOUT_MS = 4000;
@@ -20,7 +20,6 @@ const APP_ASSETS = [
   "./vendor/recharts.js",
   "./vendor/babel.min.js",
   "./src/domain/oneRm.js",
-  "./src/domain/progression.js",
 ];
 
 self.addEventListener("install", (e) => {
