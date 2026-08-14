@@ -2033,7 +2033,7 @@ function App() {
         <div>
           <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: 32, letterSpacing: 1, lineHeight: 1 }}>
             OVERLOAD<span style={{ color: C.red }}>+</span>
-            <span style={{ fontFamily: "'Noto Sans JP', sans-serif", fontSize: 12, fontWeight: 700, color: C.green, marginLeft: 8, verticalAlign: "middle" }}>v72</span>
+            <span style={{ fontFamily: "'Noto Sans JP', sans-serif", fontSize: 12, fontWeight: 700, color: C.green, marginLeft: 8, verticalAlign: "middle" }}>v74</span>
           </div>
         </div>
         {AI_ENABLED && (
@@ -2125,17 +2125,17 @@ function App() {
                       <span style={{ flexShrink: 0 }}><JudgeBadge type={it.type} /></span>
                     </div>
                     {p.prevSets ? (
-                      <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.7 }}>
+                      <div style={{ fontSize: 13, color: C.grey, lineHeight: 1.7, opacity: 0.6 }}>
                         {p.prevSets.map((s, si) => (
                           <span key={si}>
                             {si > 0 && " / "}
                             {s.warmup ? "W:" : ""}{s.assisted ? "補:" : ""}
-                            <span style={{ color: C.muted, fontWeight: s.warmup ? 400 : 700 }}>
+                            <span style={{ color: C.grey, fontWeight: s.warmup ? 400 : 700 }}>
                               {s.weight}{p.isDb ? "(片手)" : ""}×{s.reps}
                             </span>
                           </span>
                         ))}
-                        <span style={{ color: C.muted, marginLeft: 6 }}>({p.sets}セット)</span>
+                        <span style={{ color: C.grey, marginLeft: 6 }}>({p.sets}セット)</span>
                       </div>
                     ) : (
                       <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 18, fontWeight: 600, color: C.muted }}>
