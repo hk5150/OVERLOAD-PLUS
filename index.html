@@ -538,7 +538,7 @@ const fieldLabel = { fontSize: 10, color: C.muted, textAlign: "center" };
 const adjBtn = { flex: 1, padding: "8px 0", borderRadius: 8, border: `1px solid ${C.border}`, background: C.surface2, color: C.text, fontSize: 13, fontWeight: 700, fontFamily: "inherit", cursor: "pointer" };
 const cfgInput = {
   width: 46, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8,
-  padding: "5px 2px", color: C.text, textAlign: "center", fontSize: 14, fontFamily: "inherit",
+  padding: "5px 2px", color: C.text, textAlign: "center", fontSize: 16, fontFamily: "inherit",
 };
 const chip = (active, activeColor = C.blue) => ({
   padding: "6px 12px", borderRadius: 999, fontSize: 12, cursor: "pointer", fontFamily: "inherit",
@@ -704,7 +704,7 @@ function ExerciseNoteEditor({ value, onSave }) {
       onChange={e => setText(e.target.value)}
       placeholder="例:シート高さ4、肩甲骨を寄せる、グリップは肩幅より拳1つ外"
       rows={2}
-      style={{ width: "100%", background: C.bg, border: `1px solid ${C.yellow}`, borderRadius: 8, color: C.text, padding: "8px 10px", fontSize: 13, fontFamily: "inherit", resize: "vertical", lineHeight: 1.6 }} />
+      style={{ width: "100%", background: C.bg, border: `1px solid ${C.yellow}`, borderRadius: 8, color: C.text, padding: "8px 10px", fontSize: 16, fontFamily: "inherit", resize: "vertical", lineHeight: 1.6 }} />
   );
 }
 
@@ -1573,7 +1573,8 @@ function App() {
           ...(s.assisted ? { assisted: true } : {}),
           ...(s.rir !== "" && s.rir != null ? { rir: num(s.rir) } : {}),
         })),
-    })).filter(ex => ex.sets.length > 0); // 有効なセットが1つも無い種目は記録しない
+      // ウォームアップだけでは「実施した」とみなさない(あと何回できた?を入力したワーキングセットが1つも無い種目は記録しない)
+    })).filter(ex => ex.sets.some(s => !s.warmup));
     if (exercises.length === 0) {
       setError("実施したセットがありません。「あと何回できた?」を入力したセットが記録対象になります。");
       setSaving(false);
@@ -1837,17 +1838,18 @@ function App() {
 
   const saveEditWorkout = async () => {
     const { index, draft } = editWorkout;
-    // 数値化し、回数0のセットと空の種目は除去
+    // 数値化し、回数0のセット・余力(RIR)未入力のワーキングセット・空の種目は除去
     const exercises = draft.exercises.map(ex => ({
       ...ex,
       sets: ex.sets
-        .filter(s => Math.round(num(s.reps)) > 0)
+        .filter(s => Math.round(num(s.reps)) > 0 && (s.warmup || (s.rir !== "" && s.rir != null)))
         .map(s => ({
           weight: num(s.weight), reps: Math.round(num(s.reps)), warmup: !!s.warmup,
           ...(s.assisted ? { assisted: true } : {}),
           ...(s.rir !== "" && s.rir != null ? { rir: num(s.rir) } : {}),
         })),
-    })).filter(ex => ex.sets.length > 0);
+      // ウォームアップだけでは「実施した」とみなさない
+    })).filter(ex => ex.sets.some(s => !s.warmup));
 
     if (exercises.length === 0) {
       if (!window.confirm("有効なセットがありません。この記録を削除しますか?")) return;
@@ -2265,7 +2267,7 @@ function App() {
         <div>
           <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: 32, letterSpacing: 1, lineHeight: 1 }}>
             OVERLOAD<span style={{ color: C.red }}>+</span>
-            <span style={{ fontFamily: "'Noto Sans JP', sans-serif", fontSize: 11, fontWeight: 700, color: C.green, marginLeft: 8, verticalAlign: "middle" }}>v65</span>
+            <span style={{ fontFamily: "'Noto Sans JP', sans-serif", fontSize: 11, fontWeight: 700, color: C.green, marginLeft: 8, verticalAlign: "middle" }}>v66</span>
           </div>
         </div>
         {AI_ENABLED && (
@@ -2470,7 +2472,7 @@ function App() {
                     別の種目に差し替えます(入力中のセットは、差し替え先の種目の前回記録に入れ替わります)。
                   </div>
                   <input value={swapSearch} onChange={e => setSwapSearch(e.target.value)} placeholder="種目を検索"
-                    style={{ width: "100%", background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: "8px 10px", fontSize: 13, fontFamily: "inherit", marginBottom: 8 }} />
+                    style={{ width: "100%", background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: "8px 10px", fontSize: 16, fontFamily: "inherit", marginBottom: 8 }} />
                   {/* 部位フィルター(他の部位にも変更できる) */}
                   <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 8, marginBottom: 4 }}>
                     <button onClick={() => setSwapMuscle("")} style={{ ...chip(swapMuscle === ""), flexShrink: 0 }}>すべて</button>
@@ -2726,7 +2728,7 @@ function App() {
                 <div style={{ background: C.bg, borderRadius: 10, padding: 12, marginBottom: 10 }}>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center", marginBottom: 10 }}>
                     {!ex.muscle && (
-                      <label style={{ fontSize: 12, color: C.yellow }}>部位(未設定) <select value={ex.muscle} onChange={e => updEx(ex.id, { muscle: e.target.value })} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: "5px 6px", fontSize: 13, fontFamily: "inherit" }}><option value="">未設定</option>{MUSCLES.map(m => <option key={m} value={m}>{m}</option>)}</select></label>
+                      <label style={{ fontSize: 12, color: C.yellow }}>部位(未設定) <select value={ex.muscle} onChange={e => updEx(ex.id, { muscle: e.target.value })} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: "5px 6px", fontSize: 16, fontFamily: "inherit" }}><option value="">未設定</option>{MUSCLES.map(m => <option key={m} value={m}>{m}</option>)}</select></label>
                     )}
                     <label style={{ fontSize: 12, color: C.muted, display: "flex", alignItems: "center", gap: 4 }}><input type="checkbox" checked={ex.bwFactor > 0} onChange={e => updEx(ex.id, { bwFactor: e.target.checked ? 0.7 : 0 })} />自重種目</label>
                   </div>
@@ -2916,7 +2918,7 @@ function App() {
                   <div style={{ background: C.surface, borderRadius: 14, padding: 12, marginBottom: 12, border: `1px solid ${C.red}` }}>
                     <input value={search} onChange={e => setSearch(e.target.value)} onFocus={selectOnFocus}
                       placeholder="種目を検索(なければカスタム追加)"
-                      style={{ width: "100%", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: "9px 10px", fontSize: 14, fontFamily: "inherit", marginBottom: 8 }} />
+                      style={{ width: "100%", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: "9px 10px", fontSize: 16, fontFamily: "inherit", marginBottom: 8 }} />
                     <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 8 }}>
                       <button onClick={() => setPickerMuscle("")} style={{ ...chip(pickerMuscle === ""), flexShrink: 0 }}>最近使った順</button>
                       {MUSCLES.map(m => (
@@ -2956,19 +2958,22 @@ function App() {
               </div>
             )}
             <input value={search} onChange={e => setSearch(e.target.value)} onFocus={selectOnFocus}
-              onKeyDown={e => e.key === "Enter" && search.trim() && addExercise(search, findExercise(search.trim()) ? undefined : { muscle: customDraft.muscle, eq: customDraft.eq, isDb: customDraft.eq === "ダンベル", bwFactor: customDraft.eq === "自重" ? 0.7 : 0 })}
+              // 既存種目はEnterでそのまま追加してよいが、新規カスタム種目は部位・器具を選ばずに
+              // 既定値(部位未設定・ダンベル)のまま追加されてしまうため、Enterでは追加しない。
+              // 下の「カスタム種目として追加」パネルで選んでからボタンを押してもらう。
+              onKeyDown={e => { if (e.key === "Enter" && search.trim() && findExercise(search.trim())) addExercise(search); }}
               placeholder="種目を検索(なければカスタム追加)"
-              style={{ width: "100%", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 12px", color: C.text, fontSize: 14, fontFamily: "inherit", marginBottom: 10 }} />
+              style={{ width: "100%", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 12px", color: C.text, fontSize: 16, fontFamily: "inherit", marginBottom: 10 }} />
 
             {/* カスタム追加時の部位・器具設定 */}
             {search.trim() && !findExercise(search.trim()) && (
               <div style={{ background: C.bg, borderRadius: 10, padding: 10, marginBottom: 10 }}>
                 <div style={{ fontSize: 12, color: C.muted, marginBottom: 8 }}>「{search.trim()}」をカスタム種目として追加</div>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 10 }}>
-                  <select value={customDraft.muscle} onChange={e => setCustomDraft({ ...customDraft, muscle: e.target.value })} style={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: "6px 8px", fontSize: 13, fontFamily: "inherit" }}>
+                  <select value={customDraft.muscle} onChange={e => setCustomDraft({ ...customDraft, muscle: e.target.value })} style={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: "6px 8px", fontSize: 16, fontFamily: "inherit" }}>
                     <option value="">部位を選択</option>{MUSCLES.map(m => <option key={m} value={m}>{m}</option>)}
                   </select>
-                  <select value={customDraft.eq} onChange={e => setCustomDraft({ ...customDraft, eq: e.target.value })} style={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: "6px 8px", fontSize: 13, fontFamily: "inherit" }}>
+                  <select value={customDraft.eq} onChange={e => setCustomDraft({ ...customDraft, eq: e.target.value })} style={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: "6px 8px", fontSize: 16, fontFamily: "inherit" }}>
                     {EQUIPMENT.map(q => <option key={q} value={q}>{q}</option>)}
                   </select>
                 </div>
@@ -3040,7 +3045,7 @@ function App() {
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, minWidth: 0 }}>
                         <span style={{ color: C.muted, fontSize: 12, flexShrink: 0 }}>Day {i + 1}</span>
-                        {editing ? <input value={d.name} onChange={e => updDay(i, { name: e.target.value })} onFocus={selectOnFocus} aria-label="Day名" style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: "4px 8px", fontSize: 14, fontFamily: "inherit", width: "100%" }} /> : <strong style={{ fontSize: 15 }}>{d.name}</strong>}
+                        {editing ? <input value={d.name} onChange={e => updDay(i, { name: e.target.value })} onFocus={selectOnFocus} aria-label="Day名" style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: "4px 8px", fontSize: 16, fontFamily: "inherit", width: "100%" }} /> : <strong style={{ fontSize: 15 }}>{d.name}</strong>}
                         {isNext && <span style={{ background: C.blue, color: "#fff", borderRadius: 999, padding: "2px 8px", fontSize: 10, fontWeight: 800, flexShrink: 0 }}>今日</span>}
                       </div>
                       <div style={{ display: "flex", gap: 4, flexShrink: 0, alignItems: "center" }}>
@@ -3443,7 +3448,7 @@ function App() {
                     <div style={{ fontSize: 11, color: C.muted, marginBottom: 8 }}>記録し忘れた種目を追加できます。</div>
                     <input value={editAddSearch} onChange={e => setEditAddSearch(e.target.value)}
                       placeholder="種目を検索して追加"
-                      style={{ width: "100%", background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: "8px 10px", fontSize: 13, fontFamily: "inherit", marginBottom: 8 }} />
+                      style={{ width: "100%", background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: "8px 10px", fontSize: 16, fontFamily: "inherit", marginBottom: 8 }} />
                     {editAddSearch.trim() && (
                       <div style={{ maxHeight: 170, overflowY: "auto" }}>
                         {allExercises
@@ -3574,7 +3579,7 @@ function App() {
             </p>
             <input value={exSettingSearch} onChange={e => setExSettingSearch(e.target.value)}
               placeholder="種目を検索(空欄なら使用中の種目)"
-              style={{ width: "100%", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: "9px 10px", fontSize: 14, fontFamily: "inherit", marginBottom: 10 }} />
+              style={{ width: "100%", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: "9px 10px", fontSize: 16, fontFamily: "inherit", marginBottom: 10 }} />
 
             {(() => {
               const q = exSettingSearch.trim();
@@ -3617,7 +3622,7 @@ function App() {
                       <label style={{ fontSize: 12, color: C.muted }}>
                         部位{" "}
                         <select value={e.m || ""} onChange={ev => updateCustomExercise(e.n, { m: ev.target.value })}
-                          style={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: "5px 6px", fontSize: 13, fontFamily: "inherit" }}>
+                          style={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: "5px 6px", fontSize: 16, fontFamily: "inherit" }}>
                           <option value="">未設定</option>
                           {MUSCLES.map(m => <option key={m} value={m}>{m}</option>)}
                         </select>
@@ -3628,7 +3633,7 @@ function App() {
                           const eq = ev.target.value;
                           updateCustomExercise(e.n, { eq, db: eq === "ダンベル", bw: eq === "自重" ? (e.bw || 0.7) : 0 });
                         }}
-                          style={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: "5px 6px", fontSize: 13, fontFamily: "inherit" }}>
+                          style={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: "5px 6px", fontSize: 16, fontFamily: "inherit" }}>
                           <option value="">その他</option>
                           {EQUIPMENT.map(qq => <option key={qq} value={qq}>{qq}</option>)}
                         </select>
