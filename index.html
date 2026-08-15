@@ -49,6 +49,24 @@
   #boot button { background: #E2453C; color: #fff; border: none; border-radius: 10px; padding: 12px 20px; font-size: 14px; font-weight: 700; font-family: inherit; cursor: pointer; }
   .spinner { width: 22px; height: 22px; border: 2px solid #2E3237; border-top-color: #E2453C; border-radius: 50%; animation: spin .8s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* 縦画面固定。
+     ネイティブ(iOS)はInfo.plistのUISupportedInterfaceOrientationsで固定できるが、
+     Web/PWAはiOS Safariがmanifestのorientationもscreen.orientation.lock()も無視するため、
+     横向きのスマホにだけ「縦にしてください」を出して実質的に縦運用へ寄せる。
+     pointer:coarse と max-height でタッチ端末の横向きだけに絞り、
+     背の低いデスクトップウィンドウでは出さない。 */
+  #rotate-lock { display: none; }
+  @media (orientation: landscape) and (max-height: 500px) and (pointer: coarse) {
+    #root { display: none; }
+    #rotate-lock {
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 12px; min-height: 100vh; padding: 24px; text-align: center;
+      font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', sans-serif;
+    }
+    #rotate-lock .title { font-size: 16px; font-weight: 700; }
+    #rotate-lock .msg { color: #8E939A; font-size: 13px; line-height: 1.7; }
+  }
 </style>
 </head>
 <body>
@@ -61,6 +79,18 @@
     <div class="err" id="booterr" style="display:none"></div>
     <button id="retry" style="display:none" onclick="location.reload(true)">再読み込み</button>
   </div>
+</div>
+
+<!-- 横向きのスマホでのみ表示(CSSの@mediaで制御)。縦画面前提のレイアウトなので縦運用へ誘導する -->
+<div id="rotate-lock">
+  <svg width="46" height="46" viewBox="0 0 48 48" fill="none" aria-hidden="true">
+    <rect x="15" y="4" width="18" height="30" rx="3" stroke="#F2F0EB" stroke-width="2"/>
+    <path d="M22 30h4" stroke="#F2F0EB" stroke-width="2" stroke-linecap="round"/>
+    <path d="M11 39a17 17 0 0 0 26 0" stroke="#E2453C" stroke-width="2" stroke-linecap="round"/>
+    <path d="M37 33v6h-6" stroke="#E2453C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>
+  <div class="title">画面を縦にしてください</div>
+  <div class="msg">OVERLOAD+ は縦画面での利用を想定しています。</div>
 </div>
 
 <script>
@@ -600,6 +630,7 @@ function App() {
   const [loaded, setLoaded] = useState(false);
   const [guideSeen, setGuideSeen] = useState(false); // 初回ガイドを見たか
   const [guideStep, setGuideStep] = useState(0);      // ガイドの現在ページ
+  const [chartMuscle, setChartMuscle] = useState("");   // 種目別グラフ: 先に部位を選ぶ
   const [chartExercise, setChartExercise] = useState("");
   const [volMode, setVolMode] = useState("total"); // total | muscle
   const [volMuscle, setVolMuscle] = useState("");
@@ -624,6 +655,7 @@ function App() {
   const [editWorkout, setEditWorkout] = useState(null); // 編集中の記録 {index, draft}
   const [editAddSearch, setEditAddSearch] = useState("");  // 履歴編集で種目を追加するときの検索語
   const [exSettingSearch, setExSettingSearch] = useState(""); // 設定タブの種目検索
+  const [exSettingMuscle, setExSettingMuscle] = useState(""); // 設定タブの種目を部位で絞り込む(空なら使用中の種目)
 
   // タイマー
   const [startAt, setStartAt] = useState(null);   // セッション開始(ms)
@@ -1741,6 +1773,23 @@ function App() {
 
   // ---- グラフ ----
   const exerciseNames = useMemo(() => { const s = new Set(); workouts.forEach(w => w.exercises.forEach(ex => s.add(ex.name))); return [...s]; }, [workouts]);
+  // 種目が増えると種目チップが並びすぎるので、先に部位を選んでから種目を選ぶ。
+  // 部位は記録時点の値(ex.muscle)を使う。未設定のものは「未設定」にまとめる。
+  const chartExercisesByMuscle = useMemo(() => {
+    const m = {};
+    workouts.forEach(w => w.exercises.forEach(ex => {
+      const key = ex.muscle || "未設定";
+      if (!m[key]) m[key] = new Set();
+      m[key].add(ex.name);
+    }));
+    return Object.fromEntries(Object.entries(m).map(([k, v]) => [k, [...v]]));
+  }, [workouts]);
+  // 部位の並びはMUSCLESの定義順に揃える(記録順だとバラバラになるため)
+  const chartMuscles = useMemo(() => {
+    const keys = Object.keys(chartExercisesByMuscle);
+    return [...MUSCLES.filter(m => keys.includes(m)), ...keys.filter(k => !MUSCLES.includes(k))];
+  }, [chartExercisesByMuscle]);
+  const chartExerciseChoices = chartExercisesByMuscle[chartMuscle] || [];
   const chartData = useMemo(() => {
     if (!chartExercise) return [];
     return workouts.map(w => {
@@ -1789,7 +1838,12 @@ function App() {
     }).filter(Boolean);
   }, [workouts, volMuscle, profile.bodyweight]);
   useEffect(() => { if (!volMuscle && trainedMuscles.length) setVolMuscle(trainedMuscles[0]); }, [trainedMuscles, volMuscle]);
-  useEffect(() => { if (!chartExercise && exerciseNames.length) setChartExercise(exerciseNames[0]); }, [exerciseNames, chartExercise]);
+  useEffect(() => { if (!chartMuscle && chartMuscles.length) setChartMuscle(chartMuscles[0]); }, [chartMuscles, chartMuscle]);
+  // 部位を切り替えたら、その部位に無い種目が選ばれたままにならないよう先頭に寄せる
+  useEffect(() => {
+    if (!chartExerciseChoices.length) return;
+    if (!chartExerciseChoices.includes(chartExercise)) setChartExercise(chartExerciseChoices[0]);
+  }, [chartExerciseChoices, chartExercise]);
 
 
   // ---- バックアップ推奨の判定 ----
@@ -1985,7 +2039,7 @@ function App() {
         <div>
           <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: 32, letterSpacing: 1, lineHeight: 1 }}>
             OVERLOAD<span style={{ color: C.red }}>+</span>
-            <span style={{ fontFamily: FONT_UI, fontSize: 12, fontWeight: 700, color: C.green, marginLeft: 8, verticalAlign: "middle" }}>v77</span>
+            <span style={{ fontFamily: FONT_UI, fontSize: 12, fontWeight: 700, color: C.green, marginLeft: 8, verticalAlign: "middle" }}>v78</span>
           </div>
         </div>
       </header>
@@ -2868,9 +2922,17 @@ function App() {
               {/* 種目別 重量推移 */}
               <div style={{ background: C.surface, borderRadius: 14, padding: 14, border: `1px solid ${C.border}`, marginBottom: 16 }}>
                 <h2 style={{ fontSize: 14, fontWeight: 900, margin: "0 0 10px" }}>種目別の重量推移</h2>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
-                  {exerciseNames.map(name => <button key={name} onClick={() => setChartExercise(name)} style={chip(chartExercise === name)}>{name}</button>)}
-                </div>
+                {chartMuscles.length === 0 ? (
+                  <div style={{ color: C.muted, fontSize: 13, textAlign: "center", padding: "20px 0" }}>記録するとここに表示されます。</div>
+                ) : (<>
+                  {/* 部位 → 種目 の2段選択(種目が増えてもチップが並びすぎないように) */}
+                  <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 6, marginBottom: 8 }}>
+                    {chartMuscles.map(m => <button key={m} onClick={() => setChartMuscle(m)} style={{ ...chip(chartMuscle === m), flexShrink: 0 }}>{m}</button>)}
+                  </div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
+                    {chartExerciseChoices.map(name => <button key={name} onClick={() => setChartExercise(name)} style={chip(chartExercise === name, C.red)}>{name}</button>)}
+                  </div>
+                </>)}
                 {chartData.length >= 2 ? (
                   <ResponsiveContainer width="100%" height={200}>
                     <LineChart data={chartData} margin={{ top: 8, right: 8, left: -14, bottom: 0 }}>
@@ -3207,11 +3269,24 @@ function App() {
               placeholder="種目を検索(空欄なら使用中の種目)"
               style={{ width: "100%", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: "9px 10px", fontSize: 16, fontFamily: "inherit", marginBottom: 10 }} />
 
+            {/* 部位フィルター(種目数が多いので、検索しなくても部位から辿れるようにする) */}
+            <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 6, marginBottom: 10 }}>
+              <button onClick={() => setExSettingMuscle("")} style={{ ...chip(!exSettingMuscle), flexShrink: 0 }}>使用中</button>
+              {MUSCLES.filter(m => allExercises.some(e => e.m === m)).map(m => (
+                <button key={m} onClick={() => setExSettingMuscle(exSettingMuscle === m ? "" : m)} style={{ ...chip(exSettingMuscle === m), flexShrink: 0 }}>{m}</button>
+              ))}
+            </div>
+
             {(() => {
               const q = exSettingSearch.trim();
               let list;
               if (q) {
-                list = allExercises.filter(e => e.n.includes(q) || (e.m || "").includes(q) || (e.eq || "").includes(q)).slice(0, 30);
+                list = allExercises.filter(e => e.n.includes(q) || (e.m || "").includes(q) || (e.eq || "").includes(q));
+                if (exSettingMuscle) list = list.filter(e => e.m === exSettingMuscle);
+                list = list.slice(0, 30);
+              } else if (exSettingMuscle) {
+                // 部位を選んだら、その部位の全種目(内蔵+カスタム)から選べる
+                list = allExercises.filter(e => e.m === exSettingMuscle).slice(0, 60);
               } else {
                 // 使用中の種目(履歴・最近使った・カスタム)だけを既定で表示
                 const used = new Set([
@@ -3224,7 +3299,7 @@ function App() {
               }
               if (list.length === 0) {
                 return <div style={{ color: C.muted, fontSize: 13, textAlign: "center", padding: "12px 0" }}>
-                  {q ? "該当する種目がありません。" : "記録するとここに表示されます。検索すれば全種目から探せます。"}
+                  {q || exSettingMuscle ? "該当する種目がありません。" : "記録するとここに表示されます。部位を選ぶか検索すれば全種目から探せます。"}
                 </div>;
               }
               return list.map(e => {
