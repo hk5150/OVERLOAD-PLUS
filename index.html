@@ -205,6 +205,17 @@ const normMuscle = (m) => {
   return m || "";
 };
 
+// 保存データの移行処理。通常の起動読み込みとバックアップ復元(importBackup)の両方から使う。
+// 別々に書くと、片方だけ直したときに移行結果が食い違う。
+const migrateWorkouts = (ws) => (ws || []).map(w => ({
+  ...w, exercises: (w.exercises || []).map(ex => ({ ...ex, muscle: normMuscle(ex.muscle) })),
+}));
+const migrateSplit = (sp) => sp ? { ...sp, days: sp.days.map(d => ({ ...d, muscles: [...new Set((d.muscles || []).map(normMuscle))] })) } : null;
+const defaultProfile = (p) => ({
+  bodyweight: p?.bodyweight ?? 70, soundOn: p?.soundOn ?? true,
+  defTargetReps: p?.defTargetReps ?? p?.defRepHigh ?? 10, defIncrement: p?.defIncrement ?? 2.5,
+});
+
 // ================= 種目マスター(約95種目) =================
 // m=部位, eq=器具, t=C/I, bw=自重(体重係数), db=ダンベル(片手重量), rom=可動域係数(集計ボリュームのみ・既定1.0)
 const EXERCISE_DB = [
@@ -719,15 +730,11 @@ function App() {
         const res = await store.get(STORAGE_KEY);
         if (res?.value) {
           const p = JSON.parse(res.value);
-          // 旧部位名(背中/背中上部)を「広背筋」に正規化
-          const migW = (ws) => (ws || []).map(w => ({ ...w, exercises: (w.exercises || []).map(ex => ({ ...ex, muscle: normMuscle(ex.muscle) })) }));
-          const migSplit = (sp) => sp ? { ...sp, days: sp.days.map(d => ({ ...d, muscles: [...new Set((d.muscles || []).map(normMuscle))] })) } : null;
-          if (Array.isArray(p)) setWorkouts(migW(p));
+          if (Array.isArray(p)) setWorkouts(migrateWorkouts(p));
           else {
-            setWorkouts(migW(p.workouts));
-            setSplit(migSplit(p.split));
-            setProfile({ bodyweight: p.profile?.bodyweight ?? 70, soundOn: p.profile?.soundOn ?? true,
-              defTargetReps: p.profile?.defTargetReps ?? p.profile?.defRepHigh ?? 10, defIncrement: p.profile?.defIncrement ?? 2.5 });
+            setWorkouts(migrateWorkouts(p.workouts));
+            setSplit(migrateSplit(p.split));
+            setProfile(defaultProfile(p.profile));
             setRecentNames(p.recentNames || []);
             setCustomExercises(p.customExercises || []);
             setExerciseNotes(p.exerciseNotes || {});
@@ -1749,12 +1756,10 @@ function App() {
         if (cur?.value) await store.set(PRE_IMPORT_BACKUP_KEY, cur.value);
       } catch { /* スナップショットに失敗しても復元自体は続行する */ }
 
-      const migW = (arr) => arr.map(w => ({ ...w, exercises: (w.exercises || []).map(ex => ({ ...ex, muscle: normMuscle(ex.muscle) })) }));
       const next = {
-        workouts: migW(ws),
-        split: p.split ? { ...p.split, days: p.split.days.map(d => ({ ...d, muscles: [...new Set((d.muscles || []).map(normMuscle))] })) } : null,
-        profile: { bodyweight: p.profile?.bodyweight ?? 70, soundOn: p.profile?.soundOn ?? true,
-          defTargetReps: p.profile?.defTargetReps ?? p.profile?.defRepHigh ?? 10, defIncrement: p.profile?.defIncrement ?? 2.5 },
+        workouts: migrateWorkouts(ws),
+        split: migrateSplit(p.split),
+        profile: defaultProfile(p.profile),
         recentNames: p.recentNames || [],
         customExercises: p.customExercises || [],
         exerciseNotes: p.exerciseNotes || {},
