@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- トラッキングも外部送信も行わない。記録は端末内のみ(privacy.html と同じ内容)。 -->
+	<key>NSPrivacyTracking</key>
+	<false/>
+	<key>NSPrivacyTrackingDomains</key>
+	<array/>
+	<key>NSPrivacyCollectedDataTypes</key>
+	<array/>
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array>
+		<!-- @capacitor/preferences が UserDefaults を使う(Preferences.swift)。
+		     UserDefaults は Required Reason API なので理由の宣言が必須。
+		     CA92.1 = 自アプリからのみアクセスできる情報の読み書き(他アプリと共有しない)。
+		     Capacitor本体のマニフェストは NSPrivacyAccessedAPITypes が空で、
+		     @capacitor/preferences はマニフェストを同梱していないため、アプリ側で宣言する。 -->
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>CA92.1</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>

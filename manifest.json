@@ -1,7 +1,7 @@
 {
   "name": "OVERLOAD+ トレーニング記録",
   "short_name": "OVERLOAD+",
-  "description": "プログレッシブオーバーロードに基づいて次回メニューを自動提案するトレーニング記録アプリ",
+  "description": "前回の記録がそのまま出てくるトレーニング記録アプリ。推定1RMと自己ベストは自動計算",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",

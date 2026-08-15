@@ -2039,7 +2039,7 @@ function App() {
         <div>
           <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: 32, letterSpacing: 1, lineHeight: 1 }}>
             OVERLOAD<span style={{ color: C.red }}>+</span>
-            <span style={{ fontFamily: FONT_UI, fontSize: 12, fontWeight: 700, color: C.green, marginLeft: 8, verticalAlign: "middle" }}>v78</span>
+            <span style={{ fontFamily: FONT_UI, fontSize: 12, fontWeight: 700, color: C.green, marginLeft: 8, verticalAlign: "middle" }}>v79</span>
           </div>
         </div>
       </header>
@@ -2157,7 +2157,7 @@ function App() {
           {today.length === 0 && (
             <div style={{ border: `1px dashed ${C.border}`, borderRadius: 14, padding: 20, color: C.muted, fontSize: 14, textAlign: "center", marginBottom: 16 }}>
               {todayDay && autoMenu.length > 0 ? "上の「今日のメニュー」から開始するか、下の一覧で種目を追加できます。" : "下の一覧から種目を追加して開始しましょう。"}
-              {!split && <><br />「分割」タブでマイ分割法を作ると、今日のメニューが自動で提案されます。</>}
+              {!split && <><br />「分割」タブでマイ分割法を作ると、今日のメニューに前回の記録が引き継がれます。</>}
             </div>
           )}
 
