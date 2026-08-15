@@ -73,6 +73,7 @@ App Store Connectの「App Privacy」セクションでは、以下の方針で�
 ## スクリーンショット
 
 - Xcode SimulatorでiPhone(6.9インチ相当、例: iPhone 16 Pro Max)を起動し、アプリの主要画面(オンボーディング/分割選択/記録入力/グラフ)を `Cmd+S` でスクリーンショット保存すれば、実機不要でApp Store用画像を用意できます。
+- **iPad用は不要です。** iPhone専用アプリ(`TARGETED_DEVICE_FAMILY = "1"`)として提出するため、iPadではiPhone互換モードで動作します(縦画面前提のレイアウトのため、この構成にしています)。
 - 必要枚数・サイズの詳細はApp Store Connectのアップロード画面が案内する現行の要件に従ってください(仕様がApple側で更新されることがあるため、ここでは固定しません)。
 
 ## App Review用の申し送り事項(App Review Information)
