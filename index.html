@@ -118,8 +118,9 @@
     { key:'recharts', urls:['vendor/recharts.js'] },
     { key:'babel',    urls:['vendor/babel.min.js'] },
     // ドメインロジック(純粋関数)。テストで使い回すため#appsrcの外へ切り出したもの。
-    { key:'oneRm',   urls:['src/domain/oneRm.js'] },
-    { key:'storage', urls:['src/domain/storage.js'] }
+    { key:'oneRm',      urls:['src/domain/oneRm.js'] },
+    { key:'storage',    urls:['src/domain/storage.js'] },
+    { key:'backupValidation', urls:['src/domain/backupValidation.js'] }
   ];
 
   function loadOne(urls, i){
@@ -216,22 +217,8 @@ const defaultProfile = (p) => ({
   defTargetReps: p?.defTargetReps ?? p?.defRepHigh ?? 10, defIncrement: p?.defIncrement ?? 2.5,
 });
 
-// 保存データ(通常の起動読み込み・バックアップ復元とも)から記録配列を取り出す。
-// 旧形式は配列そのもの、新形式は { workouts: [...] } のオブジェクト。
-const extractWorkoutsArray = (p) => (Array.isArray(p) ? p : p?.workouts);
-// 壊れたデータで上書き・表示しないよう、最低限の構造を検証する。問題があれば例外を投げる。
-const validateWorkoutsShape = (ws) => {
-  if (!Array.isArray(ws)) throw new Error("workoutsが配列ではありません");
-  ws.forEach((w, i) => {
-    if (!w || typeof w !== "object") throw new Error(`${i + 1}件目の記録の形式が不正です`);
-    if (typeof w.date !== "string") throw new Error(`${i + 1}件目の記録に日付がありません`);
-    if (!Array.isArray(w.exercises)) throw new Error(`${i + 1}件目の記録の種目データが配列ではありません`);
-    w.exercises.forEach((ex, j) => {
-      if (!ex || typeof ex.name !== "string") throw new Error(`${i + 1}件目の記録・${j + 1}種目目の名前が不正です`);
-      if (!Array.isArray(ex.sets)) throw new Error(`${i + 1}件目の記録・${j + 1}種目目のセットデータが配列ではありません`);
-    });
-  });
-};
+// extractWorkoutsArray・validateWorkoutsShapeは src/domain/backupValidation.js へ移設(テストのため)。
+// LIBSで<script src>読み込み済みなのでグローバル関数としてそのまま参照できる。
 
 // ================= 種目マスター(約95種目) =================
 // m=部位, eq=器具, t=C/I, bw=自重(体重係数), db=ダンベル(片手重量), rom=可動域係数(集計ボリュームのみ・既定1.0)
