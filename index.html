@@ -689,6 +689,7 @@ function App() {
   const [customDraft, setCustomDraft] = useState({ muscle: "", eq: "ダンベル" });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [saveStatus, setSaveStatus] = useState("idle"); // idle | saving | saved | error(persist()の書き込み状態)
   const [loaded, setLoaded] = useState(false);
   const [guideSeen, setGuideSeen] = useState(false); // 初回ガイドを見たか
   const [guideStep, setGuideStep] = useState(0);      // ガイドの現在ページ
@@ -861,9 +862,40 @@ function App() {
     if (patch.exerciseOverrides !== undefined) { setExerciseOverrides(next.exerciseOverrides); setExerciseOverrides_module(next.exerciseOverrides); }
     if (patch.lastBackupAt !== undefined) setLastBackupAt(next.lastBackupAt);
     if (patch.guideSeen !== undefined) setGuideSeen(next.guideSeen);
-    try { await store.set(STORAGE_KEY, JSON.stringify(next)); }
-    catch { setError("保存に失敗しました。通信環境を確認してください。"); }
+    // 画面上のstateは既に更新済み(楽観的更新)。書き込みが失敗しても巻き戻さない
+    // (別の操作で上書きされた方が「保存できたと見せかけて実は消えていた」より安全なため)。
+    // 代わりに保存状態を可視化し、失敗時は同じ内容でいつでも再試行できるようにする。
+    setSaveStatus("saving");
+    try {
+      await store.set(STORAGE_KEY, JSON.stringify(next));
+      setSaveStatus("saved");
+    } catch {
+      setSaveStatus("error");
+      setError("保存に失敗しました。通信環境を確認し、下の「再試行」から保存し直してください。");
+    }
   };
+
+  // 保存に失敗した後の再試行。楽観的更新で画面には既に反映されている現在のstateを、
+  // そのまま改めて書き込む(patchを覚えておく必要がない)。
+  const retrySave = async () => {
+    const next = { workouts, split, profile, recentNames, customExercises, exerciseNotes, exerciseOverrides, lastBackupAt, guideSeen };
+    setSaveStatus("saving");
+    try {
+      await store.set(STORAGE_KEY, JSON.stringify(next));
+      setSaveStatus("saved");
+      setError("");
+    } catch {
+      setSaveStatus("error");
+      setError("再試行しましたが保存に失敗しました。通信環境を確認してください。");
+    }
+  };
+
+  // 保存成功の表示は一定時間で消す(常時出ていると煩わしいため)。失敗表示は再試行されるまで残す。
+  useEffect(() => {
+    if (saveStatus !== "saved") return;
+    const t = setTimeout(() => setSaveStatus("idle"), 2000);
+    return () => clearTimeout(t);
+  }, [saveStatus]);
 
   // ---- 経過タイマー ----
   useEffect(() => {
@@ -2140,12 +2172,24 @@ function App() {
         <div>
           <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: 32, letterSpacing: 1, lineHeight: 1 }}>
             OVERLOAD<span style={{ color: C.red }}>+</span>
-            <span style={{ fontFamily: FONT_UI, fontSize: 12, fontWeight: 700, color: C.green, marginLeft: 8, verticalAlign: "middle" }}>v79</span>
+            <span style={{ fontFamily: FONT_UI, fontSize: 12, fontWeight: 700, color: C.green, marginLeft: 8, verticalAlign: "middle" }}>v80</span>
           </div>
         </div>
+        {(saveStatus === "saving" || saveStatus === "saved") && (
+          <div role="status" style={{ fontSize: 12, color: saveStatus === "saved" ? C.green : C.muted, marginTop: 6 }}>
+            {saveStatus === "saving" ? "保存中…" : "保存済み"}
+          </div>
+        )}
       </header>
 
-      {error && <div role="alert" style={{ margin: "0 16px 12px", padding: 12, borderRadius: 10, background: "#3A2224", color: "#F5B8B3", fontSize: 13 }}>{error}</div>}
+      {error && (
+        <div role="alert" style={{ margin: "0 16px 12px", padding: 12, borderRadius: 10, background: "#3A2224", color: "#F5B8B3", fontSize: 13 }}>
+          <div>{error}</div>
+          {saveStatus === "error" && (
+            <button onClick={retrySave} style={{ ...btn(C.red), padding: "8px 14px", fontSize: 13, marginTop: 8 }}>再試行</button>
+          )}
+        </div>
+      )}
 
       {/* 入力途中の記録を復元した通知 */}
       {draftRestored && today.length > 0 && (
