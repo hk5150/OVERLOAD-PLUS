@@ -216,6 +216,23 @@ const defaultProfile = (p) => ({
   defTargetReps: p?.defTargetReps ?? p?.defRepHigh ?? 10, defIncrement: p?.defIncrement ?? 2.5,
 });
 
+// 保存データ(通常の起動読み込み・バックアップ復元とも)から記録配列を取り出す。
+// 旧形式は配列そのもの、新形式は { workouts: [...] } のオブジェクト。
+const extractWorkoutsArray = (p) => (Array.isArray(p) ? p : p?.workouts);
+// 壊れたデータで上書き・表示しないよう、最低限の構造を検証する。問題があれば例外を投げる。
+const validateWorkoutsShape = (ws) => {
+  if (!Array.isArray(ws)) throw new Error("workoutsが配列ではありません");
+  ws.forEach((w, i) => {
+    if (!w || typeof w !== "object") throw new Error(`${i + 1}件目の記録の形式が不正です`);
+    if (typeof w.date !== "string") throw new Error(`${i + 1}件目の記録に日付がありません`);
+    if (!Array.isArray(w.exercises)) throw new Error(`${i + 1}件目の記録の種目データが配列ではありません`);
+    w.exercises.forEach((ex, j) => {
+      if (!ex || typeof ex.name !== "string") throw new Error(`${i + 1}件目の記録・${j + 1}種目目の名前が不正です`);
+      if (!Array.isArray(ex.sets)) throw new Error(`${i + 1}件目の記録・${j + 1}種目目のセットデータが配列ではありません`);
+    });
+  });
+};
+
 // ================= 種目マスター(約95種目) =================
 // m=部位, eq=器具, t=C/I, bw=自重(体重係数), db=ダンベル(片手重量), rom=可動域係数(集計ボリュームのみ・既定1.0)
 const EXERCISE_DB = [
@@ -729,7 +746,11 @@ function App() {
       try {
         const res = await store.get(STORAGE_KEY);
         if (res?.value) {
-          const p = JSON.parse(res.value);
+          let p;
+          try { p = JSON.parse(res.value); }
+          catch { throw new Error("保存データがJSON形式として壊れています"); }
+          // 壊れたデータのまま画面に出さない(白紙の記録に見えて実は消えていない、を防ぐ)
+          validateWorkoutsShape(extractWorkoutsArray(p));
           if (Array.isArray(p)) setWorkouts(migrateWorkouts(p));
           else {
             setWorkouts(migrateWorkouts(p.workouts));
@@ -744,7 +765,11 @@ function App() {
             if (p.guideSeen) setGuideSeen(true);
           }
         }
-      } catch { /* データなし */ }
+      } catch (e) {
+        // データが存在しない(res?.valueがfalsy)場合はここに来ない = 初回起動として無音のまま。
+        // ここに来るのは「データはあるが読めない」場合なので、消えたように見えて実は残っていることを伝える。
+        setError(`保存されている記録を正しく読み込めませんでした(${e?.message || "データが壊れている可能性があります"})。データ自体は端末に残っています。復元前のバックアップがあれば「設定」タブから読み込んでください。`);
+      }
 
       // 入力途中の記録を復元(24時間以内のものだけ)
       try {
@@ -1736,18 +1761,9 @@ function App() {
     try {
       const text = await file.text();
       const p = JSON.parse(text);
-      const ws = p.workouts ?? (Array.isArray(p) ? p : null);
-      if (!Array.isArray(ws)) throw new Error("形式が違います(workoutsが配列ではありません)");
+      const ws = extractWorkoutsArray(p);
       // 壊れたデータで上書きしないよう、最低限の構造を検証してから確認ダイアログに進む
-      ws.forEach((w, i) => {
-        if (!w || typeof w !== "object") throw new Error(`${i + 1}件目の記録の形式が不正です`);
-        if (typeof w.date !== "string") throw new Error(`${i + 1}件目の記録に日付がありません`);
-        if (!Array.isArray(w.exercises)) throw new Error(`${i + 1}件目の記録の種目データが配列ではありません`);
-        w.exercises.forEach((ex, j) => {
-          if (!ex || typeof ex.name !== "string") throw new Error(`${i + 1}件目の記録・${j + 1}種目目の名前が不正です`);
-          if (!Array.isArray(ex.sets)) throw new Error(`${i + 1}件目の記録・${j + 1}種目目のセットデータが配列ではありません`);
-        });
-      });
+      validateWorkoutsShape(ws);
       if (!window.confirm(`バックアップを復元します(記録 ${ws.length}件)。\n現在のデータはすべて置き換わります。よろしいですか?`)) return;
 
       // 復元前に現在のデータをスナップショットとして退避(復元後に問題があった場合の保険)
