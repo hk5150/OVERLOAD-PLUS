@@ -679,6 +679,7 @@ function App() {
   const [pickingSplit, setPickingSplit] = useState(false); // trueで分割選択(プリセット/新規作成)画面を表示
   const [backupMsg, setBackupMsg] = useState("");
   const [lastBackupAt, setLastBackupAt] = useState(null); // 最後にバックアップした日時(ISO)
+  const [hasPreImportSnapshot, setHasPreImportSnapshot] = useState(false); // バックアップ復元前のデータ退避が残っているか
   const [hideBackupNag, setHideBackupNag] = useState(false); // このセッション中は非表示
   const [editWorkout, setEditWorkout] = useState(null); // 編集中の記録 {index, draft}
   const [editAddSearch, setEditAddSearch] = useState("");  // 履歴編集で種目を追加するときの検索語
@@ -788,6 +789,12 @@ function App() {
           }
         }
       } catch { /* 下書きなし */ }
+
+      // バックアップ復元前のスナップショットが残っていれば、設定タブから戻せるようにする
+      try {
+        const snap = await store.get(PRE_IMPORT_BACKUP_KEY);
+        if (snap?.value) setHasPreImportSnapshot(true);
+      } catch { /* noop */ }
 
       setLoaded(true);
     })();
@@ -1769,7 +1776,7 @@ function App() {
       // 復元前に現在のデータをスナップショットとして退避(復元後に問題があった場合の保険)
       try {
         const cur = await store.get(STORAGE_KEY);
-        if (cur?.value) await store.set(PRE_IMPORT_BACKUP_KEY, cur.value);
+        if (cur?.value) { await store.set(PRE_IMPORT_BACKUP_KEY, cur.value); setHasPreImportSnapshot(true); }
       } catch { /* スナップショットに失敗しても復元自体は続行する */ }
 
       const next = {
@@ -1788,6 +1795,35 @@ function App() {
     } catch (e) {
       setBackupMsg("");
       setError(`復元に失敗しました(${e?.message || "ファイルを確認してください"})。`);
+    }
+  };
+
+  // バックアップ復元の直前の状態に戻す(importBackupが退避したスナップショットから)
+  const restoreFromPreImportSnapshot = async () => {
+    try {
+      const snap = await store.get(PRE_IMPORT_BACKUP_KEY);
+      if (!snap?.value) { setHasPreImportSnapshot(false); return; }
+      const p = JSON.parse(snap.value);
+      const ws = extractWorkoutsArray(p);
+      validateWorkoutsShape(ws);
+      if (!window.confirm(`バックアップ復元より前の状態(記録 ${ws.length}件)に戻します。\n現在のデータは置き換わります。よろしいですか?`)) return;
+      const next = {
+        workouts: migrateWorkouts(ws),
+        split: migrateSplit(p.split),
+        profile: defaultProfile(p.profile),
+        recentNames: p.recentNames || [],
+        customExercises: p.customExercises || [],
+        exerciseNotes: p.exerciseNotes || {},
+        exerciseOverrides: p.exerciseOverrides || {},
+        lastBackupAt: p.lastBackupAt || null,
+      };
+      await persist(next);
+      await store.del(PRE_IMPORT_BACKUP_KEY);
+      setHasPreImportSnapshot(false);
+      setBackupMsg(`復元前の状態に戻しました(記録 ${next.workouts.length}件)。`);
+      setError("");
+    } catch (e) {
+      setError(`元に戻す処理に失敗しました(${e?.message || "データを確認してください"})。`);
     }
   };
 
@@ -3426,6 +3462,18 @@ function App() {
               style={{ ...btn("transparent", workouts.length === 0 ? C.border : C.muted), width: "100%", padding: 10, fontSize: 13, border: `1px solid ${C.border}` }}>
               CSVで書き出す(Excel等で開く用)
             </button>
+
+            {hasPreImportSnapshot && (
+              <div style={{ marginTop: 10, padding: 10, borderRadius: 10, background: "#3A2224", border: `1px solid ${C.red}` }}>
+                <p style={{ color: "#F5B8B3", fontSize: 12, margin: "0 0 8px", lineHeight: 1.6 }}>
+                  バックアップ復元より前のデータが端末に残っています。間違えて復元してしまった場合は、ここから戻せます。
+                </p>
+                <button onClick={restoreFromPreImportSnapshot} style={{ ...btn(C.red), width: "100%", padding: 10, fontSize: 13 }}>
+                  ↩ 復元前の状態に戻す
+                </button>
+              </div>
+            )}
+
             <p style={{ color: C.muted, fontSize: 12, margin: "10px 0 0", lineHeight: 1.6 }}>
               ※復元すると現在のデータはすべて置き換わります。復元前に念のため書き出しておくと安全です。
             </p>
