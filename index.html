@@ -1141,9 +1141,13 @@ function App() {
     [customExercises, exerciseOverrides]);
   const findExercise = (name) => allExercises.find(e => e.n === name) || dbLookup(name);
   const pickerList = useMemo(() => {
+    // 今日の記録に既にある種目名は候補から外す(同名重複すると、履歴参照が
+    // 名前ベースの.findのため一方のカードの記録が以後参照できなくなるため)
+    const inToday = new Set(today.map(t => t.name));
+    const notAdded = (e) => !inToday.has(e.n);
     const q = search.trim();
-    if (q) return allExercises.filter(e => e.n.includes(q) || e.m.includes(q) || e.eq.includes(q));
-    if (pickerMuscle) return allExercises.filter(e => e.m === pickerMuscle);
+    if (q) return allExercises.filter(e => notAdded(e) && (e.n.includes(q) || e.m.includes(q) || e.eq.includes(q)));
+    if (pickerMuscle) return allExercises.filter(e => notAdded(e) && e.m === pickerMuscle);
     // 既定: 最近使った順 → 今日の部位 → 残り
     const rank = (e) => {
       const r = recentNames.indexOf(e.n);
@@ -1151,8 +1155,8 @@ function App() {
       if (todayDay && muscleMatchesDay(e.m, todayDay)) return 1000;
       return 2000;
     };
-    return [...allExercises].sort((a, b) => rank(a) - rank(b));
-  }, [search, pickerMuscle, todayDay, recentNames, allExercises]);
+    return allExercises.filter(notAdded).sort((a, b) => rank(a) - rank(b));
+  }, [search, pickerMuscle, todayDay, recentNames, allExercises, today]);
 
   // ---- 種目設定の引き継ぎ ----
   const lastConfig = (name) => {
@@ -2300,6 +2304,9 @@ function App() {
                       .filter(e => {
                         const q = swapSearch.trim();
                         if (e.n === ex.name) return false;
+                        // 今日の記録に既にある種目名には差し替えない(同名重複すると、履歴参照が
+                        // 名前ベースの.findのため一方のカードの記録が以後参照できなくなる)
+                        if (today.some(t => t.id !== ex.id && t.name === e.n)) return false;
                         if (q) return e.n.includes(q) || e.m.includes(q) || e.eq.includes(q);
                         if (swapMuscle) return e.m === swapMuscle;
                         return true; // 既定はすべての部位から選べる
