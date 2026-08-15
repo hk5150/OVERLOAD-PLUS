@@ -34,6 +34,7 @@ const DOMAIN_FILES = [
   "oneRm.js",
   "storage.js",
   "backupValidation.js",
+  "volume.js",
 ];
 
 const appsrcRe = /<script type="text\/plain" id="appsrc">([\s\S]*?)<\/script>/;
@@ -104,6 +105,7 @@ function build(dest) {
 <script src="src/domain/oneRm.js"></script>
 <script src="src/domain/storage.js"></script>
 <script src="src/domain/backupValidation.js"></script>
+<script src="src/domain/volume.js"></script>
 <script src="app.bundle.js"></script>`;
 
   if (!bootBlockRe.test(html)) throw new Error("index.html 内の起動ブロックが見つかりません(www側の生成ロジックを見直してください)");

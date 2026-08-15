@@ -22,6 +22,7 @@ const APP_ASSETS = [
   "./src/domain/oneRm.js",
   "./src/domain/storage.js",
   "./src/domain/backupValidation.js",
+  "./src/domain/volume.js",
   "./fonts/barlow-condensed-600-latin.woff2",
   "./fonts/barlow-condensed-800-latin.woff2",
 ];

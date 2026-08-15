@@ -120,7 +120,8 @@
     // ドメインロジック(純粋関数)。テストで使い回すため#appsrcの外へ切り出したもの。
     { key:'oneRm',      urls:['src/domain/oneRm.js'] },
     { key:'storage',    urls:['src/domain/storage.js'] },
-    { key:'backupValidation', urls:['src/domain/backupValidation.js'] }
+    { key:'backupValidation', urls:['src/domain/backupValidation.js'] },
+    { key:'volume',     urls:['src/domain/volume.js'] }
   ];
 
   function loadOne(urls, i){
@@ -1030,11 +1031,13 @@ function App() {
       if (workouts[i].exercises.some(e => e.muscle === muscle || e.muscle === "全身")) return daysSince(workouts[i].date);
     return null;
   };
-  // 集計用ボリューム: 実効重量 × 回数 × 可動域係数(1RM/PR/判定には係数を掛けない)
-  const setVolume = (ex, s) => effWeight(s.weight, resolveIsDb(ex.name, ex.isDb), ex.bwFactor ?? 0, ex.bwAtLog ?? profile.bodyweight) * s.reps * resolveRom(ex.name, ex.rom);
-  // ボリューム・セット数はワーキングセットのみ(ウォームアップは除外)
-  const workingSets = (ex) => (ex.sets || []).filter(s => !s.warmup);
-  const exVolume = (ex) => workingSets(ex).reduce((a, s) => a + setVolume(ex, s), 0);
+  // 計算本体は src/domain/volume.js へ移設(テストのため)。ここではprofile.bodyweightを
+  // 閉じ込めた薄いラッパーとして、元の呼び出し方(引数1つ)をそのまま保つ。
+  // window.のprefixは同名のローカル変数(このconst自体)への再帰を避けるために必要。
+  const volumeDeps = { effWeight, resolveIsDb, resolveRom };
+  const setVolume = (ex, s) => window.setVolume(ex, s, profile.bodyweight, volumeDeps);
+  const workingSets = (ex) => window.workingSets(ex);
+  const exVolume = (ex) => window.exVolume(ex, profile.bodyweight, volumeDeps);
 
   // ---- PR(自己ベスト)と推定1RM ----
   // 実効重量(ダンベルは両手・自重は体重換算)ベースで比較する
