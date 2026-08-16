@@ -16,3 +16,17 @@ export function loadDomainModule(relPathFromRepoRoot, initialGlobals = {}) {
   vm.runInContext(code, sandbox, { filename: absPath });
   return sandbox;
 }
+
+// db/migration.js や db/workoutStore.js のように、他のドメインファイルが定義したグローバル
+// (extractWorkoutsArray, SCHEMA_STATEMENTS など)に依存するファイルをまとめて読み込むための版。
+// index.html の<script src>の読み込み順と同じ順に相対パスを並べて渡すこと。
+export function loadDomainModules(relPathsFromRepoRoot, initialGlobals = {}) {
+  const sandbox = { ...initialGlobals };
+  vm.createContext(sandbox);
+  for (const relPath of relPathsFromRepoRoot) {
+    const absPath = path.resolve(process.cwd(), relPath);
+    const code = fs.readFileSync(absPath, "utf-8");
+    vm.runInContext(code, sandbox, { filename: absPath });
+  }
+  return sandbox;
+}

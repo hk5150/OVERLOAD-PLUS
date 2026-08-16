@@ -7,7 +7,7 @@
 
 ## これは何か
 
-OVERLOAD+ は漸進性過負荷にもとづく筋トレ記録PWA。**中心にある考え方は「前回の実績をそのまま見せて、判断はユーザーに委ねる」**。
+KURABELL Workout Log は漸進性過負荷にもとづく筋トレ記録PWA。**中心にある考え方は「前回の実績をそのまま見せて、判断はユーザーに委ねる」**。
 各セット行に前回の同じ番手のセット(重量×回数×RIRと、同一負荷なら余力の差分)を並べるのが主機能で、
 自動でメニューを判定する層は持たない。以前あった決定論的ルールエンジン(`analyzeExercise`)は
 削除済み(コミット `6af3353`)。復活させたくなったらgit履歴から。
@@ -21,7 +21,7 @@ OVERLOAD+ は漸進性過負荷にもとづく筋トレ記録PWA。**中心に�
 | 配信元 | リポジトリ直下の `index.html` | `www/`(生成物・gitignore) |
 | JSX変換 | ブラウザ上でランタイムBabel + `eval` | esbuildで事前ビルド → `app.bundle.js` |
 | Service Worker | 使う (`sw.js`) | **使わない**(バンドル内配信なので不要) |
-| 保存先 | localStorage | Capacitor Preferences (UserDefaults) |
+| 保存先 | localStorage | SQLite(`workout-log-v1`のみ) + Capacitor Preferences(それ以外) |
 
 **Webをビルド不要に保つのは意図的**(単一ファイルをpushすれば配信される手軽さを優先)。
 その代償として、実行経路がiOSと分岐している。片方だけで動作確認して満足しないこと。
@@ -41,11 +41,21 @@ OVERLOAD+ は漸進性過負荷にもとづく筋トレ記録PWA。**中心に�
   ステートの取り違えで記録中の内容が消えるバグを実際に出したことがある。
 - **RIRが入って初めて「実施済み」。** RIR未入力のセットは「まだやっていない」であって「余力0」ではない。
 - **`www/` に新しいファイルを足したら、参照元3箇所を揃える。** `index.html` の `LIBS` /
-  `sw.js` の `APP_ASSETS` / `scripts/sync-www.js` の `DOMAIN_FILES`。
+  `sw.js` の `APP_ASSETS` / `scripts/sync-www.js` の `DOMAIN_FILES`(SQLite関連は`DB_DOMAIN_FILES`)。
   ここがズレて `cache.addAll()` が落ち、iOS版のSWが永久にactivateしない状態で出荷されかけた
   (`addAll` は1つでも失敗すると全体がrejectする)。`tests/sync-www.test.js` が生成物を実際にビルドして検証している。
 - **外部ホストへのリクエストを足さない。** フォントもライブラリも同梱済み。
   電波の悪いジムや機内モードが主戦場なので、外部依存は実用上の欠陥になる。テストで縛ってある。
+- **`src/domain/storage.js` はもう完全に汎用のkey-valueストアではない。** `"workout-log-v1"`
+  というキー文字列だけを特別扱いして、ネイティブ+SQLiteプラグインが使える環境ではSQLite
+  (`src/domain/db/workoutStore.js`)経由にすり替える。この1文字列は `index.html` の
+  `STORAGE_KEY` と手で一致させている(定数の共有はできない、storage.jsはindex.htmlより先に
+  読み込まれるスクリプトなので)。下書き(`workout-draft-v1`)や復元前スナップショットは
+  従来どおりPreferences止まり。詳細と設計判断は `DATA_MIGRATION.md` を参照。
+- **SQLite関連のコードはXcode実機/シミュレータで未検証。** `src/domain/db/capacitorSqliteDriver.js`
+  が `window.Capacitor.Plugins.CapacitorSQLite` を叩く部分は、Xcodeが無い環境で書いたため
+  実際のネイティブブリッジでは検証できていない。テスト(`tests/db/`)は `node:sqlite` を使った
+  フェイクドライバに対してのみ検証済み。触るときは必ずシミュレータで動作確認すること。
 
 ## ドメインの約束事
 
@@ -69,6 +79,7 @@ OVERLOAD+ は漸進性過負荷にもとづく筋トレ記録PWA。**中心に�
 
 - `src/domain/*.js`: `#appsrc` の外に出した純粋ロジック。**テストしたいものはここに置く**
   (素のグローバルスクリプトとして `<script src>` で読む。importもmodule.exportsも使わない)
+- `src/domain/db/`: iOS版のSQLite永続化層(スキーマ・旧データ移行・ドライバ)。設計判断は `DATA_MIGRATION.md`
 - `tests/`: `npm test`(vitest)。生成物・バージョン整合・保存レイヤの移行までカバーしている
 - `vendor/`: React等をローカル同梱(CDN不使用)。gitignoreせずコミットする
 - `fonts/`: Barlow Condensed(数字・ロゴ用、SIL OFL)。日本語本文は端末標準フォントに任せる

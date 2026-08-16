@@ -18,7 +18,7 @@ const { build } = require("../scripts/sync-www.js");
 let dest;
 
 beforeAll(() => {
-  dest = fs.mkdtempSync(path.join(os.tmpdir(), "overload-www-"));
+  dest = fs.mkdtempSync(path.join(os.tmpdir(), "kurabell-www-"));
   build(dest);
 });
 

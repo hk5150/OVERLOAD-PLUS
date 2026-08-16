@@ -1,6 +1,6 @@
-// OVERLOAD+ Service Worker
+// KURABELL+ Service Worker
 // アプリ本体をキャッシュし、オフラインでも起動できるようにする。ライブラリもすべてローカル同梱(CDN不使用)。
-const CACHE = "overload-v81";
+const CACHE = "kurabell-v81";
 
 // ネットワーク優先フェッチのタイムアウト(電波が弱い環境でハングし続けるのを防ぐ)
 const NETWORK_TIMEOUT_MS = 4000;
@@ -23,6 +23,10 @@ const APP_ASSETS = [
   "./src/domain/storage.js",
   "./src/domain/backupValidation.js",
   "./src/domain/volume.js",
+  "./src/domain/db/schema.js",
+  "./src/domain/db/migration.js",
+  "./src/domain/db/workoutStore.js",
+  "./src/domain/db/capacitorSqliteDriver.js",
   "./fonts/barlow-condensed-600-latin.woff2",
   "./fonts/barlow-condensed-800-latin.woff2",
 ];

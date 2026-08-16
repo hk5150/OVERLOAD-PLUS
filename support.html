@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>サポート | KURABELL Workout Log</title>
+<style>
+  html, body { margin: 0; padding: 0; background: #141517; color: #F2F0EB; }
+  body {
+    font-family: 'Noto Sans JP', -apple-system, BlinkMacSystemFont, sans-serif;
+    line-height: 1.8;
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 32px 20px 80px;
+  }
+  h1 { font-size: 22px; margin-bottom: 4px; }
+  .updated { color: #8E939A; font-size: 13px; margin-bottom: 32px; }
+  h2 { font-size: 17px; margin-top: 36px; border-left: 4px solid #E2453C; padding-left: 10px; }
+  h3 { font-size: 15px; margin-top: 24px; color: #F2F0EB; }
+  p, li { color: #D8D5CE; font-size: 14px; }
+  ul, ol { padding-left: 20px; }
+  a { color: #E2453C; }
+  code {
+    background: #1E1F22; color: #F2F0EB; padding: 2px 6px; border-radius: 4px;
+    font-size: 13px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  .box {
+    background: #1E1F22; border-radius: 10px; padding: 14px 16px; margin: 16px 0;
+    font-size: 13px; color: #D8D5CE;
+  }
+</style>
+</head>
+<body>
+
+<h1>KURABELL Workout Log サポート</h1>
+<div class="updated">最終更新日: 2026年8月16日</div>
+
+<p>KURABELL Workout Log は、前回の重量・回数・RIRをセットごとに見ながら記録する筋トレ記録アプリです。このページでは、お問い合わせ方法とよくある質問をまとめています。</p>
+
+<h2>お問い合わせ</h2>
+<p>ご不明点・不具合報告は下記メールアドレスまでご連絡ください。</p>
+<p><a href="mailto:hajime5150@gmail.com">hajime5150@gmail.com</a></p>
+<div class="box">
+  お問い合わせの際は、次の情報を書いていただけるとスムーズに対応できます。
+  <ul>
+    <li>アプリのバージョン(アプリ内ヘッダーに <code>vNN</code> の形式で表示されています)</li>
+    <li>お使いのiOSのバージョン(設定 → 一般 → 情報 で確認できます)</li>
+    <li>何をしていたときに起きたか(できれば手順)</li>
+  </ul>
+</div>
+<p>対応言語: 日本語・英語(返信は日本語を基本とします)</p>
+
+<h2>よくある質問</h2>
+
+<h3>データはどこに保存されますか?通信は発生しますか?</h3>
+<p>トレーニング記録は端末内にのみ保存されます(iOS版はSQLite、Web版はブラウザのlocalStorage)。アカウント登録・ログインは不要で、記録・集計・グラフ・バックアップなどの主要機能はすべてオフラインで動作します。種目のやり方をYouTubeで調べる任意の機能を使ったときだけ、外部ブラウザでYouTube検索結果を開きます(その際に送信するのは種目名だけで、トレーニング記録が送信されることはありません)。詳しくは<a href="privacy.html">プライバシーポリシー</a>をご覧ください。</p>
+
+<h3>機種変更したら記録は引き継がれますか?</h3>
+<p>自動では引き継がれません。記録は端末内保存のため、機種変更やアプリの再インストールの前に、必ず「設定」タブから「バックアップを書き出す」でJSONファイルを保存してください。新しい端末でアプリを開き、「設定」→「バックアップから復元する」で保存したJSONファイルを選択すると復元できます。</p>
+
+<h3>バックアップの書き出し方法</h3>
+<ol>
+  <li>「設定」タブを開く</li>
+  <li>「バックアップを書き出す」をタップ</li>
+  <li>JSON形式のファイルが書き出されます(ファイル名は <code>kurabell-backup-日付.json</code>)。iCloud DriveやAirDrop、メールなど、お好きな方法で保存・転送してください</li>
+</ol>
+<p>あわせてCSV形式での書き出しにも対応しています(Excel等の表計算ソフトで開けます)。CSVは記録の閲覧・集計用で、CSVからの復元(読み込み)はできません。復元にはJSON形式のバックアップをお使いください。</p>
+
+<h3>JSONバックアップからの復元方法</h3>
+<ol>
+  <li>「設定」タブを開く</li>
+  <li>「バックアップから復元する」をタップし、保存しておいたJSONファイルを選択</li>
+  <li>内容を確認するダイアログが出るので、よろしければ「OK」を選択</li>
+</ol>
+<p>復元を行う前に、現在のデータは自動的に退避されます。万一、復元した内容に問題があった場合は、「設定」タブから復元前の状態に戻すことができます。壊れたファイルや対応していない形式のバックアップを選んだ場合は復元されず、現在のデータはそのまま残ります。</p>
+
+<h3>アプリを削除(アンインストール)するとどうなりますか?</h3>
+<p>アプリを削除すると、端末に保存されているすべての記録が失われます。削除の前に、必ず「設定」タブから「バックアップを書き出す」を行ってください。書き出したJSONファイルを別の場所(iCloud Driveなど)に保管しておけば、再インストール後に復元できます。</p>
+
+<h3>記録を削除したい(一部・全部)</h3>
+<p>個別の記録は「履歴」タブから対象の記録を選び、削除できます。すべての記録をまとめて削除したい場合は、「設定」タブの「すべての履歴を削除」から行えます(確認ダイアログが表示されます)。この操作は元に戻せないため、必要であれば先にバックアップを書き出してください。</p>
+
+<h3>広告や課金はありますか?</h3>
+<p>広告やトラッキングはありません。課金方針(有料/無料)についてはApp Store上の表示をご確認ください。</p>
+
+<h2>プライバシーポリシー</h2>
+<p>データの取り扱いについては<a href="privacy.html">プライバシーポリシー</a>をご覧ください。</p>
+
+</body>
+</html>

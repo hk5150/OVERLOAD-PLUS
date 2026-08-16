@@ -24,6 +24,21 @@
 				<string>CA92.1</string>
 			</array>
 		</dict>
+		<!-- @capacitor-community/sqlite (SQLite本体)がDB/ジャーナルファイルの入出力でファイル
+		     タイムスタンプ系API(stat/fstat等)を内部的に使う。プラグイン自体はPrivacy Manifestを
+		     同梱していない(ios/以下にxcprivacyが無いことを確認済み)ため、アプリ側で宣言する。
+		     C617.1 = 自アプリのコンテナ内(App Group/CloudKitコンテナ含む)にあるファイルの
+		     タイムスタンプへのアクセス。DBファイルはLibrary/CapacitorDatabase(アプリのコンテナ内)
+		     に置いており、ユーザーが選んだ外部ファイルではないためC617.1が該当する。
+		     ※ Xcodeでのビルド(Privacy Report)による実機確認はまだ行っていない。 -->
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryFileTimestamp</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>C617.1</string>
+			</array>
+		</dict>
 	</array>
 </dict>
 </plist>

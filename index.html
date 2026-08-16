@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>OVERLOAD+</title>
+<title>KURABELL Workout Log</title>
 <meta name="description" content="プログレッシブオーバーロードに基づくトレーニング記録アプリ" />
 
 <link rel="manifest" href="manifest.json" />
@@ -11,7 +11,7 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-<meta name="apple-mobile-web-app-title" content="OVERLOAD+" />
+<meta name="apple-mobile-web-app-title" content="KURABELL" />
 <meta name="mobile-web-app-capable" content="yes" />
 
 <style>
@@ -43,7 +43,6 @@
   * { -webkit-tap-highlight-color: transparent; }
   #boot { padding-top: calc(24px + env(safe-area-inset-top)); display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 70vh; gap: 14px; padding: 24px; text-align: center; }
   #boot .logo { font-family: 'Barlow Condensed', sans-serif; font-weight: 800; font-size: 34px; letter-spacing: 1px; }
-  #boot .plus { color: #E2453C; }
   #boot .msg { color: #8E939A; font-size: 13px; line-height: 1.7; }
   #boot .err { color: #F5B8B3; background: #3A2224; border-radius: 10px; padding: 12px; font-size: 12px; text-align: left; max-width: 420px; word-break: break-all; line-height: 1.7; }
   #boot button { background: #E2453C; color: #fff; border: none; border-radius: 10px; padding: 12px 20px; font-size: 14px; font-weight: 700; font-family: inherit; cursor: pointer; }
@@ -73,7 +72,7 @@
 
 <div id="root">
   <div id="boot">
-    <div class="logo">OVERLOAD<span class="plus">+</span></div>
+    <div class="logo">KURABELL</div>
     <div class="spinner" id="spin"></div>
     <div class="msg" id="bootmsg">読み込み中…</div>
     <div class="err" id="booterr" style="display:none"></div>
@@ -90,7 +89,7 @@
     <path d="M37 33v6h-6" stroke="#E2453C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
   </svg>
   <div class="title">画面を縦にしてください</div>
-  <div class="msg">OVERLOAD+ は縦画面での利用を想定しています。</div>
+  <div class="msg">KURABELL Workout Log は縦画面での利用を想定しています。</div>
 </div>
 
 <script>
@@ -121,7 +120,12 @@
     { key:'oneRm',      urls:['src/domain/oneRm.js'] },
     { key:'storage',    urls:['src/domain/storage.js'] },
     { key:'backupValidation', urls:['src/domain/backupValidation.js'] },
-    { key:'volume',     urls:['src/domain/volume.js'] }
+    { key:'volume',     urls:['src/domain/volume.js'] },
+    // iOS版のSQLite永続化層。Web版では何もしない(nativeSqliteDriver()がnullを返すだけ)。
+    { key:'dbSchema',    urls:['src/domain/db/schema.js'] },
+    { key:'dbMigration', urls:['src/domain/db/migration.js'] },
+    { key:'dbWorkoutStore', urls:['src/domain/db/workoutStore.js'] },
+    { key:'dbCapacitorSqliteDriver', urls:['src/domain/db/capacitorSqliteDriver.js'] }
   ];
 
   function loadOne(urls, i){
@@ -176,6 +180,9 @@ const FONT_UI = "-apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Hiragino K
 const STORAGE_KEY = "workout-log-v1";
 const DRAFT_KEY = "workout-draft-v1"; // 入力途中の記録(アプリが落ちても復元できるように)
 const PRE_IMPORT_BACKUP_KEY = "workout-log-v1-pre-import"; // バックアップ復元前のデータ退避(復元に失敗した場合の保険)
+// ヘッダーのバージョンバッジとバックアップのappVersionで共有する単一の定数。
+// sw.js の CACHE 定数とは tests/version.test.js が数字の一致を機械的に縛っている(CLAUDE.md参照)。
+const APP_VERSION = "v81";
 // store(保存レイヤ)は src/domain/storage.js へ移設(テストのため)。
 // LIBSで<script src>読み込み済みなのでグローバルの store をそのまま参照できる。
 const uid = () => Math.random().toString(36).slice(2, 8);
@@ -642,7 +649,7 @@ class ErrorBoundary extends React.Component {
     return (
       <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 14, padding: 24, textAlign: "center", background: C.bg, color: C.text }}>
         <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: 34, letterSpacing: 1 }}>
-          OVERLOAD<span style={{ color: C.red }}>+</span>
+          KURABELL
         </div>
         <div style={{ color: C.muted, fontSize: 13, lineHeight: 1.7 }}>
           予期しないエラーが発生しました。記録データは保存されたままです。<br />再読み込みしてお試しください。
@@ -710,6 +717,7 @@ function App() {
   const [lastBackupAt, setLastBackupAt] = useState(null); // 最後にバックアップした日時(ISO)
   const [hasPreImportSnapshot, setHasPreImportSnapshot] = useState(false); // バックアップ復元前のデータ退避が残っているか
   const [hideBackupNag, setHideBackupNag] = useState(false); // このセッション中は非表示
+  const [offerSaveAsMenu, setOfferSaveAsMenu] = useState(null); // 分割未設定で初めて記録を保存した直後、その記録{name, muscles, exercises}をメニュー化するか尋ねる
   const [editWorkout, setEditWorkout] = useState(null); // 編集中の記録 {index, draft}
   const [editAddSearch, setEditAddSearch] = useState("");  // 履歴編集で種目を追加するときの検索語
   const [exSettingSearch, setExSettingSearch] = useState(""); // 設定タブの種目検索
@@ -1515,6 +1523,12 @@ function App() {
       durationMin, totalVolume, kcal: estimateKcal(durationMin), exercises,
     };
     const nextSplit = split ? { ...split, cursor: (split.cursor + 1) % split.days.length } : split;
+    // 分割が無い状態での初めての記録だけ、終了後に「メニューとして保存しますか?」と尋ねる
+    // (2回目以降は出さない。workouts.length===0の時点=これが最初の記録、で判定する)
+    if (!split && workouts.length === 0) {
+      const muscles = [...new Set(exercises.map(ex => ex.muscle).filter(Boolean))];
+      setOfferSaveAsMenu({ exercises: exercises.map(ex => ex.name), muscles });
+    }
     await persist({ workouts: [...workouts, entry], split: nextSplit });
     // 終了コメント
     setToday([]); setSaving(false);
@@ -1529,6 +1543,14 @@ function App() {
     const q = encodeURIComponent(`${exName} やり方 フォーム`);
     window.open(`https://www.youtube.com/results?search_query=${q}`, "_blank", "noopener,noreferrer");
   };
+
+  // 「分割未設定で初めて記録した内容をメニューとして保存するか」の申し出への応答
+  const applyOfferedMenu = () => {
+    if (!offerSaveAsMenu) return;
+    persist({ split: { name: "マイメニュー", days: [{ name: "Day 1", muscles: offerSaveAsMenu.muscles, exercises: offerSaveAsMenu.exercises }], cursor: 0 } });
+    setOfferSaveAsMenu(null);
+  };
+  const dismissOfferedMenu = () => setOfferSaveAsMenu(null);
 
   // ---- 分割操作 ----
   const applyPreset = (preset) => {
@@ -1592,7 +1614,7 @@ function App() {
     setWorkouts([]); setSplit(null); setChartExercise(""); setRecentNames([]); setCustomExercises([]); setExerciseNotes({}); setExerciseOverrides({}); setExerciseOverrides_module({}); setLastBackupAt(null);
     // profile/guideSeenもメモリ上でリセットしないと、削除後に何か保存すると
     // persist()がpatch未指定分を現在stateから引き継ぐため、古いprofileが復活してしまう。
-    setProfile(DEFAULT_PROFILE); setGuideSeen(false);
+    setProfile(DEFAULT_PROFILE); setGuideSeen(false); setOfferSaveAsMenu(null);
   };
 
   // ---- 履歴の編集・削除 ----
@@ -1758,7 +1780,7 @@ function App() {
       lines.push("");
     });
 
-    lines.push("— OVERLOAD+");
+    lines.push("— KURABELL Workout Log");
     return lines.join("\n");
   };
 
@@ -1802,14 +1824,16 @@ function App() {
   };
 
   const exportBackup = () => {
+    const isNative = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
     const payload = {
-      app: "OVERLOAD+", version: 1, exportedAt: new Date().toISOString(),
+      app: "KURABELL Workout Log", formatVersion: CURRENT_BACKUP_FORMAT_VERSION, appVersion: APP_VERSION,
+      platform: isNative ? "ios" : "web", exportedAt: new Date().toISOString(),
       workouts, split, profile, recentNames, customExercises, exerciseNotes, exerciseOverrides,
       lastBackupAt: new Date().toISOString(),
     };
     const d = new Date();
     const stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
-    downloadFile(`overload-backup-${stamp}.json`, JSON.stringify(payload, null, 2));
+    downloadFile(`kurabell-backup-${stamp}.json`, JSON.stringify(payload, null, 2));
     persist({ lastBackupAt: new Date().toISOString() });
     setHideBackupNag(true);
     setBackupMsg(`バックアップを書き出しました(記録 ${workouts.length}件)。`);
@@ -1825,7 +1849,7 @@ function App() {
       }));
     });
     const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
-    downloadFile(`overload-log-${Date.now()}.csv`, "\uFEFF" + csv, "text/csv");
+    downloadFile(`kurabell-log-${Date.now()}.csv`, "\uFEFF" + csv, "text/csv");
     setBackupMsg("CSVを書き出しました(Excel等で開けます)。");
   };
 
@@ -1834,9 +1858,9 @@ function App() {
     try {
       const text = await file.text();
       const p = JSON.parse(text);
-      const ws = extractWorkoutsArray(p);
-      // 壊れたデータで上書きしないよう、最低限の構造を検証してから確認ダイアログに進む
-      validateWorkoutsShape(ws);
+      // 壊れたデータ・数値異常・未知の将来フォーマットで上書きしないよう、
+      // 確認ダイアログより前に検証する(ここで例外が出れば現在のデータは一切変更されない)。
+      const ws = validateBackupPayload(p);
       if (!window.confirm(`バックアップを復元します(記録 ${ws.length}件)。\n現在のデータはすべて置き換わります。よろしいですか?`)) return;
 
       // 復元前に現在のデータをスナップショットとして退避(復元後に問題があった場合の保険)
@@ -1870,8 +1894,7 @@ function App() {
       const snap = await store.get(PRE_IMPORT_BACKUP_KEY);
       if (!snap?.value) { setHasPreImportSnapshot(false); return; }
       const p = JSON.parse(snap.value);
-      const ws = extractWorkoutsArray(p);
-      validateWorkoutsShape(ws);
+      const ws = validateBackupPayload(p);
       if (!window.confirm(`バックアップ復元より前の状態(記録 ${ws.length}件)に戻します。\n現在のデータは置き換わります。よろしいですか?`)) return;
       const next = {
         workouts: migrateWorkouts(ws),
@@ -2048,7 +2071,7 @@ function App() {
       {loaded && !guideSeen && (() => {
         const steps = [
           {
-            art: "hero", title: "OVERLOAD+ へようこそ",
+            art: "hero", title: "KURABELL Workout Log へようこそ",
             lead: "前回の内容がそのまま出てくる、筋トレ記録アプリです。",
             body: "同じ分割の前回の記録(重量・回数・セット数)がそのまま並ぶので、入力の手間なく「前回より上」を狙えます。推定1RMや自己ベストは自動で計算されます。",
           },
@@ -2161,8 +2184,8 @@ function App() {
       <header style={{ padding: "16px 16px 12px", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
         <div>
           <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: 32, letterSpacing: 1, lineHeight: 1 }}>
-            OVERLOAD<span style={{ color: C.red }}>+</span>
-            <span style={{ fontFamily: FONT_UI, fontSize: 12, fontWeight: 700, color: C.green, marginLeft: 8, verticalAlign: "middle" }}>v81</span>
+            KURABELL
+            <span style={{ fontFamily: FONT_UI, fontSize: 12, fontWeight: 700, color: C.green, marginLeft: 8, verticalAlign: "middle" }}>{APP_VERSION}</span>
           </div>
         </div>
         {(saveStatus === "saving" || saveStatus === "saved") && (
@@ -2342,19 +2365,20 @@ function App() {
                     {inGroup && prevEx && prevEx.ssGroup === ex.ssGroup ? "⛓ 上の種目とスーパーセット中(解除)" : "⛓ 上の種目とスーパーセットにする"}
                   </button>
                 )}
-                <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 4, alignItems: "center" }}>
                   <button onClick={() => moveExercise(ex.id, -1)} disabled={exIdx === 0} aria-label="上へ移動"
                     style={{ ...btn(C.surface2, exIdx === 0 ? C.border : C.muted), padding: "4px 8px", fontSize: 13, cursor: exIdx === 0 ? "default" : "pointer" }}>▲</button>
                   <button onClick={() => moveExercise(ex.id, 1)} disabled={exIdx === today.length - 1} aria-label="下へ移動"
                     style={{ ...btn(C.surface2, exIdx === today.length - 1 ? C.border : C.muted), padding: "4px 8px", fontSize: 13, cursor: exIdx === today.length - 1 ? "default" : "pointer" }}>▼</button>
-                  <button onClick={() => openYouTube(ex.name)} aria-label="YouTubeでフォームを検索" style={{ ...btn(C.surface2, C.red), padding: "4px 8px", fontSize: 12, fontWeight: 700 }}>YouTube</button>
+                  <button onClick={() => openYouTube(ex.name)} aria-label="YouTubeでフォームを検索" style={{ ...btn(C.surface2, C.red), padding: "4px 8px", fontSize: 12, fontWeight: 700, whiteSpace: "nowrap", flexShrink: 0 }}>YouTube</button>
                   <button onClick={() => { setSwapEx(swapEx === ex.id ? null : ex.id); setSwapSearch(""); setSwapMuscle(""); }}
-                    style={{ ...btn(C.surface2, swapEx === ex.id ? C.blue : C.muted), padding: "4px 9px", fontSize: 13 }}>変更</button>
+                    style={{ ...btn(C.surface2, swapEx === ex.id ? C.blue : C.muted), padding: "4px 9px", fontSize: 13, whiteSpace: "nowrap", flexShrink: 0 }}>変更</button>
                   <button onClick={() => setOpenHist({ ...openHist, [ex.id]: !openHist[ex.id] })}
-                    style={{ ...btn(C.surface2, openHist[ex.id] ? C.blue : C.muted), padding: "4px 9px", fontSize: 13 }}>履歴</button>
-                  <button onClick={() => setOpenCfg({ ...openCfg, [ex.id]: !openCfg[ex.id] })} style={{ ...btn(C.surface2, C.muted), padding: "4px 9px", fontSize: 13 }}>⚙</button>
+                    style={{ ...btn(C.surface2, openHist[ex.id] ? C.blue : C.muted), padding: "4px 9px", fontSize: 13, whiteSpace: "nowrap", flexShrink: 0 }}>履歴</button>
+                  <button onClick={() => setOpenCfg({ ...openCfg, [ex.id]: !openCfg[ex.id] })} aria-label="種目の詳細設定" aria-expanded={!!openCfg[ex.id]}
+                    style={{ ...btn(C.surface2, C.muted), padding: "4px 9px", fontSize: 13, minWidth: 32, minHeight: 32, flexShrink: 0 }}>⚙</button>
                   <div style={{ flex: 1 }} />
-                  <button onClick={() => removeExercise(ex.id)} aria-label="種目を削除" style={{ ...btn("transparent", C.muted), padding: "4px 6px", fontSize: 13 }}>✕ 削除</button>
+                  <button onClick={() => removeExercise(ex.id)} aria-label="種目を削除" style={{ ...btn("transparent", C.muted), padding: "4px 6px", fontSize: 13, whiteSpace: "nowrap", flexShrink: 0 }}>✕ 削除</button>
                 </div>
               </div>
 
@@ -2653,7 +2677,7 @@ function App() {
                     </button>
                     <NumInput inputMode="decimal" value={s.weight} placeholder="0"
                       onBlur={() => { if ((num(s.weight) > 0 || num(s.reps) > 0) && isLastInGroup(exIdx)) startRest(); }}
-                      onChange={e => updateSet(ex.id, i, "weight", e.target.value)} aria-label={`セット${i + 1}の重量`} style={{ ...numInput, flex: 1.3, opacity: s.warmup ? 0.6 : 1 }} />
+                      onChange={e => updateSet(ex.id, i, "weight", e.target.value)} aria-label={`セット${i + 1}の重量(kg)`} style={{ ...numInput, flex: 1.3, opacity: s.warmup ? 0.6 : 1 }} />
                     <NumInput inputMode="numeric" value={s.reps} placeholder="0"
                       onBlur={() => { if ((num(s.weight) > 0 || num(s.reps) > 0) && isLastInGroup(exIdx)) startRest(); }}
                       onChange={e => updateSet(ex.id, i, "reps", e.target.value)} aria-label={`セット${i + 1}の回数`} style={{ ...numInput, flex: 1, opacity: s.warmup ? 0.6 : 1 }} />
@@ -2867,7 +2891,15 @@ function App() {
               {pickingSplit && split && (
                 <button onClick={() => setPickingSplit(false)} style={{ ...btn(C.surface2, C.muted), fontSize: 13, padding: "8px 12px", marginBottom: 12 }}>← 今の分割({split.name})に戻る</button>
               )}
-              <p style={{ color: C.muted, fontSize: 13, margin: "0 0 10px" }}>パターンを選ぶか、ゼロから作成できます。{split && "(選ぶと今の分割は置き換わります)"}</p>
+              {!split && (
+                <div style={{ background: C.surface, borderRadius: 14, padding: 14, marginBottom: 16, border: `1px solid ${C.border}` }}>
+                  <div style={{ fontSize: 13, color: C.muted, marginBottom: 10, lineHeight: 1.6 }}>
+                    分割を作らなくても、種目を選んですぐ記録を始められます。分割は後からいつでも作れます。
+                  </div>
+                  <button onClick={() => setView("log")} style={{ ...btn(C.red), width: "100%", padding: 14, fontSize: 15 }}>今すぐ記録する</button>
+                </div>
+              )}
+              <p style={{ color: C.muted, fontSize: 13, margin: "0 0 10px" }}>{split ? "パターンを選ぶか、ゼロから作成できます。(選ぶと今の分割は置き換わります)" : "または、分割メニューを設定する"}</p>
               {SPLIT_PRESETS.map(p => (
                 <button key={p.name} onClick={() => applyPreset(p)} style={{ ...btn(C.surface, C.text), width: "100%", textAlign: "left", padding: 14, marginBottom: 8, border: `1px solid ${C.border}` }}>
                   <div style={{ fontWeight: 900, fontSize: 15, marginBottom: 4 }}>{p.name}</div>
@@ -2998,6 +3030,17 @@ function App() {
       {/* ===== 履歴タブ ===== */}
       {view === "history" && (
         <div style={{ padding: "0 16px" }}>
+          {offerSaveAsMenu && (
+            <div style={{ background: C.surface, borderRadius: 14, padding: 14, border: `1px solid ${C.blue}`, marginBottom: 12 }}>
+              <div style={{ fontSize: 13, lineHeight: 1.7, marginBottom: 10 }}>
+                次回から今日の種目と前回記録を表示できます。この内容をメニューとして保存しますか?
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button onClick={applyOfferedMenu} style={{ ...btn(C.red), flex: 1, padding: 10, fontSize: 14 }}>保存する</button>
+                <button onClick={dismissOfferedMenu} style={{ ...btn(C.surface2, C.muted), flex: 1, padding: 10, fontSize: 14 }}>今回はしない</button>
+              </div>
+            </div>
+          )}
           {workouts.length > 0 && (
             <>
               {/* ボリューム推移(トータル / 部位別) */}
@@ -3509,6 +3552,7 @@ function App() {
             <label style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 14 }}>
               インターバルの通知音
               <button onClick={() => { const next = !soundOn; persist({ profile: { ...profile, soundOn: next } }); if (next) setTimeout(() => beep(1), 60); }}
+                role="switch" aria-checked={soundOn} aria-label="インターバルの通知音"
                 style={{ width: 52, height: 30, borderRadius: 999, border: "none", cursor: "pointer", background: soundOn ? C.green : C.grey, position: "relative" }}>
                 <span style={{ position: "absolute", top: 3, left: soundOn ? 25 : 3, width: 24, height: 24, borderRadius: "50%", background: "#fff", transition: "left .15s" }} />
               </button>

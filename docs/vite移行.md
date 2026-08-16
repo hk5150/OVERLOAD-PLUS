@@ -42,14 +42,14 @@ GitHub Pages配信用の`index.html`本体は対象外(後述)。
 |---|---|
 | `scripts/sync-www.js` | 事前ビルドロジックを追加(esbuildでJSX変換、www/index.htmlの起動スクリプトを書き換え) |
 | `package.json` / `package-lock.json` | `esbuild`をdevDependencyに追加 |
-| `.claude/launch.json` | `www/`をそのまま配信して検証するための`overload-plus-www`エントリを追加(ポート8766) |
+| `.claude/launch.json` | `www/`をそのまま配信して検証するための`kurabell-www`エントリを追加(ポート8766) |
 
 `index.html` / `sw.js`(ルート、GitHub Pages配信用)は今回のビルド化そのものでは変更していない。
 
 ## 検証内容
 
 - `npm run sync-www`実行 → `www/app.bundle.js`(228KB、`React.createElement`呼び出しに正しく変換済み、生のJSX構文は残っていないことを確認)
-- `www/`を`overload-plus-www`でそのまま配信し、Babel読み込みなし・コンソールエラーなしで起動することを確認
+- `www/`を`kurabell-www`でそのまま配信し、Babel読み込みなし・コンソールエラーなしで起動することを確認
 - 分割選択・種目検索・種目追加・セット入力の一連の操作がソースビルド(ランタイムBabel版)と同じ挙動であることを確認
 
 ## 残っている課題

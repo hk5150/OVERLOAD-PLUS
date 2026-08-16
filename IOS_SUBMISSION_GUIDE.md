@@ -52,7 +52,7 @@ https://developer.apple.com/programs/ から登録(年間$99)。有料アプリ�
 
 ## 5. Bundle ID を確認・登録
 
-`capacitor.config.json` の `appId` は仮に `com.hajime5150.overloadplus` としています。そのまま使う場合も、変更する場合も、developer.apple.com の **Certificates, Identifiers & Profiles → Identifiers** で同じ文字列のApp IDを登録してください。変更する場合は `capacitor.config.json` を編集後、`npm run ios:sync` を再実行してください。
+`capacitor.config.json` の `appId` は仮に `com.hajime5150.kurabellplus` としています。そのまま使う場合も、変更する場合も、developer.apple.com の **Certificates, Identifiers & Profiles → Identifiers** で同じ文字列のApp IDを登録してください。変更する場合は `capacitor.config.json` を編集後、`npm run ios:sync` を再実行してください。
 
 ## 6. Xcodeでアイコン・署名を設定
 
@@ -76,7 +76,8 @@ https://appstoreconnect.apple.com → マイApp → ＋ → 新規App
 - Bundle ID: 手順5で登録したものを選択
 - 名前・サブタイトル・説明文・キーワード等は [APPSTORE.md](APPSTORE.md) の内容を貼り付け
 - プライバシーポリシーURL: GitHub Pagesを有効化した上で `https://hk5150.github.io/OVERLOAD-PLUS/privacy.html` を設定
-- App Privacy(データ収集)の質問には「データを収集しない」で回答
+- サポートURL: 同様に `https://hk5150.github.io/OVERLOAD-PLUS/support.html` を設定(mailtoリンクはApp Store ConnectのサポートURL欄には使えないため、支援ページ側に問い合わせリンクとして置いてある)
+- App Privacy(データ収集)の質問には「データを収集しない」で回答(YouTube検索ボタンの扱いは[APPSTORE.md](APPSTORE.md)の該当節を参照)
 - 価格帯: 銀行・税務情報の入力完了後に選択可能になります
 
 ## 9. スクリーンショットを用意

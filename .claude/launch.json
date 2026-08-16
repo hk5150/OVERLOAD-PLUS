@@ -2,13 +2,13 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "overload-plus-dev",
+      "name": "kurabell-dev",
       "runtimeExecutable": "python3",
       "runtimeArgs": ["-m", "http.server", "8765"],
       "port": 8765
     },
     {
-      "name": "overload-plus-www",
+      "name": "kurabell-www",
       "runtimeExecutable": "python3",
       "runtimeArgs": ["-m", "http.server", "8766", "--directory", "www"],
       "port": 8766

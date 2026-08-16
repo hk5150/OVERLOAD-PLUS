@@ -36,6 +36,13 @@ const DOMAIN_FILES = [
   "backupValidation.js",
   "volume.js",
 ];
+// iOS版のSQLite永続化層(src/domain/db/以下)。DOMAIN_FILESと同じ理由でapp.bundle.jsより先に読み込む。
+const DB_DOMAIN_FILES = [
+  "schema.js",
+  "migration.js",
+  "workoutStore.js",
+  "capacitorSqliteDriver.js",
+];
 
 const appsrcRe = /<script type="text\/plain" id="appsrc">([\s\S]*?)<\/script>/;
 // <body>直後の起動診断〜CDNローダーのブロック(元は「アプリ本体」コメントの手前まで)
@@ -47,7 +54,7 @@ function build(dest) {
   fs.rmSync(dest, { recursive: true, force: true });
   fs.mkdirSync(dest, { recursive: true });
   fs.mkdirSync(path.join(dest, "vendor"), { recursive: true });
-  fs.mkdirSync(path.join(dest, "src", "domain"), { recursive: true });
+  fs.mkdirSync(path.join(dest, "src", "domain", "db"), { recursive: true });
 
   for (const file of STATIC_FILES) {
     fs.copyFileSync(path.join(ROOT, file), path.join(dest, file));
@@ -57,6 +64,9 @@ function build(dest) {
   }
   for (const file of DOMAIN_FILES) {
     fs.copyFileSync(path.join(ROOT, "src", "domain", file), path.join(dest, "src", "domain", file));
+  }
+  for (const file of DB_DOMAIN_FILES) {
+    fs.copyFileSync(path.join(ROOT, "src", "domain", "db", file), path.join(dest, "src", "domain", "db", file));
   }
   // ローカル同梱フォント(オフラインでも字面が崩れないようにするため。CDNは使わない)
   const fontsDir = path.join(ROOT, "fonts");
@@ -106,6 +116,10 @@ function build(dest) {
 <script src="src/domain/storage.js"></script>
 <script src="src/domain/backupValidation.js"></script>
 <script src="src/domain/volume.js"></script>
+<script src="src/domain/db/schema.js"></script>
+<script src="src/domain/db/migration.js"></script>
+<script src="src/domain/db/workoutStore.js"></script>
+<script src="src/domain/db/capacitorSqliteDriver.js"></script>
 <script src="app.bundle.js"></script>`;
 
   if (!bootBlockRe.test(html)) throw new Error("index.html 内の起動ブロックが見つかりません(www側の生成ロジックを見直してください)");

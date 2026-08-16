@@ -1,8 +1,8 @@
 {
-  "name": "overload-plus-ios",
+  "name": "kurabellplus-ios",
   "private": true,
   "version": "1.0.0",
-  "description": "OVERLOAD+ iOS wrapper (Capacitor)",
+  "description": "KURABELL Workout Log iOS wrapper (Capacitor)",
   "scripts": {
     "sync-www": "node scripts/sync-www.js",
     "ios:add": "npm run sync-www && npx cap add ios",
@@ -16,6 +16,7 @@
     "vitest": "^4.1.10"
   },
   "dependencies": {
+    "@capacitor-community/sqlite": "^6.0.2",
     "@capacitor/core": "^6.0.0",
     "@capacitor/ios": "^6.0.0",
     "@capacitor/preferences": "^6.0.4"

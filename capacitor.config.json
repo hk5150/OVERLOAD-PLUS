@@ -1,9 +1,15 @@
 {
-  "appId": "com.hajime5150.overloadplus",
-  "appName": "OVERLOAD+",
+  "appId": "com.hajime5150.kurabellplus",
+  "appName": "KURABELL",
   "webDir": "www",
   "backgroundColor": "#141517",
   "ios": {
     "contentInset": "always"
+  },
+  "plugins": {
+    "CapacitorSQLite": {
+      "iosDatabaseLocation": "Library/CapacitorDatabase",
+      "iosIsEncryption": false
+    }
   }
 }

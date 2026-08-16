@@ -1,4 +1,4 @@
-# OVERLOAD+
+# KURABELL Workout Log
 
 漸進性過負荷(プログレッシブオーバーロード)にもとづく筋トレ記録アプリ。
 
@@ -29,7 +29,7 @@
 ### 1. リポジトリを作る
 
 1. GitHub にログインし、右上の **+** → **New repository**
-2. **Repository name** に `overload` などを入力
+2. **Repository name** に `kurabell` などを入力
 3. **Public** を選択(Pages を無料で使うため)
 4. **Create repository** をクリック
 
@@ -64,7 +64,7 @@
 5. 1〜2分待つと、ページ上部に公開URLが表示される
 
    ```
-   https://<ユーザー名>.github.io/overload/
+   https://<ユーザー名>.github.io/kurabell/
    ```
 
 ### 4. iPhone のホーム画面に追加する
@@ -118,7 +118,7 @@ Chrome でURLを開き、メニュー(⋮)→ **ホーム画面に追加** / **�
 Service Worker のキャッシュが効いているため、更新が反映されない場合は `sw.js` 冒頭の
 
 ```js
-const CACHE = "overload-vNN";
+const CACHE = "kurabell-vNN";
 ```
 
 のバージョン番号を1つ上げてください(現在の番号は `sw.js` を直接確認してください)。
