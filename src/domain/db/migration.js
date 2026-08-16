@@ -20,7 +20,9 @@ function genId(prefix) {
 // index.html側の読み込み処理(migrateWorkouts/migrateSplit/defaultProfileの適用)とは別レイヤ:
 // ここでは構造の受け渡しだけを行い、種目名の正規化などのアプリ固有ルールはapp.bundle.js側に任せる。
 function legacyBlobToState(rawJsonString) {
-  const parsed = JSON.parse(rawJsonString);
+  let parsed;
+  try { parsed = JSON.parse(rawJsonString); }
+  catch (e) { throw new Error(`legacyBlobToStateのJSON.parseに失敗: raw=${JSON.stringify(String(rawJsonString).slice(0, 200))} err=${e.message}`); }
   const workouts = extractWorkoutsArray(parsed);
   validateWorkoutsShape(workouts);
   if (Array.isArray(parsed)) {
@@ -185,10 +187,16 @@ function rowsToState({ workoutRows, workoutExerciseRows, setRows, customExercise
     exercises: exercisesByWorkout.get(r.id) || [],
   }));
 
-  const customExercises = (customExerciseRows || []).map((r) => JSON.parse(r.data));
+  const customExercises = (customExerciseRows || []).map((r) => {
+    try { return JSON.parse(r.data); }
+    catch (e) { throw new Error(`customExercises行のJSON.parseに失敗: row=${JSON.stringify(r)} err=${e.message}`); }
+  });
 
   const settings = {};
-  (settingsRows || []).forEach((r) => { settings[r.key] = JSON.parse(r.value); });
+  (settingsRows || []).forEach((r) => {
+    try { settings[r.key] = JSON.parse(r.value); }
+    catch (e) { throw new Error(`settings行のJSON.parseに失敗: row=${JSON.stringify(r)} err=${e.message}`); }
+  });
 
   return {
     workouts,

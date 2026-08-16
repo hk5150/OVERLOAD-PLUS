@@ -114,29 +114,50 @@ index.html側の `persist()` は元々 `saveStatus` を "saving"/"saved"/エラ�
 
 ## 検証状況
 
-- ✅ `npm test`: スキーマDDL・移行・setAll/getAll・clearAll・storage.js経路の切り替えを
-  Node組み込みの `node:sqlite`(`DatabaseSync`)を使ったフェイクドライバで検証(136件)。
-  手書きのモックではなく本物のSQLiteエンジンを使っているため、トランザクションの
+- ✅ `npm test`: スキーマDDL・移行・setAll/getAll・clearAll・storage.js経路の切り替え・
+  `capacitorSqliteDriver.js` の行データ正規化を、Node組み込みの `node:sqlite`
+  (`DatabaseSync`)を使ったフェイクドライバ、および実際の生データ形状の単体テストで検証
+  (141件)。手書きのモックではなく本物のSQLiteエンジンを使っているため、トランザクションの
   ロールバックや外部キーも含めて検証できている。
+- ✅ **Xcodeシミュレータ(iPhone 17 Pro)での実機相当検証を完了**。ビルド・起動・
+  新規インストール・アプリ完全終了→再起動・SQLiteへの直接SQL書き込みからの読み込みまで
+  一通り確認した(詳細は下記「実機検証で見つけた不具合」を参照)。
 - ✅ `npx cap sync ios`: `@capacitor-community/sqlite@6.0.2` が正しく認識され、CocoaPodsの
-  `pod install` が成功することを確認(本リポジトリで実行し、"Found 2 Capacitor plugins for ios"
-  のログを確認)。
-- ✅ `CapacitorSQLite.query()` がiOS側で `[[String: Any]]`(行オブジェクトの配列)を返すことは、
-  プラグインのSwiftソース(`CapacitorSQLitePlugin.swift`)を直接確認した
-  (npm型定義の "iOS the first row is the returned ios_columns name list" というコメントは
-  古い記載で、現行のSwift実装とは一致しないと判断し、ソースコードを優先した)。
-- ⚠️ **未検証(Xcode実機/シミュレータが必要)**: `capacitorSqliteDriver.js` から実際に
-  ネイティブプラグインを呼び出す経路そのもの(`window.Capacitor.Plugins.CapacitorSQLite`
-  経由の生のブリッジ呼び出し)。ビルド・実行環境が無いため、この一枚だけは
-  Xcodeでのビルドと実機/シミュレータでの動作確認が必要。TestFlightまたはシミュレータで
-  以下を確認すること:
-  1. 新規インストールで正常に起動し、記録・保存ができる
-  2. 旧バージョンのアプリ(Preferencesにデータがある状態)から更新して、履歴が消えずに
-     引き継がれる
-  3. 機内モードでも正常に動作する(SQLiteはローカルファイルなので通信は発生しないはずだが、
-     プラグインの初期化自体に問題が無いか)
-  4. Xcodeの Privacy Report で `PrivacyInfo.xcprivacy` に宣言した
-     `NSPrivacyAccessedAPICategoryFileTimestamp` が実際の使用状況と一致しているか
+  `pod install` が成功することを確認("Found 2 Capacitor plugins for ios" のログを確認)。
+- ⚠️ **TestFlight/実機での確認はまだ**(シミュレータのみ)。特に「旧バージョン(Preferencesに
+  データがある状態)からの更新」の移行パスは、シミュレータ上でPreferencesへ手動で旧形式JSONを
+  書き込む形でしか検証していない。実際のTestFlightアップデートフローでの確認が望ましい。
+
+### 実機検証で見つけた不具合(修正済み)
+
+Xcodeシミュレータでの検証中に、**`CapacitorSQLite.query()` の戻り値の実際の形が
+当初の想定と違う**という重大なバグを発見し、修正した。
+
+- **症状**: アプリを初回起動→ガイド完了(初めての`persist`が走る)→完全に終了して
+  再起動すると、「保存されている記録を正しく読み込めませんでした(JSON Parse error:
+  Unexpected identifier "undefined")」というエラーが再現性高く発生した。
+- **調査**: `sqlite3` CLIでSQLiteファイルを直接開いて中身を確認したところ、
+  保存されているデータ自体は正常なJSON文字列だった。つまり書き込みではなく
+  **読み込み側**(`capacitorSqliteDriver.js`の`all()`)に問題があると判明。
+  一時的に生のレスポンスをエラーメッセージとして投げるデバッグコードを仕込み、
+  実機ログではなく画面上のエラーバナーから実際の値を直接確認する方法で特定した
+  (WKWebViewのコンソールにXcode無しでは到達できなかったため)。
+- **真因**: `query()`の`values`配列は、**先頭要素だけが`{"ios_columns": [列名, ...]}`という
+  特殊なメタデータ行で、2番目以降は最初から`{列名: 値, ...}`という正しい行オブジェクト**、
+  という形式だった。型定義ファイルの "iOS the first row is the returned ios_columns name
+  list" というコメントはこの意味であり、古い記載ではなく正しい仕様だった。
+  当初これを「Swiftソースの`[[String: Any]]`をそのまま返す」と誤読し、
+  ヘッダー行を無視して先頭行もデータとして扱ってしまっていた。
+- **修正**: `capacitorSqliteDriver.js`に`normalizeRows()`を追加し、先頭の
+  `ios_columns`メタ行だけを取り除く。`tests/db/capacitorSqliteDriver.test.js`で
+  実際に観測した形状に対する回帰テストを追加(node:sqliteのフェイクドライバでは
+  この形状差は再現しないため、実データ形状の単体テストとして別途カバーしている)。
+- **検証**: 修正後、同じ手順(新規インストール→ガイド完了→完全終了→再起動)で
+  エラーが解消したことを確認。さらに`sqlite3`で`workouts`/`workout_exercises`/`sets`に
+  直接テスト行をINSERTしてから再起動し、「前回の記録」(過去の自分 101.3kg、
+  80kg×8回など)がUIに正しく表示されること、履歴タブに一覧表示されることまで確認した。
+  これによりこのアプリの中心機能(前回の実績を見せる)がSQLite経由で実際に動作することを
+  実証できた。
 
 ## Privacy Manifest
 

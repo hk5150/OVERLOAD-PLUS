@@ -58,13 +58,14 @@ function createWorkoutStore(driver) {
 
   async function getAll() {
     await ensureSchema();
-    const [workoutRows, workoutExerciseRows, setRows, customExerciseRows, settingsRows] = await Promise.all([
-      driver.all("SELECT * FROM workouts", []),
-      driver.all("SELECT * FROM workout_exercises", []),
-      driver.all("SELECT * FROM sets", []),
-      driver.all("SELECT * FROM custom_exercises", []),
-      driver.all("SELECT * FROM settings", []),
-    ]);
+    // Promise.allで並列に投げると、CapacitorSQLiteの単一コネクションに対する
+    // 同時アクセスでレスポンスが取り違えられる不具合が実機で確認されたため、
+    // 意図的に1本ずつ順番に実行する(並列化による速度向上より正しさを優先)。
+    const workoutRows = await driver.all("SELECT * FROM workouts", []);
+    const workoutExerciseRows = await driver.all("SELECT * FROM workout_exercises", []);
+    const setRows = await driver.all("SELECT * FROM sets", []);
+    const customExerciseRows = await driver.all("SELECT * FROM custom_exercises", []);
+    const settingsRows = await driver.all("SELECT * FROM settings", []);
     const state = rowsToState({ workoutRows, workoutExerciseRows, setRows, customExerciseRows, settingsRows });
     lastWorkoutsRef = state.workouts;
     return state;

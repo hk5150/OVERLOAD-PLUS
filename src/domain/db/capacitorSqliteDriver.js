@@ -9,11 +9,26 @@
 // (npm installしてnpx cap syncすれば自動)、JS側のラッパーパッケージを読み込まなくても
 // Capacitor.Plugins.CapacitorSQLite.execute(...) のようにメソッドを直接呼び出せる。
 //
-// query()がSwift側で [[String: Any]] (= 行オブジェクトの配列) を返すことは
-// CapacitorSQLitePlugin.swift の実装を直接確認済み(型定義のコメントは古い記載で誤解を招くため)。
-// ただし実機/シミュレータでの動作確認はまだ行っていない(Xcodeが無い環境で作業しているため)。
+// query()の戻り値(values配列)は、iOS実機で実際に確認したところ
+// 「先頭要素だけが {"ios_columns": [列名, ...]} という特殊なメタデータ行で、
+//  2番目以降は既に {列名: 値, ...} という正しい行オブジェクト」という形式だった。
+// 型定義ファイルの "iOS the first row is the returned ios_columns name list" という
+// コメントの通り(先頭行だけ特別、という意味だった)。当初「先頭行が列名の配列で、
+// 以降は値だけの配列」と誤解して実装し、実機で「settings行のJSON.parseに失敗」という
+// エラーを引き起こしたため、normalizeRows()で先頭のios_columnsメタ行だけを取り除く。
 
 const DB_NAME = "kurabellplus";
+
+// 先頭要素が {"ios_columns": [...]} という形のメタデータ行なら取り除く。
+// それ以外の要素は既に {列名: 値, ...} という行オブジェクトなのでそのまま使う。
+function normalizeRows(values) {
+  if (!Array.isArray(values) || values.length === 0) return [];
+  const first = values[0];
+  if (first && typeof first === "object" && !Array.isArray(first) && Array.isArray(first.ios_columns)) {
+    return values.slice(1);
+  }
+  return values;
+}
 
 function capSqlitePlugin() {
   try {
@@ -55,9 +70,10 @@ function makeCapacitorSqliteDriver() {
     async all(sql, params) {
       await ensureOpen();
       const res = await plugin.query({ database: DB_NAME, statement: sql, values: params || [] });
-      return res && res.values ? res.values : [];
+      return normalizeRows(res && res.values ? res.values : []);
     },
   };
 }
 
 globalThis.makeCapacitorSqliteDriver = makeCapacitorSqliteDriver;
+globalThis.normalizeRows = normalizeRows; // テスト用に公開(実機で踏んだ変換バグの回帰防止)
