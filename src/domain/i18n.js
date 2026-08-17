@@ -161,8 +161,10 @@ const STRINGS = {
 
   // ---- 今日のメニュー ----
   "menu.title":        { ja: "今日のメニュー",         en: "Today's menu" },
-  "menu.fromSplit":    { ja: "マイ分割に登録した種目", en: "From your split" },
-  "menu.fromLast":     { ja: "前回のセッション",       en: "From your last session" },
+  // この2つは menu.carryover の {src} にだけ差し込まれる。英語では前置詞 from が
+  // 差し込み側にあるので、ここで "From ..." と書くと "Carried over from From your split." になる。
+  "menu.fromSplit":    { ja: "マイ分割に登録した種目", en: "your split" },
+  "menu.fromLast":     { ja: "前回のセッション",       en: "your last session" },
   "menu.start":        { ja: "この内容で記録を開始",   en: "Start with this menu" },
   "menu.carryover":    { ja: "{src}の記録をそのまま引き継いでいます。開始後に調整できます。", en: "Carried over from {src}. You can adjust once you start." },
   "menu.setCount":     { ja: "({n}セット)",            en: "({n} sets)" },
