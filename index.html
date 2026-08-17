@@ -147,6 +147,7 @@
     { key:'babel',    urls:['vendor/babel.min.js'] },
     // ドメインロジック(純粋関数)。テストで使い回すため#appsrcの外へ切り出したもの。
     { key:'i18n',       urls:['src/domain/i18n.js'] },
+    { key:'units',      urls:['src/domain/units.js'] },
     { key:'oneRm',      urls:['src/domain/oneRm.js'] },
     { key:'storage',    urls:['src/domain/storage.js'] },
     { key:'backupValidation', urls:['src/domain/backupValidation.js'] },
@@ -211,7 +212,7 @@ const DRAFT_KEY = "workout-draft-v1"; // 入力途中の記録(アプリが落�
 const PRE_IMPORT_BACKUP_KEY = "workout-log-v1-pre-import"; // バックアップ復元前のデータ退避(復元に失敗した場合の保険)
 // ヘッダーのバージョンバッジとバックアップのappVersionで共有する単一の定数。
 // sw.js の CACHE 定数とは tests/version.test.js が数字の一致を機械的に縛っている(CLAUDE.md参照)。
-const APP_VERSION = "v82";
+const APP_VERSION = "v83";
 // store(保存レイヤ)は src/domain/storage.js へ移設(テストのため)。
 // LIBSで<script src>読み込み済みなのでグローバルの store をそのまま参照できる。
 const uid = () => Math.random().toString(36).slice(2, 8);
@@ -255,6 +256,9 @@ const defaultProfile = (p) => ({
   // 表示言語。ここはフィールドを列挙する形なので、書かないと保存済みの設定が読み込み時に落ちる。
   // null は「未設定=端末の言語に従う」の意味(resolveLangがnavigator.languageを見る)。
   lang: p?.lang ?? null,
+  // 表示単位。lang と同じく null は「未設定=端末に従う」。言語とは独立したスイッチ
+  // (日本語UIでlb、英語UIでkg のどちらもあり得るため)。保存される重量は常にkg。
+  unit: p?.unit ?? null,
 });
 
 // extractWorkoutsArray・validateWorkoutsShapeは src/domain/backupValidation.js へ移設(テストのため)。
@@ -698,7 +702,7 @@ class ErrorBoundary extends React.Component {
 }
 
 // 新規インストール時、および全データ削除後の既定値(clearAllで再利用し、削除直後に古いprofileが復活しないようにする)
-const DEFAULT_PROFILE = { bodyweight: 70, soundOn: true, defTargetReps: 10, defIncrement: 2.5, lang: null };
+const DEFAULT_PROFILE = { bodyweight: 70, soundOn: true, defTargetReps: 10, defIncrement: 2.5, lang: null, unit: null };
 
 // ================= アプリ本体 =================
 function App() {
@@ -711,6 +715,10 @@ function App() {
   // useEffectではなくレンダリング中(useMemo)に反映する。
   const lang = useMemo(() => setLang(resolveLang(profile.lang, navigator.language)), [profile.lang]);
   useEffect(() => { document.documentElement.lang = lang; }, [lang]);
+  // 表示単位も同じ理由でレンダリング中に同期する。保存される重量は常にkgで、
+  // ここで切り替わるのは表示と入力欄の解釈だけ(保存済みのデータは書き換えない)。
+  const unit = useMemo(() => setUnit(resolveUnit(profile.unit, navigator.language)), [profile.unit]);
+  const prevUnitRef = useRef(null);
   const [recentNames, setRecentNames] = useState([]); // 選択履歴順
   const [customExercises, setCustomExercises] = useState([]); // 永続保存するカスタム種目 [{n,m,eq,t,db,bw}]
   const [exerciseNotes, setExerciseNotes] = useState({}); // 種目ごとの固定メモ {種目名: "メモ"}
@@ -756,6 +764,23 @@ function App() {
   const [hideBackupNag, setHideBackupNag] = useState(false); // このセッション中は非表示
   const [offerSaveAsMenu, setOfferSaveAsMenu] = useState(null); // 分割未設定で初めて記録を保存した直後、その記録{name, muscles, exercises}をメニュー化するか尋ねる
   const [editWorkout, setEditWorkout] = useState(null); // 編集中の記録 {index, draft}
+  // 記録中の入力値(today・編集中の記録)は保存前の文字列で、表示単位のまま持っている。
+  // 単位を切り替えたらここで読み替えないと「135」がlbからkgに化けて別物の記録になる。
+  // 起動時の読み込み(loadedがfalse→true)では換算しない。下書きは切り替え前の単位で
+  // 保存されており、profile.unitも同時に復元されるので、すでに辻褄が合っているため。
+  useEffect(() => {
+    // 読み込みが終わるまでは記録もしない。読み込み前の既定値(端末の言語から決めた単位)を
+    // prevとして覚えてしまうと、保存済みのprofile.unitが入った瞬間に「ユーザーが切り替えた」
+    // と誤認して下書きを換算してしまう(実際にそれで135lbが297.5lbに化けた)。
+    if (!loaded) return;
+    const prev = prevUnitRef.current;
+    prevUnitRef.current = unit;
+    if (prev == null || prev === unit) return;
+    const conv = (sets) => sets.map(s => ({ ...s, weight: convWeightStr(s.weight, prev, unit) }));
+    setToday(t => t.map(ex => ({ ...ex, sets: conv(ex.sets) })));
+    setEditWorkout(ew => ew && ({ ...ew, draft: { ...ew.draft,
+      exercises: ew.draft.exercises.map(ex => ({ ...ex, sets: conv(ex.sets) })) } }));
+  }, [unit, loaded]);
   const [editAddSearch, setEditAddSearch] = useState("");  // 履歴編集で種目を追加するときの検索語
   const [exSettingSearch, setExSettingSearch] = useState(""); // 設定タブの種目検索
   const [exSettingMuscle, setExSettingMuscle] = useState(""); // 設定タブの種目を部位で絞り込む(空なら使用中の種目)
@@ -1110,7 +1135,7 @@ function App() {
     const isDb = resolveIsDb(ex.name, ex.isDb);
     // 「あと何回できた?」を入力したセットのみ = 実際に行ったセット
     return ex.sets.filter(s => !s.warmup && !s.assisted && s.rir !== "" && s.rir != null).reduce((max, s) => {
-      const eff = effWeight(num(s.weight), isDb, ex.bwFactor || 0, profile.bodyweight);
+      const eff = effWeight(fromU(s.weight), isDb, ex.bwFactor || 0, profile.bodyweight);
       return Math.max(max, est1RM(eff, Math.round(num(s.reps))));
     }, 0);
   };
@@ -1118,7 +1143,7 @@ function App() {
   const liveMaxWeight = (ex) => {
     const isDb = resolveIsDb(ex.name, ex.isDb);
     return ex.sets.filter(s => !s.warmup && !s.assisted && Math.round(num(s.reps)) > 0 && s.rir !== "" && s.rir != null).reduce((max, s) => {
-      return Math.max(max, effWeight(num(s.weight), isDb, ex.bwFactor || 0, profile.bodyweight));
+      return Math.max(max, effWeight(fromU(s.weight), isDb, ex.bwFactor || 0, profile.bodyweight));
     }, 0);
   };
 
@@ -1171,8 +1196,8 @@ function App() {
   const liveVolume = useMemo(() => today.reduce((a, ex) => {
     const isDb = resolveIsDb(ex.name, ex.isDb);
     const rom = resolveRom(ex.name, ex.rom);
-    return a + ex.sets.filter(isDoneSet).reduce((b, s) => b + effWeight(num(s.weight), isDb, ex.bwFactor || 0, profile.bodyweight) * Math.round(num(s.reps)) * rom, 0);
-  }, 0), [today, profile.bodyweight, exerciseOverrides]);
+    return a + ex.sets.filter(isDoneSet).reduce((b, s) => b + effWeight(fromU(s.weight), isDb, ex.bwFactor || 0, profile.bodyweight) * Math.round(num(s.reps)) * rom, 0);
+  }, 0), [today, profile.bodyweight, exerciseOverrides, unit]);
 
   // 比較基準は「同じセッション」の記録。前回1回と直近3回の平均の両方を出す。
   // (前回がたまたま不調だった場合に備え、平均も見られるようにする)
@@ -1355,8 +1380,8 @@ function App() {
       const p = it.prescription;
       // 前回のセット構成があればそれをそのまま、なければ目標回数で組む
       const sets = p.prevSets
-        ? p.prevSets.map(s => ({ weight: String(s.weight), reps: String(s.reps), rir: "", warmup: !!s.warmup, ...(s.assisted ? { assisted: true } : {}) }))
-        : p.targetReps.map(r => ({ weight: String(p.weight), reps: String(r), rir: "", warmup: false }));
+        ? p.prevSets.map(s => ({ weight: wStr(s.weight), reps: String(s.reps), rir: "", warmup: !!s.warmup, ...(s.assisted ? { assisted: true } : {}) }))
+        : p.targetReps.map(r => ({ weight: wStr(p.weight), reps: String(r), rir: "", warmup: false }));
       return { id: uid(), name: p.name, muscle: p.muscle, bwFactor: p.bwFactor, isDb: p.isDb, rom: p.rom ?? 1.0,
         repLow: p.repLow, repHigh: p.repHigh, targetRirLow: p.targetRirLow, targetRirHigh: p.targetRirHigh, increment: p.increment,
         formBroke: false, pain: false, sets };
@@ -1371,14 +1396,14 @@ function App() {
       || [...workouts].reverse().find(x => x.exercises.some(e => e.name === name));
     const prevEx = prevW?.exercises.find(e => e.name === name);
     return prevEx
-      ? prevEx.sets.map(x => ({ weight: String(x.weight), reps: String(x.reps), rir: "", warmup: !!x.warmup, ...(x.assisted ? { assisted: true } : {}) }))
+      ? prevEx.sets.map(x => ({ weight: wStr(x.weight), reps: String(x.reps), rir: "", warmup: !!x.warmup, ...(x.assisted ? { assisted: true } : {}) }))
       : [{ weight: "0", reps: "0", rir: "", warmup: false }];
   };
   const addExercise = (name, meta, at = insertAt) => {
     const n = (name || "").trim(); if (!n) return;
     ensureStarted();
     const cfg = meta ? { ...lastConfig(n), ...meta } : lastConfig(n);
-    const w = cfg.lastWeight != null ? String(cfg.lastWeight) : "0";
+    const w = cfg.lastWeight != null ? wStr(cfg.lastWeight) : "0";
     // 内蔵にもカスタムにも無い種目は、カスタム種目として永続登録(次回以降も一覧に出る)
     const known = allExercises.some(e => e.n === n);
     const nextCustom = known ? customExercises : [...customExercises, {
@@ -1542,7 +1567,7 @@ function App() {
       sets: ex.sets
         .filter(s => Math.round(num(s.reps)) > 0 && (s.warmup || (s.rir !== "" && s.rir != null)))
         .map(s => ({
-          weight: num(s.weight), reps: Math.round(num(s.reps)), warmup: !!s.warmup,
+          weight: fromU(s.weight), reps: Math.round(num(s.reps)), warmup: !!s.warmup,
           ...(s.assisted ? { assisted: true } : {}),
           ...(s.rir !== "" && s.rir != null ? { rir: num(s.rir) } : {}),
         })),
@@ -1666,7 +1691,7 @@ function App() {
         exercises: w.exercises.map(ex => ({
           ...ex,
           sets: ex.sets.map(s => ({
-            weight: String(s.weight), reps: String(s.reps),
+            weight: wStr(s.weight), reps: String(s.reps),
             rir: s.rir != null ? s.rir : "", warmup: !!s.warmup,
           })),
         })),
@@ -1760,7 +1785,7 @@ function App() {
       sets: ex.sets
         .filter(s => Math.round(num(s.reps)) > 0 && (s.warmup || (s.rir !== "" && s.rir != null)))
         .map(s => ({
-          weight: num(s.weight), reps: Math.round(num(s.reps)), warmup: !!s.warmup,
+          weight: fromU(s.weight), reps: Math.round(num(s.reps)), warmup: !!s.warmup,
           ...(s.assisted ? { assisted: true } : {}),
           ...(s.rir !== "" && s.rir != null ? { rir: num(s.rir) } : {}),
         })),
@@ -1797,7 +1822,7 @@ function App() {
     const vol = Math.round(w.exercises.reduce((a, ex) => a + exVolume(ex), 0));
     const meta = [];
     if (w.durationMin != null) meta.push(`${w.durationMin}分`);
-    meta.push(`総ボリューム ${vol.toLocaleString()}kg`);
+    meta.push(`総ボリューム ${Math.round(toU(vol)).toLocaleString()}${uLabel()}`);
     lines.push(meta.join(" / "));
     lines.push("");
 
@@ -1810,9 +1835,9 @@ function App() {
         const tags = [];
         if (s.warmup) tags.push("W");
         if (s.assisted) tags.push("補助");
-        const unit = ex.isDb ? "kg(片手)" : "kg";
+        const unit = ex.isDb ? `${uLabel()}(片手)` : uLabel();
         const rir = s.rir != null ? ` 余力${s.rir}` : "";
-        lines.push(`  ${s.warmup ? "W" : j + 1}. ${s.weight}${unit} × ${s.reps}回${rir}${tags.length && !s.warmup ? ` [${tags.join("/")}]` : ""}`);
+        lines.push(`  ${s.warmup ? "W" : j + 1}. ${wU(s.weight)}${unit} × ${s.reps}回${rir}${tags.length && !s.warmup ? ` [${tags.join("/")}]` : ""}`);
       });
       if (exerciseNotes[ex.name]) lines.push(`  📌 ${exerciseNotes[ex.name]}`);
       lines.push("");
@@ -1878,12 +1903,12 @@ function App() {
   };
 
   const exportCSV = () => {
-    const rows = [["日付", "セッション", "種目", "部位", "セット", "種別", "重量kg", "回数", "あと何回"]];
+    const rows = [["日付", "セッション", "種目", "部位", "セット", "種別", `重量${uLabel()}`, "回数", "あと何回"]];
     workouts.forEach(w => {
       const d = new Date(w.date);
       const date = `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`;
       w.exercises.forEach(ex => ex.sets.forEach((s, i) => {
-        rows.push([date, w.session || "", ex.name, ex.muscle || "", i + 1, s.warmup ? "W" : "ワーキング", s.weight, s.reps, s.rir ?? ""]);
+        rows.push([date, w.session || "", ex.name, ex.muscle || "", i + 1, s.warmup ? "W" : "ワーキング", wU(s.weight), s.reps, s.rir ?? ""]);
       }));
     });
     const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
@@ -1983,14 +2008,14 @@ function App() {
       const best = ws.reduce((max, s) => Math.max(max, est1RM(setEff(ex, s), s.reps)), 0);
       return {
         date: `${d.getMonth() + 1}/${d.getDate()}`,
-        最大重量: Math.max(...ws.map(s => s.weight)),
-        推定1RM: Math.round(best * 10) / 10,
+        最大重量: wU(Math.max(...ws.map(s => s.weight))),
+        推定1RM: Math.round(toU(best) * 10) / 10,
       };
     }).filter(Boolean);
   }, [workouts, chartExercise, profile.bodyweight]);
   const volumeTrend = useMemo(() => workouts.map(w => {
     const d = new Date(w.date);
-    return { date: `${d.getMonth() + 1}/${d.getDate()}`, 総ボリューム: Math.round(w.exercises.reduce((a, ex) => a + exVolume(ex), 0)) };
+    return { date: `${d.getMonth() + 1}/${d.getDate()}`, 総ボリューム: Math.round(toU(w.exercises.reduce((a, ex) => a + exVolume(ex), 0))) };
   }), [workouts, profile.bodyweight]);
   // 週単位(月曜始まり)の合計ボリューム推移
   const weeklyVolumeTrend = useMemo(() => {
@@ -2006,7 +2031,7 @@ function App() {
     });
     return Object.values(buckets).sort((a, b) => a.key - b.key).map(b => ({
       date: `${b.monday.getMonth() + 1}/${b.monday.getDate()}週`,
-      総ボリューム: Math.round(b.vol),
+      総ボリューム: Math.round(toU(b.vol)),
     }));
   }, [workouts, profile.bodyweight]);
   const trainedMuscles = useMemo(() => {
@@ -2183,7 +2208,7 @@ function App() {
                 ボリューム{compareBase && liveVolume > 0 ? ` (vs ${compareBase.avgLabel})` : ""}
               </div>
               <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: 30, lineHeight: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                {Math.round(liveVolume).toLocaleString()}<span style={{ fontSize: 13, color: C.muted, marginLeft: 1 }}>kg</span>
+                {Math.round(toU(liveVolume)).toLocaleString()}<span style={{ fontSize: 13, color: C.muted, marginLeft: 1 }}>{uLabel()}</span>
               </div>
               {compareBase && compareBase.avg > 0 && liveVolume > 0 && (() => {
                 const pct = (liveVolume / compareBase.avg) * 100;
@@ -2192,7 +2217,7 @@ function App() {
                   <div style={{ fontSize: 12, marginTop: 2, fontWeight: 700, color: pct >= 100 ? C.green : pct >= 90 ? C.yellow : C.red }}>
                     {pct.toFixed(0)}%
                     <span style={{ color: C.muted, fontWeight: 400, marginLeft: 4 }}>
-                      平均{Math.round(compareBase.avg).toLocaleString()}
+                      平均{Math.round(toU(compareBase.avg)).toLocaleString()}
                     </span>
                   </div>
                 );
@@ -2337,7 +2362,7 @@ function App() {
                       </div>
                     ) : (
                       <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 18, fontWeight: 600, color: C.muted }}>
-                        {p.weight}<span style={{ fontSize: 12, color: C.muted }}>{p.bwFactor > 0 ? "kg加重" : p.isDb ? "kg片手" : "kg"}</span>
+                        {wU(p.weight)}<span style={{ fontSize: 12, color: C.muted }}>{uLabel()}{p.bwFactor > 0 ? "加重" : p.isDb ? "片手" : ""}</span>
                         {" × "}<span style={{ fontSize: 15 }}>{repsLabel(p.targetReps)}</span>
                       </div>
                     )}
@@ -2464,18 +2489,18 @@ function App() {
               {(() => {
                 if (!ins) return null;
                 const hasStreak = ins.streak >= 2, hasTrend = ins.trend.length >= 2;
-                const unit = ins.isDb ? "kg(片手)" : "kg";
+                const unit = ins.isDb ? `${uLabel()}(片手)` : uLabel();
                 return (
                   <div style={{ background: C.bg, borderRadius: 10, padding: "6px 10px", marginBottom: 10, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
                     <span style={{ fontSize: 12, color: C.muted }}>前回 {fmtDate(ins.date)}</span>
                     {hasStreak && (
                       <span style={{ fontSize: 12, color: ins.streak >= 4 ? C.yellow : C.muted }}>
-                        {ins.topWeight}{unit} で <strong>{ins.streak}回連続</strong>
+                        {wU(ins.topWeight)}{unit} で <strong>{ins.streak}回連続</strong>
                       </span>
                     )}
                     {hasTrend && (
                       <span style={{ fontSize: 12, color: C.muted }}>
-                        推移 {ins.trend.join(" → ")}
+                        推移 {ins.trend.map(wU).join(" → ")}
                       </span>
                     )}
                   </div>
@@ -2496,7 +2521,7 @@ function App() {
                 const diff = live1RM > 0 && best1RM > 0 ? live1RM - best1RM : null;
                 const pct = diff != null && best1RM > 0 ? (live1RM / best1RM) * 100 : null;
                 const daysSincePR = pr?.date ? Math.floor((Date.now() - new Date(pr.date).getTime()) / 86400000) : null;
-                const unit = ex.bwFactor > 0 ? "kg(体重込)" : resolveIsDb(ex.name, ex.isDb) ? "kg(両手計)" : "kg";
+                const unit = ex.bwFactor > 0 ? `${uLabel()}(体重込)` : resolveIsDb(ex.name, ex.isDb) ? `${uLabel()}(両手計)` : uLabel();
                 return (
                   <div style={{ background: C.bg, borderRadius: 10, padding: "10px 12px", marginBottom: 10 }}>
                     {/* 対比 */}
@@ -2506,9 +2531,9 @@ function App() {
                           過去の自分{pr?.date ? `(${fmtDate(pr.date)})` : ""}
                         </div>
                         <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 24, fontWeight: 800, color: C.yellow, lineHeight: 1 }}>
-                          {best1RM > 0 ? best1RM.toFixed(1) : "—"}<span style={{ fontSize: 11, color: C.muted }}>kg</span>
+                          {best1RM > 0 ? toU(best1RM).toFixed(1) : "—"}<span style={{ fontSize: 11, color: C.muted }}>{uLabel()}</span>
                         </div>
-                        <div style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>{pr?.weight > 0 ? `${pr.weight}kg×${pr.reps}回` : "Max 1RM"}</div>
+                        <div style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>{pr?.weight > 0 ? `${wU(pr.weight)}${uLabel()}×${pr.reps}回` : "Max 1RM"}</div>
                       </div>
 
                       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", flexShrink: 0, minWidth: 46 }}>
@@ -2526,7 +2551,7 @@ function App() {
                       <div style={{ flex: 1, textAlign: "center" }}>
                         <div style={{ fontSize: 10, color: isPR1RM ? C.green : C.muted, marginBottom: 2, fontWeight: isPR1RM ? 800 : 400 }}>今日の自分</div>
                         <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 24, fontWeight: 800, color: isPR1RM ? C.green : C.text, lineHeight: 1 }}>
-                          {live1RM > 0 ? live1RM.toFixed(1) : "—"}<span style={{ fontSize: 11, color: C.muted }}>kg</span>
+                          {live1RM > 0 ? toU(live1RM).toFixed(1) : "—"}<span style={{ fontSize: 11, color: C.muted }}>{uLabel()}</span>
                         </div>
                         <div style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>推定1RM</div>
                       </div>
@@ -2556,7 +2581,7 @@ function App() {
                           YOU WIN!
                         </div>
                         <div style={{ fontSize: 12, color: C.text, marginTop: 5 }}>
-                          過去の自分に勝利(<strong style={{ color: C.yellow }}>+{(live1RM - best1RM).toFixed(1)}kg</strong>)
+                          過去の自分に勝利(<strong style={{ color: C.yellow }}>+{toU(live1RM - best1RM).toFixed(1)}{uLabel()}</strong>)
                         </div>
                       </div>
                     )}
@@ -2565,12 +2590,12 @@ function App() {
                     <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginTop: 8 }}>
                       {isPR1RM && best1RM === 0 && (
                         <span style={{ background: C.yellow, color: "#141517", borderRadius: 999, padding: "3px 11px", fontSize: 12, fontWeight: 800 }}>
-                          ⚡ 初回記録 {live1RM.toFixed(1)}kg
+                          ⚡ 初回記録 {toU(live1RM).toFixed(1)}{uLabel()}
                         </span>
                       )}
                       {isPRw && (
                         <span style={{ background: C.green, color: "#fff", borderRadius: 999, padding: "3px 11px", fontSize: 12, fontWeight: 800 }}>
-                          🏆 最大重量 {liveW.toFixed(1)}{unit}
+                          🏆 最大重量 {toU(liveW).toFixed(1)}{unit}
                         </span>
                       )}
                       {!isPR1RM && daysSincePR != null && (
@@ -2579,7 +2604,7 @@ function App() {
                         </span>
                       )}
                       {!isPRw && bestW > 0 && (
-                        <span style={{ fontSize: 11, color: C.muted }}>最大重量 {bestW.toFixed(1)}{unit}</span>
+                        <span style={{ fontSize: 11, color: C.muted }}>最大重量 {toU(bestW).toFixed(1)}{unit}</span>
                       )}
                     </div>
                   </div>
@@ -2602,7 +2627,7 @@ function App() {
                           <span style={{ fontSize: 13, fontWeight: 700, color: hi === 0 ? C.text : C.muted }}>
                             {fmtDate(h.date)}{hi === 0 && <span style={{ color: C.blue, fontSize: 11, marginLeft: 6 }}>前回</span>}
                           </span>
-                          <span style={{ fontSize: 12, color: C.yellow, flexShrink: 0 }}>{Math.round(h.volume).toLocaleString()}kg</span>
+                          <span style={{ fontSize: 12, color: C.yellow, flexShrink: 0 }}>{Math.round(toU(h.volume)).toLocaleString()}{uLabel()}</span>
                         </div>
                         <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.6, wordBreak: "break-word" }}>
                           {h.ex.sets.map(s => `${s.warmup ? "W:" : ""}${s.assisted ? "補:" : ""}${s.weight}×${s.reps}${s.rir != null ? `(RIR${s.rir})` : ""}`).join(" / ")}
@@ -2657,7 +2682,7 @@ function App() {
 
               <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 4 }}>
                 <span style={{ width: 20 }} />
-                <span style={{ flex: 1.3, ...fieldLabel }}>{ex.bwFactor > 0 ? "加重 kg" : resolveIsDb(ex.name, ex.isDb) ? "重量 kg/片手" : "重量 kg"}</span>
+                <span style={{ flex: 1.3, ...fieldLabel }}>{ex.bwFactor > 0 ? `加重 ${uLabel()}` : resolveIsDb(ex.name, ex.isDb) ? `重量 ${uLabel()}/片手` : `重量 ${uLabel()}`}</span>
                 <span style={{ flex: 1, ...fieldLabel }}>回数</span>
                 <span style={{ width: 26 }} />
                 <span style={{ flex: 2.4, ...fieldLabel }}>あと何回できた?<span style={{ opacity: 0.7 }}>(RIR)</span></span>
@@ -2666,10 +2691,10 @@ function App() {
 
               {ex.sets.map((s, i) => {
                 const wsIndex = ex.sets.slice(0, i + 1).filter(x => !x.warmup).length; // ワーキング通し番号
-                const inc = num(ex.increment) || 2.5;
+                const inc = incU(num(ex.increment) || 2.5);
                 const done = s.warmup || (s.rir !== "" && s.rir != null); // 実施済みか
                 // このセットの推定1RM(ウォームアップ・補助は対象外)
-                const setW = num(s.weight), setR = Math.round(num(s.reps));
+                const setW = fromU(s.weight), setR = Math.round(num(s.reps));
                 const set1RM = (!s.warmup && !s.assisted && setW > 0 && setR > 0 && s.rir !== "" && s.rir != null)
                   ? est1RM(effWeight(setW, resolveIsDb(ex.name, ex.isDb), ex.bwFactor || 0, profile.bodyweight), setR)
                   : 0;
@@ -2680,7 +2705,7 @@ function App() {
                   ex.sets.forEach((x, xi) => {
                     if (x.warmup || x.assisted) return;
                     if (x.rir === "" || x.rir == null) return; // 未実施は対象外
-                    const w = num(x.weight), r = Math.round(num(x.reps));
+                    const w = fromU(x.weight), r = Math.round(num(x.reps));
                     if (w <= 0 || r <= 0) return;
                     const v = est1RM(effWeight(w, resolveIsDb(ex.name, ex.isDb), ex.bwFactor || 0, profile.bodyweight), r);
                     if (v > bv) { bv = v; bi = xi; }
@@ -2715,7 +2740,7 @@ function App() {
                     </button>
                     <NumInput inputMode="decimal" value={s.weight} placeholder="0"
                       onBlur={() => { if ((num(s.weight) > 0 || num(s.reps) > 0) && isLastInGroup(exIdx)) startRest(); }}
-                      onChange={e => updateSet(ex.id, i, "weight", e.target.value)} aria-label={`セット${i + 1}の重量(kg)`} style={{ ...numInput, flex: 1.3, opacity: s.warmup ? 0.6 : 1 }} />
+                      onChange={e => updateSet(ex.id, i, "weight", e.target.value)} aria-label={`セット${i + 1}の重量(${uLabel()})`} style={{ ...numInput, flex: 1.3, opacity: s.warmup ? 0.6 : 1 }} />
                     <NumInput inputMode="numeric" value={s.reps} placeholder="0"
                       onBlur={() => { if ((num(s.weight) > 0 || num(s.reps) > 0) && isLastInGroup(exIdx)) startRest(); }}
                       onChange={e => updateSet(ex.id, i, "reps", e.target.value)} aria-label={`セット${i + 1}の回数`} style={{ ...numInput, flex: 1, opacity: s.warmup ? 0.6 : 1 }} />
@@ -2738,12 +2763,12 @@ function App() {
                     <div style={{ display: "flex", alignItems: "center", gap: 8, paddingLeft: 30, marginTop: 3, flexWrap: "wrap" }}>
                       {set1RM > 0 && (
                         <span style={{ fontSize: 11, color: isSetPR ? C.green : C.muted }}>
-                          推定1RM {set1RM.toFixed(1)}kg
+                          推定1RM {toU(set1RM).toFixed(1)}{uLabel()}
                         </span>
                       )}
                       {isSetPR && (
                         <span style={{ background: C.yellow, color: "#141517", borderRadius: 999, padding: "1px 8px", fontSize: 11, fontWeight: 800 }}>
-                          ⚡ 1RM更新 +{(set1RM - pastBest1RM).toFixed(1)}kg
+                          ⚡ 1RM更新 +{toU(set1RM - pastBest1RM).toFixed(1)}{uLabel()}
                         </span>
                       )}
                       {prevSet && (
@@ -3030,7 +3055,7 @@ function App() {
                   {weekly.totalVol > 0 && (
                     <div style={{ textAlign: "right" }}>
                       <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: 18 }}>
-                        {Math.round(weekly.totalVol).toLocaleString()}kg
+                        {Math.round(toU(weekly.totalVol)).toLocaleString()}{uLabel()}
                       </span>
                       {weekly.prevTotalVol > 0 && (() => {
                         const pct = Math.round(((weekly.totalVol - weekly.prevTotalVol) / weekly.prevTotalVol) * 100);
@@ -3053,7 +3078,7 @@ function App() {
                         <span>{muscleName(m)}</span>
                         <span style={{ color: C.muted, textAlign: "right" }}>
                           <span style={{ color: C.yellow, fontWeight: 700 }}>{v.sets}セット</span>
-                          <span style={{ marginLeft: 8 }}>{Math.round(v.vol).toLocaleString()}kg</span>
+                          <span style={{ marginLeft: 8 }}>{Math.round(toU(v.vol)).toLocaleString()}{uLabel()}</span>
                           {pct != null && (
                             <span style={{ marginLeft: 6, fontWeight: 700, color: pct >= 0 ? C.green : C.red }}>
                               {pct >= 0 ? "+" : ""}{pct}%
@@ -3104,7 +3129,7 @@ function App() {
                         <CartesianGrid stroke={C.border} strokeDasharray="3 3" />
                         <XAxis dataKey="date" stroke={C.muted} fontSize={11} tickLine={false} />
                         <YAxis stroke={C.muted} fontSize={11} tickLine={false} width={44} />
-                        <Tooltip contentStyle={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 13, color: C.text }} formatter={v => [`${v.toLocaleString()}kg`, "総ボリューム"]} />
+                        <Tooltip contentStyle={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 13, color: C.text }} formatter={v => [`${v.toLocaleString()}${uLabel()}`, "総ボリューム"]} />
                         <Line type="monotone" dataKey="総ボリューム" stroke={C.green} strokeWidth={2.5} dot={{ r: 3, fill: C.green }} />
                       </LineChart>
                     </ResponsiveContainer>
@@ -3116,7 +3141,7 @@ function App() {
                         <CartesianGrid stroke={C.border} strokeDasharray="3 3" />
                         <XAxis dataKey="date" stroke={C.muted} fontSize={11} tickLine={false} />
                         <YAxis stroke={C.muted} fontSize={11} tickLine={false} width={44} />
-                        <Tooltip contentStyle={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 13, color: C.text }} formatter={v => [`${v.toLocaleString()}kg`, "週合計"]} />
+                        <Tooltip contentStyle={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 13, color: C.text }} formatter={v => [`${v.toLocaleString()}${uLabel()}`, "週合計"]} />
                         <Bar dataKey="総ボリューム" fill={C.blue} radius={[4, 4, 0, 0]} />
                       </BarChart>
                     </ResponsiveContainer>
@@ -3134,7 +3159,7 @@ function App() {
                           <CartesianGrid stroke={C.border} strokeDasharray="3 3" />
                           <XAxis dataKey="date" stroke={C.muted} fontSize={11} tickLine={false} />
                           <YAxis stroke={C.muted} fontSize={11} tickLine={false} width={44} />
-                          <Tooltip contentStyle={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 13, color: C.text }} formatter={v => [`${v.toLocaleString()}kg`, volMuscle]} />
+                          <Tooltip contentStyle={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 13, color: C.text }} formatter={v => [`${v.toLocaleString()}${uLabel()}`, volMuscle]} />
                           <Line type="monotone" dataKey="ボリューム" stroke={C.blue} strokeWidth={2.5} dot={{ r: 3, fill: C.blue }} />
                         </LineChart>
                       </ResponsiveContainer>
@@ -3163,7 +3188,7 @@ function App() {
                       <CartesianGrid stroke={C.border} strokeDasharray="3 3" />
                       <XAxis dataKey="date" stroke={C.muted} fontSize={11} tickLine={false} />
                       <YAxis stroke={C.muted} fontSize={11} tickLine={false} domain={["dataMin - 2", "dataMax + 2"]} />
-                      <Tooltip contentStyle={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 13, color: C.text }} formatter={(v, n) => [n === "最大重量" ? `${v}kg` : `${v.toLocaleString()}kg`, n]} />
+                      <Tooltip contentStyle={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 13, color: C.text }} formatter={(v, n) => [n === "最大重量" ? `${v}${uLabel()}` : `${v.toLocaleString()}${uLabel()}`, n]} />
                       <Legend wrapperStyle={{ fontSize: 12, color: C.muted }} />
                       <Line type="monotone" dataKey="最大重量" stroke={C.red} strokeWidth={2.5} dot={{ r: 4, fill: C.red }} />
                       <Line type="monotone" dataKey="推定1RM" stroke={C.yellow} strokeWidth={2} strokeDasharray="4 3" dot={{ r: 3, fill: C.yellow }} />
@@ -3281,7 +3306,7 @@ function App() {
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 10, fontSize: 12, color: C.muted, marginBottom: 8 }}>
                   {w.startAt && <span>{fmtTime(w.startAt)}〜{w.endAt ? fmtTime(w.endAt) : ""}</span>}
                   {w.durationMin != null && <span>{w.durationMin}分</span>}
-                  <span style={{ color: C.yellow }}>{Math.round(w.exercises.reduce((a, ex) => a + exVolume(ex), 0)).toLocaleString()}kg</span>
+                  <span style={{ color: C.yellow }}>{Math.round(toU(w.exercises.reduce((a, ex) => a + exVolume(ex), 0))).toLocaleString()}{uLabel()}</span>
                   {w.kcal != null && <span>約{w.kcal}kcal</span>}
                 </div>
               )}
@@ -3316,7 +3341,7 @@ function App() {
                     {ex.formBroke && <span style={{ color: C.yellow, marginLeft: 4 }}>△</span>}
                     {hasPR && (
                       <span style={{ background: C.yellow, color: "#141517", fontSize: 10, fontWeight: 800, borderRadius: 4, padding: "1px 6px", marginLeft: 6 }}>
-                        ⚡1RM {prVal.toFixed(1)}kg
+                        ⚡1RM {toU(prVal).toFixed(1)}{uLabel()}
                       </span>
                     )}
                   </div>
@@ -3352,7 +3377,7 @@ function App() {
                       </div>
                       <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 4 }}>
                         <span style={{ width: 22 }} />
-                        <span style={{ flex: 1.3, ...fieldLabel }}>重量</span>
+                        <span style={{ flex: 1.3, ...fieldLabel }}>重量 {uLabel()}</span>
                         <span style={{ flex: 1, ...fieldLabel }}>回数</span>
                         <span style={{ flex: 1, ...fieldLabel }}>余力</span>
                         <span style={{ width: 24 }} />
@@ -3444,10 +3469,10 @@ function App() {
                   <div style={{ display: "flex", alignItems: "center", fontSize: 13 }}>
                     <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{exName(name)}</span>
                     <span style={{ width: 76, textAlign: "right", fontFamily: "'Barlow Condensed', sans-serif", fontSize: 17, fontWeight: 600, color: C.yellow }}>
-                      {pr.bestWeight.toFixed(1)}<span style={{ fontSize: 11, color: C.muted }}>kg</span>
+                      {toU(pr.bestWeight).toFixed(1)}<span style={{ fontSize: 11, color: C.muted }}>{uLabel()}</span>
                     </span>
                     <span style={{ width: 68, textAlign: "right", fontFamily: "'Barlow Condensed', sans-serif", fontSize: 15, color: C.muted }}>
-                      {pr.best1RM.toFixed(1)}<span style={{ fontSize: 11 }}>kg</span>
+                      {toU(pr.best1RM).toFixed(1)}<span style={{ fontSize: 11 }}>{uLabel()}</span>
                     </span>
                   </div>
                   {days != null && (
@@ -3479,7 +3504,7 @@ function App() {
           <div style={{ background: C.surface, borderRadius: 14, padding: 16, border: `1px solid ${C.border}`, marginBottom: 12 }}>
             <label style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 14 }}>
               体重(自重換算・カロリー計算に使用)
-              <span><NumInput inputMode="decimal" value={profile.bodyweight} onChange={e => persist({ profile: { ...profile, bodyweight: num(e.target.value) } })} style={{ ...cfgInput, width: 70, fontSize: 16 }} /> kg</span>
+              <span><NumInput inputMode="decimal" value={wU(profile.bodyweight)} onChange={e => persist({ profile: { ...profile, bodyweight: fromU(e.target.value) } })} style={{ ...cfgInput, width: 70, fontSize: 16 }} /> {uLabel()}</span>
             </label>
           </div>
 
@@ -3605,6 +3630,20 @@ function App() {
             <p style={{ color: C.muted, fontSize: 13, margin: "10px 0 0", lineHeight: 1.6 }}>
               {t("settings.languageDesc")}
             </p>
+
+            <div style={{ fontSize: 14, fontWeight: 900, margin: "16px 0 10px" }}>{t("settings.unit")}</div>
+            <div role="radiogroup" aria-label={t("settings.unit")} style={{ display: "flex", gap: 8 }}>
+              {SUPPORTED_UNITS.map(code => (
+                <button key={code} role="radio" aria-checked={unit === code}
+                  onClick={() => persist({ profile: { ...profile, unit: code } })}
+                  style={{ ...btn(unit === code ? C.blue : C.surface2, unit === code ? "#fff" : C.text), flex: 1, fontSize: 14, padding: "10px 12px" }}>
+                  {t("unit." + code)}
+                </button>
+              ))}
+            </div>
+            <p style={{ color: C.muted, fontSize: 13, margin: "10px 0 0", lineHeight: 1.6 }}>
+              {t("settings.unitDesc")}
+            </p>
           </div>
 
           <div style={{ background: C.surface, borderRadius: 14, padding: 16, border: `1px solid ${C.border}`, marginBottom: 12 }}>
@@ -3683,7 +3722,7 @@ function App() {
               <div key={i} style={{ borderTop: i > 0 ? `1px solid ${C.border}` : "none", padding: "10px 0" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
                   <span style={{ fontWeight: 700, fontSize: 13 }}>{fmtDate(s.date)}</span>
-                  <span style={{ fontSize: 13, color: C.muted }}>{Math.round(s.volume).toLocaleString()}kg</span>
+                  <span style={{ fontSize: 13, color: C.muted }}>{Math.round(toU(s.volume)).toLocaleString()}{uLabel()}</span>
                 </div>
                 {s.exercises.map((ex, j) => (
                   <div key={j} style={{ marginBottom: 6 }}>

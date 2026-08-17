@@ -38,6 +38,10 @@ const I18N = {
     "settings.languageDesc": "種目名・部位名も切り替わります。記録済みのデータは変わりません。",
     "lang.ja": "日本語",
     "lang.en": "English",
+    "settings.unit": "重量の単位",
+    "settings.unitDesc": "表示と入力の単位だけが変わります。記録は常にkgで保存されるので、切り替えても過去の記録は書き換わりません。",
+    "unit.kg": "kg",
+    "unit.lb": "lb",
     // YouTubeのフォーム検索。表示文言ではなく検索クエリなので、言語ごとに語順ごと変える。
     "youtube.query": "{name} やり方 フォーム",
   },
@@ -46,6 +50,10 @@ const I18N = {
     "settings.languageDesc": "Exercise and muscle names switch too. Your saved records are not changed.",
     "lang.ja": "日本語",
     "lang.en": "English",
+    "settings.unit": "Weight unit",
+    "settings.unitDesc": "This changes display and input only. Records are always stored in kg, so switching does not rewrite your past workouts.",
+    "unit.kg": "kg",
+    "unit.lb": "lb",
     "youtube.query": "{name} how to proper form",
   },
 };

@@ -1,6 +1,6 @@
 // KURABELL+ Service Worker
 // アプリ本体をキャッシュし、オフラインでも起動できるようにする。ライブラリもすべてローカル同梱(CDN不使用)。
-const CACHE = "kurabell-v82";
+const CACHE = "kurabell-v83";
 
 // ネットワーク優先フェッチのタイムアウト(電波が弱い環境でハングし続けるのを防ぐ)
 const NETWORK_TIMEOUT_MS = 4000;
@@ -20,6 +20,7 @@ const APP_ASSETS = [
   "./vendor/recharts.js",
   "./vendor/babel.min.js",
   "./src/domain/i18n.js",
+  "./src/domain/units.js",
   "./src/domain/oneRm.js",
   "./src/domain/storage.js",
   "./src/domain/backupValidation.js",
