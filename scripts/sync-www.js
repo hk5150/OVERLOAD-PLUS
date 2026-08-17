@@ -31,6 +31,7 @@ const VENDOR_FILES = [
 ];
 // #appsrcの外へ切り出したドメインロジック(純粋関数)。<script src>でapp.bundle.jsより先に読み込む必要がある。
 const DOMAIN_FILES = [
+  "i18n.js",
   "oneRm.js",
   "storage.js",
   "backupValidation.js",
