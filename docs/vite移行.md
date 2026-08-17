@@ -67,3 +67,103 @@ GitHub Pages配信用の`index.html`本体は対象外(後述)。
 6. ~~**アクセシビリティ**: viewportの`maximum-scale=1`がピンチズームを殺している~~ → 対応済み(CACHE v64)。viewport metaから`maximum-scale=1`を削除。
 
 すべて対応済み。次にやるとすれば「ビルド化まわり」の2件(実機起動時間の実測、`www/`のminify検討)。
+
+---
+
+# 2026-08-16: 改名・iOS SQLite移行・App Store申請準備
+
+このセクションはビルド化(上記)とは別件。同じ「決定事項メモ」として一箇所にまとめておく。
+
+## 決定事項
+
+### 1. アプリ名を「KURABELL Workout Log」に変更
+
+`OVERLOAD+`という名前が既存アプリ(KOSEI MASUDA氏の「筋トレ・ワークアウト・ジム 記録 - Overload+」)と
+衝突していたため改名。検討順序: OVERLOAD+ → MAESET → KURABELL+ → KURABELL Workout Log(最終)。
+
+- Bundle ID: `com.hajime5150.kurabellplus`(未申請だったため自由に変更できた)
+- App Store掲載名・タイトル類は正式名「KURABELL Workout Log」
+- ホーム画面アイコンラベル・アプリ内ヘッダーロゴは「KURABELL」(コンパクト表記。
+  `manifest.json`の`name`/`short_name`の使い分けと同じ考え方。文字数制限・見切れ対策)
+- リポジトリ名・GitHub Pages URL(`OVERLOAD-PLUS`)は意図的に変更していない
+  (審査上必須ではなく、変更するとリンクが切れるリスクの方が大きいため)
+
+### 2. iOS版の永続化をCapacitor Preferences(UserDefaults)からSQLiteへ移行
+
+数年分のトレーニング履歴を1個のJSON文字列としてUserDefaultsへ毎回丸ごと書き直す設計は、
+性能・破損・保存失敗のリスクがあったため。採用ライブラリは`@capacitor-community/sqlite@^6.0.2`
+(現在のCapacitor 6系と`peerDependencies`が一致する最後の系列)。設計判断・スキーマ・移行手順の
+詳細は[DATA_MIGRATION.md](../DATA_MIGRATION.md)を参照。ここでは要点だけ:
+
+- `workouts`/`workout_exercises`/`sets`のみ正規化。`settings`/`custom_exercises`はキー1行=JSON文字列1個
+  (形の決まっていない小さな設定値をカラム分割すると、フィールド追加のたびにDDL変更が要るため)
+- 旧Preferencesデータからの移行は1回きり・1トランザクション・失敗しても次回起動時に再試行可能
+- `workouts`配列への参照が変わっていない保存(プロフィール編集など)はworkouts系テーブルに触れない
+  最適化(UserDefaults時代の「小さな変更で履歴全体を書き直す」問題を繰り返さないため)
+- Web版は変更なし(引き続きlocalStorage)。`src/domain/storage.js`が`workout-log-v1`キーだけを
+  ネイティブ+SQLiteプラグインが使える環境でSQLite経由にすり替える
+
+### 3. Xcodeシミュレータでの実機相当検証で見つけたバグを修正
+
+`CapacitorSQLite.query()`の戻り値(`values`配列)は、**先頭要素だけが`{"ios_columns":[列名,...]}`
+という特殊なメタデータ行**という仕様だった。Swiftソースの型だけを見て「先頭行も含めて全部が
+`{列名:値}`の行オブジェクト」と誤読して実装し、実機で「settings行のJSON.parseに失敗」という
+バグを引き起こした。`capacitorSqliteDriver.js`に`normalizeRows()`を追加して修正。
+詳細は[DATA_MIGRATION.md](../DATA_MIGRATION.md)の「実機検証で見つけた不具合」を参照。
+
+同じ検証で、旧バージョンからの更新(Preferencesに旧データがある状態からの起動)・二重移行防止・
+前回記録の表示・バックアップ書き出しが実機で正しく動作することも確認済み。
+
+### 4. その他のP0対応
+
+- `support.html`新規作成、Support URLをmailtoから`support.html`のURLに変更
+- Privacy Manifest(`PrivacyInfo.xcprivacy`)にSQLite用のFile Timestamp API宣言(`C617.1`)を追加
+- YouTube検索機能とprivacy.html/APPSTORE.mdの「外部通信なし」表記の矛盾を解消
+  (「主要機能はオフライン、YouTube検索時のみ外部接続」という正確な記述に統一)
+- バックアップJSONに`formatVersion`/`appVersion`/`platform`を追加、復元時の検証を強化
+  (数値異常・日付・未知のformatVersion拒否)
+- 初回起動時に分割設定を強制せず「今すぐ記録する」を選べるように変更。分割未設定での
+  初回記録後に「メニューとして保存しますか?」と提案する導線を追加
+- アクセシビリティ: 未ラベルのアイコンボタンに`aria-label`追加、狭い画面幅(iPhone SE相当)での
+  ボタン折り返し崩れを修正、通知音トグルに`role="switch"`/`aria-checked`を追加
+
+## 変更したファイル(主なもの)
+
+| ファイル | 内容 |
+|---|---|
+| `index.html` | 改名、SQLite関連ファイルのLIBS追加、初回体験改善、a11y修正 |
+| `src/domain/storage.js` | `workout-log-v1`のみSQLite経由に振り分けるルーティングを追加 |
+| `src/domain/db/schema.js` | SQLiteスキーマ定義(新規) |
+| `src/domain/db/migration.js` | 旧JSON⇔SQLite行の変換ロジック(新規) |
+| `src/domain/db/workoutStore.js` | 移行・読み書きのオーケストレーション(新規) |
+| `src/domain/db/capacitorSqliteDriver.js` | ネイティブSQLiteプラグインへの薄いラッパー(新規) |
+| `src/domain/backupValidation.js` | `validateBackupPayload`・formatVersion検証を追加 |
+| `capacitor.config.json` / `ios/App/App/Info.plist` / `ios/App/App.xcodeproj/project.pbxproj` | 改名・SQLiteプラグイン設定 |
+| `ios/App/App/PrivacyInfo.xcprivacy` | File Timestamp API宣言を追加 |
+| `support.html` / `MONETIZATION.md` / `APP_REVIEW_CHECKLIST.md` / `DATA_MIGRATION.md` | 新規作成 |
+| `APPSTORE.md` / `README.md` / `CLAUDE.md` / `IOS_SUBMISSION_GUIDE.md` / `privacy.html` | 改名・内容更新 |
+| `tests/db/*.test.js` / `tests/helpers/fakeSqliteDriver.js` | SQLite永続化層のテスト(新規、node:sqliteのフェイクドライバ使用) |
+
+コミット: `c7ca114`(改名+SQLite移行本体)〜`374e930`(移行検証)。
+
+## 検証内容
+
+- `npm test`: 141件パス(スキーマ・移行・setAll/getAll・storage.js経路切り替え・
+  実機で踏んだ行データ形状の回帰テストを含む)
+- Xcodeシミュレータ(iPhone 17 Pro)で実際にビルド・起動・操作して確認:
+  新規インストール、アプリ完全終了後の再起動、旧バージョンからの更新、二重移行防止、
+  前回記録のUI表示、バックアップ書き出し
+
+## 残っている課題
+
+- **TestFlight/実機(シミュレータでなく物理iPhone)での最終確認は未実施**
+- 機内モード相当のオフライン動作確認はシミュレータでは検証困難だったため未実施
+  (Macのネットワークを切ると他の作業に影響するため。主要機能はコード上もともと
+  通信を必要としない設計)
+- 「すべての履歴を削除」ボタンの実機タップ操作は座標特定が難航し断念
+  (`clearAll()`自体はunit testでSQLite/Preferences両方から削除されることを確認済み)
+- P1のうち休憩タイマーのiOS通知は対象外(現状維持でよいとの指示)
+- P2(可動域係数のオン/オフ、推定1RMの説明改善)は未着手
+- StoreKit実装は未着手(`MONETIZATION.md`で案A「買い切り」を推奨、実装はこれから)
+- ホーム画面に旧Bundle ID(`overloadplus`系)の古いインストールが別アプリとして残っている
+  可能性がある(実機で不要なら手動削除が必要)
