@@ -55,6 +55,23 @@ describe("UI文言のキー集合", () => {
     expect(missingInJa, `jaに無いキー: ${missingInJa.join(", ")}`).toEqual([]);
   });
 
+  it("STRINGSの全エントリが ja と en の両方を持つ", () => {
+    const missing = Object.entries(i18n.STRINGS)
+      .filter(([, v]) => !v || typeof v.ja !== "string" || typeof v.en !== "string")
+      .map(([k]) => k);
+    expect(missing, `ja/enが揃っていないキー: ${missing.join(", ")}`).toEqual([]);
+  });
+
+  // ja側の {name} が en側で {n} になっていると、差し込みが効かず画面に {name} がそのまま出る。
+  // 訳を書き換えたときに一番起きやすい壊れ方なので機械的に落とす。
+  it("プレースホルダの集合が ja と en で一致する", () => {
+    const ph = (s) => [...s.matchAll(/\{(\w+)\}/g)].map(m => m[1]).sort().join(",");
+    const bad = Object.entries(i18n.STRINGS)
+      .filter(([, v]) => ph(v.ja) !== ph(v.en))
+      .map(([k, v]) => `${k}(ja: ${ph(v.ja) || "なし"} / en: ${ph(v.en) || "なし"})`);
+    expect(bad, `プレースホルダが食い違うキー: ${bad.join(" / ")}`).toEqual([]);
+  });
+
   it("値が空文字のキーが無い", () => {
     for (const lang of ["ja", "en"]) {
       for (const [k, v] of Object.entries(i18n.I18N[lang])) {
