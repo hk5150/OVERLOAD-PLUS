@@ -17,6 +17,7 @@ const ROOT = path.join(__dirname, "..");
 // コピーすると cache.addAll() が必ず失敗し install が永久に完了しない(=無言で壊れる)。
 const STATIC_FILES = [
   "manifest.json",
+  "manifest.en.json",
   "icon-192.png",
   "icon-512.png",
   "icon-maskable-512.png",
@@ -98,31 +99,47 @@ function build(dest) {
   fs.writeFileSync(path.join(dest, "app.bundle.js"), code);
 
   // ---- ブート用スクリプト(ライブラリを順に読み込み→app.bundle.jsを読み込むだけ。Babel/evalは使わない) ----
+  //
+  // <script src> は上の VENDOR_FILES / DOMAIN_FILES / DB_DOMAIN_FILES から組み立てる。
+  // かつてここに同じ並びを手で書いていたため、「コピー対象には足したが読み込みに足し忘れる」
+  // という取りこぼしが起きた(i18n.js と units.js が www/ に置かれるだけで読み込まれず、
+  // iOS版が t() 未定義で起動しない状態になっていた)。並びを1箇所から導出して構造的に防ぐ。
+  const scriptTag = (src) => `<script src="${src}"></script>`;
+  const libTags = [
+    ...VENDOR_FILES.map((f) => scriptTag(`vendor/${f}`)),
+    ...DOMAIN_FILES.map((f) => scriptTag(`src/domain/${f}`)),
+    ...DB_DOMAIN_FILES.map((f) => scriptTag(`src/domain/db/${f}`)),
+    scriptTag("app.bundle.js"),
+  ].join("\n");
+
+  // 起動時エラーの文言。index.html側の起動ブロックごと差し替えるので、
+  // BT辞書はここには無い。端末の言語だけ見て日英を出し分ける(docs/多言語化.md 参照)。
   const bootScript = `<script>
-  window.addEventListener('error', function (ev) {
-    var boot = document.getElementById('boot');
-    if (!boot) return;
-    var s = document.getElementById('spin'); if (s) s.style.display = 'none';
-    var msg = document.getElementById('bootmsg'); if (msg) msg.textContent = '起動時にエラーが発生しました';
-    var err = document.getElementById('booterr');
-    var m = ev.message || (ev.error && ev.error.message) || String(ev);
-    if (err) { err.style.display = 'block'; err.textContent = m + (ev.filename ? ('\\n' + ev.filename + ':' + ev.lineno) : ''); }
-    var r = document.getElementById('retry'); if (r) r.style.display = 'block';
-  });
+  (function () {
+    var en = String(navigator.language || '').slice(0, 2).toLowerCase() === 'en';
+    document.documentElement.lang = en ? 'en' : 'ja';
+    var T = en
+      ? { loading: 'Loading…', onError: 'An error occurred while starting', retry: 'Reload',
+          rotateTitle: 'Please rotate to portrait', rotateMsg: 'KURABELL Workout Log is designed for portrait orientation.' }
+      : { loading: '読み込み中…', onError: '起動時にエラーが発生しました', retry: '再読み込み',
+          rotateTitle: '画面を縦にしてください', rotateMsg: 'KURABELL Workout Log は縦画面での利用を想定しています。' };
+    var set = function (id, text) { var e = document.getElementById(id); if (e) e.textContent = text; };
+    set('bootmsg', T.loading);
+    set('retry', T.retry);
+    set('rotate-title', T.rotateTitle);
+    set('rotate-msg', T.rotateMsg);
+    window.addEventListener('error', function (ev) {
+      if (!document.getElementById('boot')) return;
+      var s = document.getElementById('spin'); if (s) s.style.display = 'none';
+      set('bootmsg', T.onError);
+      var err = document.getElementById('booterr');
+      var m = ev.message || (ev.error && ev.error.message) || String(ev);
+      if (err) { err.style.display = 'block'; err.textContent = m + (ev.filename ? ('\\n' + ev.filename + ':' + ev.lineno) : ''); }
+      var r = document.getElementById('retry'); if (r) r.style.display = 'block';
+    });
+  })();
 </script>
-<script src="vendor/react.production.min.js"></script>
-<script src="vendor/react-dom.production.min.js"></script>
-<script src="vendor/prop-types.min.js"></script>
-<script src="vendor/recharts.js"></script>
-<script src="src/domain/oneRm.js"></script>
-<script src="src/domain/storage.js"></script>
-<script src="src/domain/backupValidation.js"></script>
-<script src="src/domain/volume.js"></script>
-<script src="src/domain/db/schema.js"></script>
-<script src="src/domain/db/migration.js"></script>
-<script src="src/domain/db/workoutStore.js"></script>
-<script src="src/domain/db/capacitorSqliteDriver.js"></script>
-<script src="app.bundle.js"></script>`;
+${libTags}`;
 
   if (!bootBlockRe.test(html)) throw new Error("index.html 内の起動ブロックが見つかりません(www側の生成ロジックを見直してください)");
   let wwwHtml = html.replace(bootBlockRe, bootScript + "\n\n");

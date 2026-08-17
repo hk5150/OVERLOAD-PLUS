@@ -44,6 +44,11 @@ KURABELL Workout Log は漸進性過負荷にもとづく筋トレ記録PWA。**
   `sw.js` の `APP_ASSETS` / `scripts/sync-www.js` の `DOMAIN_FILES`(SQLite関連は`DB_DOMAIN_FILES`)。
   ここがズレて `cache.addAll()` が落ち、iOS版のSWが永久にactivateしない状態で出荷されかけた
   (`addAll` は1つでも失敗すると全体がrejectする)。`tests/sync-www.test.js` が生成物を実際にビルドして検証している。
+  かつては `sync-www.js` 側に**4箇所目**(生成する `<script src>` の並びを手書きしていた)があり、
+  `i18n.js` と `units.js` が「www/にコピーされるが読み込まれない」状態で数コミット出荷されかけた。
+  Web版は `LIBS` 経由で読むので無症状、テストも「参照先が実在するか」しか見ていなかった。
+  今は `<script src>` を `DOMAIN_FILES` から生成し、逆方向(コピーしたのに読み込まれていない)も
+  テストで縛ってある。**手で並びを書き足す場所を作らないこと。**
 - **外部ホストへのリクエストを足さない。** フォントもライブラリも同梱済み。
   電波の悪いジムや機内モードが主戦場なので、外部依存は実用上の欠陥になる。テストで縛ってある。
 - **`src/domain/storage.js` はもう完全に汎用のkey-valueストアではない。** `"workout-log-v1"`

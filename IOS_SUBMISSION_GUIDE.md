@@ -84,6 +84,8 @@ https://appstoreconnect.apple.com → マイApp → ＋ → 新規App
 
 Xcodeシミュレータ(iPhone 16 Pro Max等、6.9インチ相当)でアプリの主要画面を `Cmd+S` で保存し、App Store Connectの規定枚数分アップロードしてください。
 
+**日本語版と英語版の2セットが必要です。** アプリ内の「設定」→ Language で表示言語を切り替えてから、それぞれ撮ってください。英語用を登録しないと、英語圏のユーザーに日本語のスクリーンショットが表示されます。
+
 ## 10. ビルドをArchiveしてアップロード
 
 Xcodeで **Product → Archive**。完了後に開く Organizer から **Distribute App → App Store Connect** を選んでアップロードします。

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>サポート | KURABELL Workout Log</title>
+<title>Support | KURABELL Workout Log</title>
 <style>
   html, body { margin: 0; padding: 0; background: #141517; color: #F2F0EB; }
   body {
@@ -28,12 +28,24 @@
     background: #1E1F22; border-radius: 10px; padding: 14px 16px; margin: 16px 0;
     font-size: 13px; color: #D8D5CE;
   }
+  .langbar { display: flex; gap: 8px; justify-content: flex-end; margin-bottom: 20px; }
+  .langbar button {
+    background: #1E1F22; color: #8E939A; border: 1px solid #2A2C30; border-radius: 999px;
+    padding: 5px 14px; font-size: 13px; font-family: inherit; cursor: pointer;
+  }
+  .langbar button[aria-pressed="true"] { background: #E2453C; color: #fff; border-color: #E2453C; }
 </style>
 </head>
 <body>
 
+<div class="langbar">
+  <button type="button" data-set-lang="ja" aria-pressed="true">日本語</button>
+  <button type="button" data-set-lang="en" aria-pressed="false">English</button>
+</div>
+
+<section data-lang="ja">
 <h1>KURABELL Workout Log サポート</h1>
-<div class="updated">最終更新日: 2026年8月16日</div>
+<div class="updated">最終更新日: 2026年8月18日</div>
 
 <p>KURABELL Workout Log は、前回の重量・回数・RIRをセットごとに見ながら記録する筋トレ記録アプリです。このページでは、お問い合わせ方法とよくある質問をまとめています。</p>
 
@@ -51,6 +63,10 @@
 <p>対応言語: 日本語・英語(返信は日本語を基本とします)</p>
 
 <h2>よくある質問</h2>
+
+<h3>表示言語や単位(kg/lb)は変えられますか?</h3>
+<p>「設定」タブから、表示言語(日本語 / English)と重量の単位(kg / lb)をそれぞれ切り替えられます。2つは独立した設定なので、日本語表示のままlbを使う、英語表示でkgを使う、といった組み合わせもできます。初回起動時は端末の言語設定に従います。</p>
+<p>記録は常にkgで保存されており、単位を切り替えても過去の記録が書き換わることはありません。表示と入力の単位だけが変わります。</p>
 
 <h3>データはどこに保存されますか?通信は発生しますか?</h3>
 <p>トレーニング記録は端末内にのみ保存されます(iOS版はSQLite、Web版はブラウザのlocalStorage)。アカウント登録・ログインは不要で、記録・集計・グラフ・バックアップなどの主要機能はすべてオフラインで動作します。種目のやり方をYouTubeで調べる任意の機能を使ったときだけ、外部ブラウザでYouTube検索結果を開きます(その際に送信するのは種目名だけで、トレーニング記録が送信されることはありません)。詳しくは<a href="privacy.html">プライバシーポリシー</a>をご覧ください。</p>
@@ -85,6 +101,101 @@
 
 <h2>プライバシーポリシー</h2>
 <p>データの取り扱いについては<a href="privacy.html">プライバシーポリシー</a>をご覧ください。</p>
+</section>
+
+<section data-lang="en">
+<h1>KURABELL Workout Log Support</h1>
+<div class="updated">Last updated: August 18, 2026</div>
+
+<p>KURABELL Workout Log is a strength training log that shows you last session's weight, reps and RIR set by set while you record. This page covers how to reach us and the questions we get most often.</p>
+
+<h2>Contact</h2>
+<p>For questions or bug reports, please email us:</p>
+<p><a href="mailto:hajime5150@gmail.com">hajime5150@gmail.com</a></p>
+<div class="box">
+  Including the following makes it much easier for us to help:
+  <ul>
+    <li>The app version (shown in the in-app header as <code>vNN</code>)</li>
+    <li>Your iOS version (Settings → General → About)</li>
+    <li>What you were doing when it happened (steps, if you can)</li>
+  </ul>
+</div>
+<p>Languages: Japanese and English. Replies in English may take a little longer.</p>
+
+<h2>Frequently asked questions</h2>
+
+<h3>Can I change the language or the weight unit (kg/lb)?</h3>
+<p>Yes — the Settings tab has separate switches for display language (日本語 / English) and weight unit (kg / lb). They are independent, so you can use English with kg, or Japanese with lb, whichever you prefer. On first launch both follow your device settings.</p>
+<p>Your records are always stored in kilograms. Switching the unit changes only display and input — it never rewrites your past workouts.</p>
+
+<h3>Where is my data stored? Does the app use the network?</h3>
+<p>Your training records are stored only on your device (SQLite on iOS, browser local storage on the web). There is no account and no sign-in, and logging, totals, charts and backups all work offline. The only time the app reaches the network is when you choose to look up an exercise on YouTube, which opens the search results in your browser — and only the exercise name is sent, never your records. See the <a href="privacy.html">privacy policy</a> for details.</p>
+
+<h3>Will my records transfer to a new phone?</h3>
+<p>Not automatically. Because records live on the device, export a backup before you switch phones or reinstall: Settings tab → "Export backup". On the new device, open the app and use Settings → "Restore from backup" to select the JSON file you saved.</p>
+
+<h3>How do I export a backup?</h3>
+<ol>
+  <li>Open the Settings tab</li>
+  <li>Tap "Export backup"</li>
+  <li>A JSON file is written out (named <code>kurabell-backup-DATE.json</code>). Save or send it however you like — iCloud Drive, AirDrop, email</li>
+</ol>
+<p>CSV export is also available for opening your log in Excel or another spreadsheet. CSV is for viewing and analysis only — you cannot restore from it. Use the JSON backup to restore.</p>
+
+<h3>How do I restore from a JSON backup?</h3>
+<ol>
+  <li>Open the Settings tab</li>
+  <li>Tap "Restore from backup" and select the JSON file you saved</li>
+  <li>Confirm the dialog that appears</li>
+</ol>
+<p>Your current data is set aside automatically before a restore, so if something looks wrong afterwards you can roll it back from the Settings tab. If you pick a corrupted or unsupported file, nothing is restored and your current data is left untouched.</p>
+
+<h3>What happens if I delete the app?</h3>
+<p>Deleting the app removes every record stored on the device. Always export a backup from the Settings tab first. If you keep the JSON file somewhere else (iCloud Drive, for example), you can restore it after reinstalling.</p>
+
+<h3>How do I delete records — one workout, or everything?</h3>
+<p>To delete a single workout, open the History tab, select it and delete it there. To remove everything at once, use "Delete all history" in the Settings tab (a confirmation dialog appears). This cannot be undone, so export a backup first if you might want the data later.</p>
+
+<h3>Are there ads or in-app purchases?</h3>
+<p>There are no ads and no tracking. For pricing, please check the App Store listing.</p>
+
+<h2>Privacy policy</h2>
+<p>See the <a href="privacy.html">privacy policy</a> for how your data is handled.</p>
+</section>
+
+<script>
+  // privacy.html と同じ出し分け。端末の言語で初期表示を決め、選択は localStorage に覚える。
+  (function () {
+    var KEY = "kurabell-doc-lang";
+    var saved = null;
+    try { saved = localStorage.getItem(KEY); } catch (e) { /* プライベートモード等では無視 */ }
+    var lang = (saved === "ja" || saved === "en") ? saved
+      : (String(navigator.language || "").slice(0, 2).toLowerCase() === "en" ? "en" : "ja");
+
+    function apply(next) {
+      lang = next;
+      document.documentElement.lang = next;
+      var sections = document.querySelectorAll("section[data-lang]");
+      for (var i = 0; i < sections.length; i++) {
+        sections[i].style.display = sections[i].getAttribute("data-lang") === next ? "" : "none";
+      }
+      var buttons = document.querySelectorAll("[data-set-lang]");
+      for (var j = 0; j < buttons.length; j++) {
+        buttons[j].setAttribute("aria-pressed", String(buttons[j].getAttribute("data-set-lang") === next));
+      }
+    }
+
+    var buttons = document.querySelectorAll("[data-set-lang]");
+    for (var k = 0; k < buttons.length; k++) {
+      buttons[k].addEventListener("click", function () {
+        var next = this.getAttribute("data-set-lang");
+        try { localStorage.setItem(KEY, next); } catch (e) { /* 保存できなくても切り替えは効く */ }
+        apply(next);
+      });
+    }
+    apply(lang);
+  })();
+</script>
 
 </body>
 </html>

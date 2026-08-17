@@ -15,6 +15,7 @@
 | サポートURL | `https://hk5150.github.io/OVERLOAD-PLUS/support.html` (GitHub Pagesを有効化後にアクセス可能。mailtoはApp Store Connectのサポート URL欄には使えないため、support.html内の問い合わせリンクとして残している) |
 | マーケティングURL(任意) | GitHub PagesのURL(公開している場合) |
 | プライバシーポリシーURL | `https://hk5150.github.io/OVERLOAD-PLUS/privacy.html` (GitHub Pagesを有効化後にアクセス可能) |
+| 対応言語 | 日本語・英語。App Store Connectで **English (U.S.)** のローカライズを追加する(文面は後述の「英語ローカライズ」節) |
 
 ## キーワード (100文字以内、カンマ区切り)
 
@@ -69,6 +70,85 @@ KURABELL Workout Logは、次の重量を自動で決めません。
 ・シンプルなUIで記録だけに集中したい方
 ```
 
+---
+
+# 英語(English (U.S.))ローカライズ
+
+App Store Connect の「App情報」→ 言語を追加 で **English (U.S.)** を足し、以下を入力する。
+プライバシーポリシーURLとサポートURLは日本語版と同じで構わない
+(1つのURLが端末の言語に応じて日英を出し分けるため。`privacy.html` / `support.html` を参照)。
+
+| 項目 | 値 |
+|---|---|
+| App名 (30文字以内) | `KURABELL Workout Log` |
+| サブタイトル (30文字以内) | `Beat your last session` (22文字) |
+
+## キーワード (100文字以内、カンマ区切り)
+
+アプリ名に含まれる語(workout, log)はキーワードに入れても重複になるため外している。
+
+```
+gym,lifting,strength,training,tracker,rir,1rm,progressive overload,barbell,dumbbell,offline
+```
+
+## プロモーションテキスト (170文字以内、審査不要で更新可能)
+
+```
+Your last weight, reps and RIR appear on every set row. The app never decides your next weight — you do. Works offline, stores everything on device. No account, no ads, no tracking.
+```
+
+## 概要(Description)
+
+```
+Your last weight, reps and RIR — right there on every set row.
+
+KURABELL Workout Log does not pick your next weight.
+It puts your last session in front of you and leaves the decision where it belongs: with you.
+
+No account. No ads. No tracking.
+Your records stay on your device and the main features work offline.
+
+■ What it does
+・Log: weight, reps and RIR (reps in reserve), with warm-up and working sets kept apart
+・Compare to last time: every set row carries the matching set from your last session. Same weight and reps? You also see how your RIR changed
+・Today's menu: pick a split (full body / upper-lower / PPL / 5-day / custom) and each rotation day carries your last session forward. Adjust anything once you start
+・Estimated 1RM and PRs: Epley-based estimate and personal bests, calculated for you, with a badge when you beat one
+・Charts: total volume over time (overall, weekly, by muscle) and weight plus estimated 1RM per exercise
+・Timers: session time and rest between sets, started automatically
+・Weekly muscle breakdown: sets, volume and days since you last trained each muscle
+・94 built-in exercises, plus your own. Optionally open a YouTube search to check form
+・Backup: JSON export and restore, plus CSV export
+・kg or lb, English or Japanese — two independent switches in Settings
+
+■ Why people choose it
+・Last session's weight, reps and RIR sit next to what you are typing
+・The app never overrides your judgment about the next weight
+・No account required
+・No ads
+・No tracking
+・Records stored on device
+・JSON and CSV export
+・No subscription
+
+■ About network use
+Logging, totals, charts and backups all work offline. The only time the app reaches the network is if you choose to look up an exercise on YouTube, which opens your browser. Only the exercise name is used as the search term — your training records are never sent to YouTube or to the developer.
+
+■ Who it is for
+・Anyone tired of trying to remember what they lifted last time
+・Anyone who wants to decide their own weights, informed by what they actually did
+・Anyone who wants a plain interface and nothing between them and the log
+```
+
+## App Review用の申し送り事項(英語)
+
+```
+This app requires no account. Logging, totals, charts and backups run entirely on local device storage, with no communication to any server. No test credentials are needed.
+
+The exercise list includes a "YouTube" button that optionally opens the system browser to YouTube search results. It passes the exercise name as the search term only — no personal data or training records are transmitted. Unless the reviewer taps that button, the app makes no network requests.
+
+The app ships in English and Japanese; the language follows the device setting on first launch and can be changed in the Settings tab. Weight units (kg/lb) are a separate switch in the same tab.
+```
+
 ## App内課金
 
 なし(単発の有料アプリ、In-App Purchaseは使用しない想定)
@@ -93,15 +173,23 @@ App Store Connectの「App Privacy」セクションでは、以下の方針で�
 - **iPad用は不要です。** iPhone専用アプリ(`TARGETED_DEVICE_FAMILY = "1"`)として提出するため、iPadではiPhone互換モードで動作します(縦画面前提のレイアウトのため、この構成にしています)。
 - 必要枚数・サイズの詳細はApp Store Connectのアップロード画面が案内する現行の要件に従ってください(仕様がApple側で更新されることがあるため、ここでは固定しません)。
 
+- **スクリーンショットはローカライズごとに必要です。** 英語ローカライズを追加したら、
+  アプリの表示言語を English にした状態で撮り直す(シミュレータの言語設定を英語にするか、
+  アプリ内の「設定」→ Language → English で切り替える)。
+  App Store Connect は英語用スクリーンショットが未登録の場合、日本語のものを流用するため、
+  英語圏のユーザーに日本語の画面が出てしまう。
+
 ### キャプション案(5枚構成)
 
 実際にアプリに存在する画面・機能のみを使ってください。
 
-1. 記録画面(前回値の表示箇所) — 「前回の自分を、セットごとに超える」
-2. 記録画面(重量・回数・RIR入力欄、前回値との並び) — 「重量・回数・RIRを並べて比較」
-3. 記録画面または今日のメニュー(前回引き継ぎ表示) — 「次回の重量は、アプリではなく自分で決める」
-4. グラフ画面(推定1RM・ボリューム推移) — 「推定1RMとボリュームの変化を確認」
-5. オンボーディングまたは設定画面(登録不要・バックアップ導線が見える画面) — 「登録不要・広告なし・端末内保存」
+| # | 画面 | 日本語 | English |
+|---|---|---|---|
+| 1 | 記録画面(前回値の表示箇所) | 前回の自分を、セットごとに超える | Beat your last session, set by set |
+| 2 | 記録画面(重量・回数・RIR入力欄、前回値との並び) | 重量・回数・RIRを並べて比較 | Weight, reps and RIR side by side |
+| 3 | 記録画面または今日のメニュー(前回引き継ぎ表示) | 次回の重量は、アプリではなく自分で決める | You decide the next weight, not the app |
+| 4 | グラフ画面(推定1RM・ボリューム推移) | 推定1RMとボリュームの変化を確認 | Track estimated 1RM and volume |
+| 5 | オンボーディングまたは設定画面 | 登録不要・広告なし・端末内保存 | No account, no ads, stored on device |
 
 ## App Review用の申し送り事項(App Review Information)
 

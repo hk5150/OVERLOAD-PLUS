@@ -12,6 +12,14 @@
 	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
+	<!-- 対応言語の宣言。UIはWebView側(src/domain/i18n.js)で切り替えるため .lproj は持たないが、
+	     これを書かないとApp Storeの製品ページに「言語: 英語」しか出ず、日本語対応が伝わらない。
+	     アプリ名 KURABELL は言語によらないので InfoPlist.strings は不要。 -->
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>en</string>
+		<string>ja</string>
+	</array>
 	<key>CFBundleName</key>
 	<string>$(PRODUCT_NAME)</string>
 	<key>CFBundlePackageType</key>

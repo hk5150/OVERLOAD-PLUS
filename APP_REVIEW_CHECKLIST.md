@@ -63,6 +63,16 @@ App Store Connectでの提出直前に、上から順に確認する。チェッ
 - [ ] キャプション案は[APPSTORE.md](APPSTORE.md)の「スクリーンショット」節を参照(5枚構成)
 - [ ] 実際にアプリに存在する画面・機能のみを使う(未実装機能を映さない)
 - [ ] iPad用スクリーンショットは不要(iPhone専用アプリのため)
+- [ ] **英語ローカライズ用のスクリーンショットを別途用意する**(アプリの表示言語をEnglishにして撮り直す)。
+  未登録だとApp Store Connectが日本語のものを流用し、英語圏に日本語の画面が出る
+
+## 多言語対応(日本語 / 英語)
+
+- [ ] App Store Connectで **English (U.S.)** のローカライズを追加し、[APPSTORE.md](APPSTORE.md)の「英語ローカライズ」節の文面を入力した
+- [ ] `ios/App/App/Info.plist` に `CFBundleLocalizations`(en / ja)がある
+      (製品ページの「言語」表示に使われる。UI自体はWebView側で切り替える)
+- [ ] プライバシーポリシーURL・サポートURLは日英で同じでよい
+      (`privacy.html` / `support.html` が端末の言語で出し分ける)
 
 ## 審査担当者向けメモ(App Review Information)
 

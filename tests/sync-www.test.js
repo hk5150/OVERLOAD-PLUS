@@ -42,6 +42,34 @@ describe("www/ ビルド生成物", () => {
     expect(missing).toEqual([]);
   });
 
+  // 逆方向の検証。「参照しているファイルが実在するか」だけを見ていたため、
+  // www/ に置いただけで <script src> に足し忘れたファイルを素通りさせていた。
+  // 実際に i18n.js と units.js がこれで抜け、iOS版が t() 未定義で起動しない状態になっていた
+  // (ルート配信のWeb版は LIBS 経由で読むので無症状だった)。
+  it("www/ にコピーしたドメインファイルがすべて<script src>で読み込まれる", () => {
+    const html = read("index.html");
+    const srcs = new Set([...html.matchAll(/<script src="([^"]+)"/g)].map((m) => m[1]));
+    const copied = [];
+    for (const f of fs.readdirSync(path.join(dest, "src", "domain"))) {
+      if (f.endsWith(".js")) copied.push(`src/domain/${f}`);
+    }
+    for (const f of fs.readdirSync(path.join(dest, "src", "domain", "db"))) {
+      if (f.endsWith(".js")) copied.push(`src/domain/db/${f}`);
+    }
+    const unreferenced = copied.filter((f) => !srcs.has(f));
+    expect(
+      unreferenced,
+      `www/ に置かれているのに読み込まれていません: ${unreferenced.join(", ")}`
+    ).toEqual([]);
+  });
+
+  it("読み込み順がindex.htmlのLIBSと同じ(ドメインファイル間の依存が崩れないように)", () => {
+    const rootHtml = fs.readFileSync(path.join(process.cwd(), "index.html"), "utf-8");
+    const libsOrder = [...rootHtml.matchAll(/urls:\['(src\/domain\/[^']+)'\]/g)].map((m) => m[1]);
+    const wwwOrder = [...read("index.html").matchAll(/<script src="(src\/domain\/[^"]+)"/g)].map((m) => m[1]);
+    expect(wwwOrder).toEqual(libsOrder);
+  });
+
   it("Service Workerを同梱も登録もしない(Capacitorはバンドル内から配信するため不要)", () => {
     expect(fs.existsSync(path.join(dest, "sw.js"))).toBe(false);
     expect(read("index.html")).not.toContain("serviceWorker");

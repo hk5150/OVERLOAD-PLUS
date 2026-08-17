@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>プライバシーポリシー | KURABELL Workout Log</title>
+<title>Privacy Policy | KURABELL Workout Log</title>
 <style>
   html, body { margin: 0; padding: 0; background: #141517; color: #F2F0EB; }
   body {
@@ -19,12 +19,25 @@
   p, li { color: #D8D5CE; font-size: 14px; }
   ul { padding-left: 20px; }
   a { color: #E2453C; }
+  /* 言語切り替え。JSが無効なときは両言語とも表示される(法的文書なので隠れるより出る方が安全) */
+  .langbar { display: flex; gap: 8px; justify-content: flex-end; margin-bottom: 20px; }
+  .langbar button {
+    background: #1E1F22; color: #8E939A; border: 1px solid #2A2C30; border-radius: 999px;
+    padding: 5px 14px; font-size: 13px; font-family: inherit; cursor: pointer;
+  }
+  .langbar button[aria-pressed="true"] { background: #E2453C; color: #fff; border-color: #E2453C; }
 </style>
 </head>
 <body>
 
+<div class="langbar">
+  <button type="button" data-set-lang="ja" aria-pressed="true">日本語</button>
+  <button type="button" data-set-lang="en" aria-pressed="false">English</button>
+</div>
+
+<section data-lang="ja">
 <h1>KURABELL Workout Log プライバシーポリシー</h1>
-<div class="updated">最終更新日: 2026年8月11日</div>
+<div class="updated">最終更新日: 2026年8月18日</div>
 
 <p>KURABELL Workout Log(以下「本アプリ」)は、トレーニング記録を管理するためのアプリです。本ポリシーは、本アプリが利用者の情報をどのように扱うかを説明します。</p>
 
@@ -52,6 +65,75 @@
 <h2>8. お問い合わせ</h2>
 <p>本ポリシーに関するご質問は、下記までご連絡ください。</p>
 <p><a href="mailto:hajime5150@gmail.com">hajime5150@gmail.com</a></p>
+</section>
+
+<section data-lang="en">
+<h1>KURABELL Workout Log Privacy Policy</h1>
+<div class="updated">Last updated: August 18, 2026</div>
+
+<p>KURABELL Workout Log (the "App") is an app for keeping a strength training log. This policy explains how the App handles your information.</p>
+
+<h2>1. Information We Collect</h2>
+<p>The App does not send or collect any user information to or on any external server. There is no account registration and no sign-in, and neither the developer nor any third party obtains information that could identify you. The App offers an optional feature to look up how to perform an exercise on YouTube; only the exercise name is sent, never your training records or any other personal data (see section 3).</p>
+
+<h2>2. Where Your Data Is Stored</h2>
+<p>Everything you enter — weight, reps, RIR, exercises, bodyweight and other settings — is stored solely on your own device (in local storage). This data is never transmitted outside the App, and the developer cannot access it.</p>
+
+<h2>3. Network Use, Tracking and Advertising</h2>
+<p>All the main features — logging, totals, charts and backups — work offline. A connection to an external service (YouTube) occurs only if you choose to open the exercise search. That search uses the exercise name alone; your training records are never sent to YouTube or to the developer. The App contains no analytics, no advertising, and no third-party tracking SDKs.</p>
+
+<h2>4. Deleting Your Data</h2>
+<p>Uninstalling the App, or deleting your data from the in-app Settings tab, permanently removes all stored records from your device. The App can export your records as JSON or CSV for backup, but that export and any subsequent sharing happen only when you choose to do so.</p>
+
+<h2>5. Payment Information</h2>
+<p>Any purchase of the App is processed through Apple's App Store. Payment information is not shared with the developer and is handled in accordance with Apple's privacy policy.</p>
+
+<h2>6. Children</h2>
+<p>Because the App collects no user information, it can be used by people of any age.</p>
+
+<h2>7. Changes to This Policy</h2>
+<p>This policy may be updated as the App's features change. Any revised version takes effect when it is published on this page.</p>
+
+<h2>8. Contact</h2>
+<p>If you have questions about this policy, please contact us:</p>
+<p><a href="mailto:hajime5150@gmail.com">hajime5150@gmail.com</a></p>
+</section>
+
+<script>
+  // 端末の言語で初期表示を決め、選択は localStorage に覚える。
+  // App Store Connect はロケールごとにURLを登録できるが、1つのURLが両言語を出せる方が
+  // 登録も保守も単純なので、ページ側で出し分ける。
+  (function () {
+    var KEY = "kurabell-doc-lang";
+    var saved = null;
+    try { saved = localStorage.getItem(KEY); } catch (e) { /* プライベートモード等では無視 */ }
+    var lang = (saved === "ja" || saved === "en") ? saved
+      : (String(navigator.language || "").slice(0, 2).toLowerCase() === "en" ? "en" : "ja");
+
+    function apply(next) {
+      lang = next;
+      document.documentElement.lang = next;
+      var sections = document.querySelectorAll("section[data-lang]");
+      for (var i = 0; i < sections.length; i++) {
+        sections[i].style.display = sections[i].getAttribute("data-lang") === next ? "" : "none";
+      }
+      var buttons = document.querySelectorAll("[data-set-lang]");
+      for (var j = 0; j < buttons.length; j++) {
+        buttons[j].setAttribute("aria-pressed", String(buttons[j].getAttribute("data-set-lang") === next));
+      }
+    }
+
+    var buttons = document.querySelectorAll("[data-set-lang]");
+    for (var k = 0; k < buttons.length; k++) {
+      buttons[k].addEventListener("click", function () {
+        var next = this.getAttribute("data-set-lang");
+        try { localStorage.setItem(KEY, next); } catch (e) { /* 保存できなくても切り替えは効く */ }
+        apply(next);
+      });
+    }
+    apply(lang);
+  })();
+</script>
 
 </body>
 </html>
