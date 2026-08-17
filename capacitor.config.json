@@ -4,7 +4,7 @@
   "webDir": "www",
   "backgroundColor": "#141517",
   "ios": {
-    "contentInset": "always"
+    "contentInset": "never"
   },
   "plugins": {
     "CapacitorSQLite": {

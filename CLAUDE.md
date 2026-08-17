@@ -40,6 +40,9 @@ KURABELL Workout Log は漸進性過負荷にもとづく筋トレ記録PWA。**
 - **`today`(記録中の状態)の更新は必ず関数形式で。** `setToday(t => ...)`。
   ステートの取り違えで記録中の内容が消えるバグを実際に出したことがある。
 - **RIRが入って初めて「実施済み」。** RIR未入力のセットは「まだやっていない」であって「余力0」ではない。
+- **セーフエリアはCSS側(`env(safe-area-inset-*)`)だけで扱う。** `capacitor.config.json` の
+  `ios.contentInset` は `"never"` にしてある(position: fixed要素の表示には実測で影響しないと
+  確認済みだが、ネイティブ側とCSS側の責務を分けておく意図で維持)。
 - **`www/` に新しいファイルを足したら、参照元3箇所を揃える。** `index.html` の `LIBS` /
   `sw.js` の `APP_ASSETS` / `scripts/sync-www.js` の `DOMAIN_FILES`(SQLite関連は`DB_DOMAIN_FILES`)。
   ここがズレて `cache.addAll()` が落ち、iOS版のSWが永久にactivateしない状態で出荷されかけた
