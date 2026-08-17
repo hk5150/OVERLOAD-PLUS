@@ -212,12 +212,11 @@ const DRAFT_KEY = "workout-draft-v1"; // 入力途中の記録(アプリが落�
 const PRE_IMPORT_BACKUP_KEY = "workout-log-v1-pre-import"; // バックアップ復元前のデータ退避(復元に失敗した場合の保険)
 // ヘッダーのバージョンバッジとバックアップのappVersionで共有する単一の定数。
 // sw.js の CACHE 定数とは tests/version.test.js が数字の一致を機械的に縛っている(CLAUDE.md参照)。
-const APP_VERSION = "v83";
+const APP_VERSION = "v84";
 // store(保存レイヤ)は src/domain/storage.js へ移設(テストのため)。
 // LIBSで<script src>読み込み済みなのでグローバルの store をそのまま参照できる。
 const uid = () => Math.random().toString(36).slice(2, 8);
 const num = (v) => { const n = parseFloat(v); return isNaN(n) ? 0 : n; };
-const round = (n) => Math.round(n * 2) / 2;
 const DEFAULT_REPS = 10; // 種目追加時の初期回数
 const fmtDate = (iso) => { const d = new Date(iso); return `${d.getMonth() + 1}/${d.getDate()} (${weekdayLabel(d.getDay())})`; };
 const fmtTime = (iso) => { const d = new Date(iso); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
@@ -1440,15 +1439,6 @@ function App() {
   };
   const updEx = (id, patch) => setToday(t => t.map(ex => ex.id === id ? { ...ex, ...patch } : ex));
   const updateSet = (id, i, field, value) => setToday(t => t.map(ex => ex.id !== id ? ex : { ...ex, sets: ex.sets.map((s, j) => j === i ? { ...s, [field]: value } : s) }));
-  // 重量・回数を±で増減(空欄は0扱い、負にはしない)
-  const adjustSet = (id, i, field, delta) => setToday(t => t.map(ex => ex.id !== id ? ex : {
-    ...ex, sets: ex.sets.map((s, j) => {
-      if (j !== i) return s;
-      const cur = num(s[field]);
-      let v = Math.max(0, Math.round((cur + delta) * 100) / 100);
-      return { ...s, [field]: String(v) };
-    }),
-  }));
   // 前のセットの重量・回数をこのセットにコピー
   const copyFromPrev = (id, i) => setToday(t => t.map(ex => {
     if (ex.id !== id || i === 0) return ex;
@@ -2691,7 +2681,6 @@ function App() {
 
               {ex.sets.map((s, i) => {
                 const wsIndex = ex.sets.slice(0, i + 1).filter(x => !x.warmup).length; // ワーキング通し番号
-                const inc = incU(num(ex.increment) || 2.5);
                 const done = s.warmup || (s.rir !== "" && s.rir != null); // 実施済みか
                 // このセットの推定1RM(ウォームアップ・補助は対象外)
                 const setW = fromU(s.weight), setR = Math.round(num(s.reps));
