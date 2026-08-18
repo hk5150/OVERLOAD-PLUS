@@ -60,10 +60,39 @@ KURABELL Workout Log は漸進性過負荷にもとづく筋トレ記録PWA。**
   `STORAGE_KEY` と手で一致させている(定数の共有はできない、storage.jsはindex.htmlより先に
   読み込まれるスクリプトなので)。下書き(`workout-draft-v1`)や復元前スナップショットは
   従来どおりPreferences止まり。詳細と設計判断は `DATA_MIGRATION.md` を参照。
-- **SQLite関連のコードはXcode実機/シミュレータで未検証。** `src/domain/db/capacitorSqliteDriver.js`
-  が `window.Capacitor.Plugins.CapacitorSQLite` を叩く部分は、Xcodeが無い環境で書いたため
-  実際のネイティブブリッジでは検証できていない。テスト(`tests/db/`)は `node:sqlite` を使った
-  フェイクドライバに対してのみ検証済み。触るときは必ずシミュレータで動作確認すること。
+- **SQLite関連はテストが緑でも何も保証しない。** `tests/db/` は `node:sqlite` のフェイク
+  ドライバに対してのみ通しており、`src/domain/db/capacitorSqliteDriver.js` が
+  `window.Capacitor.Plugins.CapacitorSQLite` を叩く部分は**テストの対象外**。
+  実際にここで、`query()` の戻り値の先頭行が `{"ios_columns":[...]}` というメタデータ行だと
+  気づかずアプリが起動のたびにJSON Parse errorを出す不具合が出た(`6b4d1b4`)。
+  シミュレータで実行して初めて分かった。**触るときは必ずシミュレータで動作確認すること。**
+  検証済みなのは、旧Preferences→SQLite移行・二重移行の防止・バックアップ書き出し(`374e930`)。
+  未検証で残っているのはオフライン動作(シミュレータの制約)。詳細は `DATA_MIGRATION.md`。
+
+## 検証手段と、その守備範囲
+
+`package.json` を見れば分かることは書かない。**読んでも分からないこと**だけ:
+
+- **`npm test` は0.8秒で終わる。** 気軽に何度でも回してよい。中身は `src/domain/` の
+  純粋関数のテストに加えて、`www/` の**実ビルド**(esbuildが`#appsrc`をJSXとしてパースする)・
+  バージョン整合・i18nのja/enパリティ・外部通信の不在まで含む。
+  つまり**JSXの構文エラーはここで落ちる**(`.claude/hooks/run-tests.sh` が編集後に自動で回す)
+- **`npm test` は `index.html` を実行しない**(`vitest.config.mjs` に明記)。
+  未定義グローバル・Reactのフック違反・`LIBS`の読み込み順ミスは全部素通りする。
+  **テストが緑でも起動するとは限らない**
+- **起動確認は `.claude/launch.json` の2設定を両方開く。**
+  `kurabell-dev`(8765)=Web版(ランタイムBabel経路)、`kurabell-www`(8766)=iOS相当(事前ビルド経路)。
+  8766側を見る前に `npm run sync-www` を回さないと古いままになる
+- **lint / typecheck / build スクリプトも CI も無い。** 入れていないので `npm run lint` は失敗する
+
+## 進め方
+
+- **新機能・仕様変更はプランモードで合意してから実装する。** 曖昧な仕様は推測で実装せず確認する
+- 実装 → `tester`(不足テストの追加) → `boot-check`(起動確認) → `reviewer`(別文脈レビュー) →
+  コミット。`reviewer` は自分で `git diff` を取り、この「踏み抜きやすい罠」と照合する
+- 調査は `explorer`(リポジトリ内) / `researcher`(外部情報) に投げて、メインの文脈を汚さない
+- **実装はメインスレッドが一本で担当する。** `index.html` 1ファイルに集中しているので、
+  実装をサブエージェントに分割すると衝突と設計の不整合を招く
 
 ## ドメインの約束事
 

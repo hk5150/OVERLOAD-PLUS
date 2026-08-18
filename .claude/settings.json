@@ -1,4 +1,12 @@
 {
+  "permissions": {
+    "deny": [
+      "Write(www/**)",
+      "Edit(www/**)",
+      "Write(ios/App/App/public/**)",
+      "Edit(ios/App/App/public/**)"
+    ]
+  },
   "hooks": {
     "PostToolUse": [
       {
@@ -7,6 +15,10 @@
           {
             "type": "command",
             "command": "sh \"$CLAUDE_PROJECT_DIR/.claude/hooks/check-cache-bump.sh\" 2>/dev/null || true"
+          },
+          {
+            "type": "command",
+            "command": "sh \"$CLAUDE_PROJECT_DIR/.claude/hooks/run-tests.sh\" 2>/dev/null || true"
           }
         ]
       }

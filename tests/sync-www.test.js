@@ -93,4 +93,30 @@ describe("www/ ビルド生成物", () => {
     const externals = [...html.matchAll(/(?:src|href)="(https?:\/\/[^"]+)"/g)].map((m) => m[1]);
     expect(externals).toEqual([]);
   });
+
+  // 上の検査は src= / href= 属性しか見ておらず、fetch や CSS の url() は素通りしていた。
+  // 電波の無いジムで動くことに加えて、App Storeの「Data Not Collected」申告の根拠でもあるので、
+  // 目視ではなく機械的に縛る。現状これらは1件も無いので、今のうちに空で固定しておく。
+  // 唯一の意図的な外部遷移は種目名でのYouTube検索(window.open)で、これは検索語を渡すだけで
+  // アプリからの通信ではないため対象外。
+  it("実行時に外部へ通信するコードが無い(App Storeのプライバシー申告の根拠)", () => {
+    const bundle = read("app.bundle.js");
+    const html = read("index.html");
+    const patterns = [
+      [/\bfetch\s*\(\s*["'`]https?:/g, "fetch()での外部URL"],
+      [/new\s+XMLHttpRequest\b/g, "XMLHttpRequest"],
+      [/new\s+WebSocket\b/g, "WebSocket"],
+      [/new\s+EventSource\b/g, "EventSource"],
+      [/\bimport\s*\(\s*["'`]https?:/g, "動的import()での外部URL"],
+      [/url\(\s*["']?https?:/g, "CSSのurl()での外部URL"],
+      [/@import\s+["']?https?:/g, "CSSの@importでの外部URL"],
+    ];
+    const hits = [];
+    for (const source of [html, bundle]) {
+      for (const [re, label] of patterns) {
+        if (source.match(re)) hits.push(label);
+      }
+    }
+    expect([...new Set(hits)], `外部通信の経路が増えている: ${hits.join(", ")}`).toEqual([]);
+  });
 });
