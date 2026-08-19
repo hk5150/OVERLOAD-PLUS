@@ -226,7 +226,7 @@ const DRAFT_KEY = "workout-draft-v1"; // 入力途中の記録(アプリが落�
 const PRE_IMPORT_BACKUP_KEY = "workout-log-v1-pre-import"; // バックアップ復元前のデータ退避(復元に失敗した場合の保険)
 // ヘッダーのバージョンバッジとバックアップのappVersionで共有する単一の定数。
 // sw.js の CACHE 定数とは tests/version.test.js が数字の一致を機械的に縛っている(CLAUDE.md参照)。
-const APP_VERSION = "v88";
+const APP_VERSION = "v89";
 // store(保存レイヤ)は src/domain/storage.js へ移設(テストのため)。
 // LIBSで<script src>読み込み済みなのでグローバルの store をそのまま参照できる。
 const uid = () => Math.random().toString(36).slice(2, 8);
@@ -2107,12 +2107,18 @@ function App() {
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: "flex", gap: 4, marginBottom: 6 }}>
-                {[1, 2, 3].map(m => (
-                  <div key={m} style={{
-                    flex: 1, height: 5, borderRadius: 999,
-                    background: restElapsed >= m * 60 ? (m >= 3 ? C.red : m >= 2 ? C.yellow : C.green) : C.border,
-                  }} />
-                ))}
+                {/* 60秒ごとに区切ったセグメントを、そのセグメント内の経過割合に応じて連続的に塗る。
+                    以前は`restElapsed >= m*60`の二値でセグメント全体の色が切り替わるだけで、
+                    数値は0.5秒ごとに動いていてもゲージ自体は1分単位でしか変化せず「止まって見える」問題があった。 */}
+                {[1, 2, 3].map(m => {
+                  const segProgress = Math.max(0, Math.min(1, (restElapsed - (m - 1) * 60) / 60));
+                  const color = m >= 3 ? C.red : m >= 2 ? C.yellow : C.green;
+                  return (
+                    <div key={m} style={{ flex: 1, height: 5, borderRadius: 999, background: C.border, overflow: "hidden" }}>
+                      <div style={{ width: `${segProgress * 100}%`, height: "100%", background: color, transition: "width .3s linear" }} />
+                    </div>
+                  );
+                })}
               </div>
               <div style={{ fontSize: 12, color: C.muted }}>
                 {restElapsed < 60 ? t("rest.until1min") : t("rest.elapsed", { n: Math.floor(restElapsed / 60) })}
@@ -2503,6 +2509,13 @@ function App() {
                     {hasStreak && (
                       <span style={{ fontSize: 12, fontWeight: 700, color: ins.streak >= 4 ? C.yellow : C.muted }}>
                         {t("log.streak", { w: wU(ins.topWeight), unit, n: ins.streak })}
+                      </span>
+                    )}
+                    {/* 同じ重量が3回続いたら、そろそろ重量を上げる判断材料として明示する。
+                        自動で重量を決めるのではなく、気づきを渡すだけに留める(アプリの中心思想)。 */}
+                    {ins.streak >= 3 && (
+                      <span style={{ fontSize: 12, fontWeight: 800, color: C.yellow, background: "rgba(232,179,60,0.15)", padding: "2px 8px", borderRadius: 999 }}>
+                        {t("log.plateauAlert", { n: ins.streak })}
                       </span>
                     )}
                     {hasTrend && (

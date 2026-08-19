@@ -104,6 +104,7 @@ const STRINGS = {
   // 1文にまとめ、強調は span 側の fontWeight でかける。
   "log.streak":        { ja: "{w}{unit} で {n}回連続", en: "{n} sessions in a row at {w}{unit}" },
   "log.trend":         { ja: "推移 {list}",           en: "Trend {list}" },
+  "log.plateauAlert":  { ja: "⚠ 重量が{n}回連続で頭打ち。そろそろ上げどき", en: "⚠ Stuck at this weight for {n} sessions — time to add more" },
   "compare.now":       { ja: "今日の自分",            en: "Today" },
   "compare.est1RM":    { ja: "推定1RM",               en: "Est. 1RM" },
   "compare.maxWeight": { ja: "最大重量",              en: "Top weight" },
