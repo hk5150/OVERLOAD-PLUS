@@ -226,7 +226,7 @@ const DRAFT_KEY = "workout-draft-v1"; // 入力途中の記録(アプリが落�
 const PRE_IMPORT_BACKUP_KEY = "workout-log-v1-pre-import"; // バックアップ復元前のデータ退避(復元に失敗した場合の保険)
 // ヘッダーのバージョンバッジとバックアップのappVersionで共有する単一の定数。
 // sw.js の CACHE 定数とは tests/version.test.js が数字の一致を機械的に縛っている(CLAUDE.md参照)。
-const APP_VERSION = "v89";
+const APP_VERSION = "v90";
 // store(保存レイヤ)は src/domain/storage.js へ移設(テストのため)。
 // LIBSで<script src>読み込み済みなのでグローバルの store をそのまま参照できる。
 const uid = () => Math.random().toString(36).slice(2, 8);
@@ -742,7 +742,7 @@ function App() {
   const [today, setToday] = useState([]);
   const [search, setSearch] = useState("");
   const [pickerMuscle, setPickerMuscle] = useState(null);
-  const [customDraft, setCustomDraft] = useState({ muscle: "", eq: "ダンベル" });
+  const [customDraft, setCustomDraft] = useState({ muscle: "", eq: "" });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [saveStatus, setSaveStatus] = useState("idle"); // idle | saving | saved | error(persist()の書き込み状態)
@@ -799,7 +799,6 @@ function App() {
   }, [unit, loaded]);
   const [editAddSearch, setEditAddSearch] = useState("");  // 履歴編集で種目を追加するときの検索語
   const [exSettingSearch, setExSettingSearch] = useState(""); // 設定タブの種目検索
-  const [exSettingMuscle, setExSettingMuscle] = useState(""); // 設定タブの種目を部位で絞り込む(空なら使用中の種目)
 
   // タイマー
   const [startAt, setStartAt] = useState(null);   // セッション開始(ms)
@@ -1423,7 +1422,7 @@ function App() {
     // 内蔵にもカスタムにも無い種目は、カスタム種目として永続登録(次回以降も一覧に出る)
     const known = allExercises.some(e => e.n === n);
     const nextCustom = known ? customExercises : [...customExercises, {
-      n, m: cfg.muscle || "", eq: meta?.eq || customDraft.eq || "その他",
+      n, m: cfg.muscle || "", eq: meta?.eq || customDraft.eq || "",
       t: "C", db: !!cfg.isDb, bw: cfg.bwFactor || 0, custom: true,
     }];
     const initialSets = initialSetsFor(n);
@@ -1452,7 +1451,7 @@ function App() {
       }
     }
     persist({ recentNames: nextRecent, ...(known ? {} : { customExercises: nextCustom }), ...splitPatch });
-    setSearch(""); setCustomDraft({ muscle: "", eq: "ダンベル" }); setInsertAt(null);
+    setSearch(""); setCustomDraft({ muscle: "", eq: "" }); setInsertAt(null);
   };
   const updEx = (id, patch) => setToday(t => t.map(ex => ex.id === id ? { ...ex, ...patch } : ex));
   const updateSet = (id, i, field, value) => setToday(t => t.map(ex => ex.id !== id ? ex : { ...ex, sets: ex.sets.map((s, j) => j === i ? { ...s, [field]: value } : s) }));
@@ -2887,10 +2886,20 @@ function App() {
                       ))}
                     </div>
                     {search.trim() && !findExercise(search.trim()) && (
-                      <button onClick={() => addExercise(search, { muscle: customDraft.muscle, eq: customDraft.eq, isDb: customDraft.eq === "ダンベル", bwFactor: customDraft.eq === "自重" ? 0.7 : 0 }, exIdx + 1)}
-                        style={{ ...btn(C.red), width: "100%", padding: 10, fontSize: 14, marginTop: 8 }}>
-                        {t("picker.addCustomShort", { name: search.trim() })}
-                      </button>
+                      <div style={{ background: C.bg, borderRadius: 10, padding: 10, marginTop: 8 }}>
+                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 10 }}>
+                          <select value={customDraft.muscle} onChange={e => setCustomDraft({ ...customDraft, muscle: e.target.value })} style={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: "6px 8px", fontSize: 16, fontFamily: "inherit" }}>
+                            <option value="">{t("picker.selectMuscle")}</option>{MUSCLES.map(m => <option key={m} value={m}>{muscleName(m)}</option>)}
+                          </select>
+                          <select value={customDraft.eq} onChange={e => setCustomDraft({ ...customDraft, eq: e.target.value })} style={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: "6px 8px", fontSize: 16, fontFamily: "inherit" }}>
+                            <option value="">{t("settings.other")}</option>{EQUIPMENT.map(q => <option key={q} value={q}>{eqName(q)}</option>)}
+                          </select>
+                        </div>
+                        <button onClick={() => addExercise(search, { muscle: customDraft.muscle, eq: customDraft.eq, isDb: customDraft.eq === "ダンベル", bwFactor: customDraft.eq === "自重" ? 0.7 : 0 }, exIdx + 1)}
+                          style={{ ...btn(C.red), width: "100%", padding: 10, fontSize: 14 }}>
+                          {t("picker.addCustomShort", { name: search.trim() })}
+                        </button>
+                      </div>
                     )}
                   </div>
                 )}
@@ -2950,7 +2959,7 @@ function App() {
                     <option value="">{t("picker.selectMuscle")}</option>{MUSCLES.map(m => <option key={m} value={m}>{muscleName(m)}</option>)}
                   </select>
                   <select value={customDraft.eq} onChange={e => setCustomDraft({ ...customDraft, eq: e.target.value })} style={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: "6px 8px", fontSize: 16, fontFamily: "inherit" }}>
-                    {EQUIPMENT.map(q => <option key={q} value={q}>{eqName(q)}</option>)}
+                    <option value="">{t("settings.other")}</option>{EQUIPMENT.map(q => <option key={q} value={q}>{eqName(q)}</option>)}
                   </select>
                 </div>
                 <button onClick={() => addExercise(search, { muscle: customDraft.muscle, eq: customDraft.eq, isDb: customDraft.eq === "ダンベル", bwFactor: customDraft.eq === "自重" ? 0.7 : 0 })} style={{ ...btn(C.red), width: "100%", padding: 10, fontSize: 14 }}>{t("picker.addWithConfig")}</button>
@@ -3537,24 +3546,14 @@ function App() {
               placeholder={t("settings.exSearch")}
               style={{ width: "100%", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: "9px 10px", fontSize: 16, fontFamily: "inherit", marginBottom: 10 }} />
 
-            {/* 部位フィルター(種目数が多いので、検索しなくても部位から辿れるようにする) */}
-            <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 6, marginBottom: 10 }}>
-              <button onClick={() => setExSettingMuscle("")} style={{ ...chip(!exSettingMuscle), flexShrink: 0 }}>{t("settings.inUse")}</button>
-              {MUSCLES.filter(m => allExercises.some(e => e.m === m)).map(m => (
-                <button key={m} onClick={() => setExSettingMuscle(exSettingMuscle === m ? "" : m)} style={{ ...chip(exSettingMuscle === m), flexShrink: 0 }}>{muscleName(m)}</button>
-              ))}
-            </div>
-
+            {/* 部位フィルター(絞り込みではなく、下の一覧の該当見出しへジャンプするショートカット。
+                実際に一覧に出ている種目の部位だけをチップにする。全種目を母集団にすると、
+                既定表示(使用中の種目のみ)では対応する見出しが無くチップが無反応になるため) */}
             {(() => {
               const q = exSettingSearch.trim();
-              let list;
+              let pool;
               if (q) {
-                list = allExercises.filter(e => exMatches(e, q));
-                if (exSettingMuscle) list = list.filter(e => e.m === exSettingMuscle);
-                list = list.slice(0, 30);
-              } else if (exSettingMuscle) {
-                // 部位を選んだら、その部位の全種目(内蔵+カスタム)から選べる
-                list = allExercises.filter(e => e.m === exSettingMuscle).slice(0, 60);
+                pool = allExercises.filter(e => exMatches(e, q));
               } else {
                 // 使用中の種目(履歴・最近使った・カスタム)だけを既定で表示
                 const used = new Set([
@@ -3563,14 +3562,33 @@ function App() {
                   ...workouts.flatMap(w => w.exercises.map(e => e.name)),
                   ...Object.keys(exerciseOverrides),
                 ]);
-                list = allExercises.filter(e => used.has(e.n)).slice(0, 40);
+                pool = allExercises.filter(e => used.has(e.n));
               }
-              if (list.length === 0) {
-                return <div style={{ color: C.muted, fontSize: 13, textAlign: "center", padding: "12px 0" }}>
-                  {q || exSettingMuscle ? t("settings.noMatch") : t("settings.exEmptyHint")}
-                </div>;
+              const groups = MUSCLES.filter(m => pool.some(e => e.m === m));
+              const unassigned = pool.filter(e => !MUSCLES.includes(e.m));
+              const chips = (
+                <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 6, marginBottom: 10 }}>
+                  {groups.map(m => (
+                    <button key={m} onClick={() => document.getElementById(`ex-settings-${m}`)?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                      style={{ ...chip(false), flexShrink: 0 }}>{muscleName(m)}</button>
+                  ))}
+                  {unassigned.length > 0 && (
+                    <button onClick={() => document.getElementById("ex-settings-unassigned")?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                      style={{ ...chip(false), flexShrink: 0 }}>{muscleName("未設定")}</button>
+                  )}
+                </div>
+              );
+              if (pool.length === 0) {
+                return (
+                  <>
+                    {chips}
+                    <div style={{ color: C.muted, fontSize: 13, textAlign: "center", padding: "12px 0" }}>
+                      {q ? t("settings.noMatch") : t("settings.exEmptyHint")}
+                    </div>
+                  </>
+                );
               }
-              return list.map(e => {
+              const renderCard = e => {
                 const custom = customExercises.some(c => c.n === e.n);
                 const edited = !!exerciseOverrides[e.n];
                 return (
@@ -3628,7 +3646,24 @@ function App() {
                     </div>
                   </div>
                 );
-              });
+              };
+              return (
+                <>
+                  {chips}
+                  {groups.map((m, gi) => (
+                    <React.Fragment key={m}>
+                      <div id={`ex-settings-${m}`} style={{ fontSize: 12, fontWeight: 800, color: C.muted, margin: gi === 0 ? "0 0 6px" : "14px 0 6px" }}>{muscleName(m)}</div>
+                      {pool.filter(e => e.m === m).map(renderCard)}
+                    </React.Fragment>
+                  ))}
+                  {unassigned.length > 0 && (
+                    <React.Fragment key="unassigned">
+                      <div id="ex-settings-unassigned" style={{ fontSize: 12, fontWeight: 800, color: C.muted, margin: groups.length === 0 ? "0 0 6px" : "14px 0 6px" }}>{muscleName("未設定")}</div>
+                      {unassigned.map(renderCard)}
+                    </React.Fragment>
+                  )}
+                </>
+              );
             })()}
             <p style={{ color: C.muted, fontSize: 12, margin: "6px 0 0", lineHeight: 1.6 }}>
               {t("settings.exNote")}

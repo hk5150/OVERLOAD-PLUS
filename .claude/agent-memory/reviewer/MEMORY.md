@@ -1,0 +1,2 @@
+- [select センチネル不一致](kurabell-select-sentinel-mismatch.md) — 保存時フォールバック値と`<option value>`のセンチネルがずれるバグクラス(eqで実例)
+- [チップ→ジャンプ の母集団不一致](kurabell-chip-jump-pool-mismatch.md) — 絞り込みチップをジャンプ用に転用する際、表示母集団とジャンプ先存在条件がずれると無反応になる
