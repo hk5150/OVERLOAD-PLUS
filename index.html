@@ -226,7 +226,7 @@ const DRAFT_KEY = "workout-draft-v1"; // 入力途中の記録(アプリが落�
 const PRE_IMPORT_BACKUP_KEY = "workout-log-v1-pre-import"; // バックアップ復元前のデータ退避(復元に失敗した場合の保険)
 // ヘッダーのバージョンバッジとバックアップのappVersionで共有する単一の定数。
 // sw.js の CACHE 定数とは tests/version.test.js が数字の一致を機械的に縛っている(CLAUDE.md参照)。
-const APP_VERSION = "v87";
+const APP_VERSION = "v88";
 // store(保存レイヤ)は src/domain/storage.js へ移設(テストのため)。
 // LIBSで<script src>読み込み済みなのでグローバルの store をそのまま参照できる。
 const uid = () => Math.random().toString(36).slice(2, 8);
@@ -242,7 +242,7 @@ const fmtClock = (sec) => {
 
 // ================= 部位分類 =================
 const MUSCLES = [
-  "胸",
+  "大胸筋",
   "広背筋", "僧帽筋", "脊柱起立筋",
   "三角筋前部", "三角筋中部", "三角筋後部",
   "上腕二頭筋", "上腕三頭筋", "前腕",
@@ -250,10 +250,13 @@ const MUSCLES = [
   "腹筋", "全身",
 ];
 const EQUIPMENT = ["バーベル", "ダンベル", "マシン", "ケーブル", "スミス", "自重"];
-// 旧部位名(背中/背中上部→広背筋、上部胸筋→胸)を正規化
+// 旧部位名(背中/背中上部→広背筋、上部胸筋/胸→大胸筋)を正規化。
+// 「胸」は解剖学的に不正確なため「大胸筋」へ改名(2026-08-19)。既存記録の
+// muscle文字列は書き換わらないため、この正規化が無いと旧「胸」と新「大胸筋」が
+// 週間集計・分割日マッチで別グループとして分離されてしまう。
 const normMuscle = (m) => {
   if (m === "背中" || m === "背中上部") return "広背筋";
-  if (m === "上部胸筋") return "胸";
+  if (m === "上部胸筋" || m === "胸") return "大胸筋";
   return m || "";
 };
 
@@ -281,21 +284,21 @@ const defaultProfile = (p) => ({
 // m=部位, eq=器具, t=C/I, bw=自重(体重係数), db=ダンベル(片手重量), rom=可動域係数(集計ボリュームのみ・既定1.0)
 const EXERCISE_DB = [
   // 胸
-  { n: "バーベルベンチプレス", m: "胸", eq: "バーベル", t: "C" },
-  { n: "ダンベルベンチプレス", m: "胸", eq: "ダンベル", t: "C", db: true },
-  { n: "ダンベルフライ", m: "胸", eq: "ダンベル", t: "I", db: true },
-  { n: "チェストプレス", m: "胸", eq: "マシン", t: "C" },
-  { n: "ペックデックフライ", m: "胸", eq: "マシン", t: "I" },
-  { n: "スミスマシンベンチプレス", m: "胸", eq: "スミス", t: "C" },
-  { n: "ケーブルフライ", m: "胸", eq: "ケーブル", t: "I" },
-  { n: "ディップス", m: "胸", eq: "自重", t: "C", bw: 0.95 },
-  { n: "プッシュアップ", m: "胸", eq: "自重", t: "C", bw: 0.65 },
+  { n: "バーベルベンチプレス", m: "大胸筋", eq: "バーベル", t: "C" },
+  { n: "ダンベルベンチプレス", m: "大胸筋", eq: "ダンベル", t: "C", db: true },
+  { n: "ダンベルフライ", m: "大胸筋", eq: "ダンベル", t: "I", db: true },
+  { n: "チェストプレス", m: "大胸筋", eq: "マシン", t: "C" },
+  { n: "ペックデックフライ", m: "大胸筋", eq: "マシン", t: "I" },
+  { n: "スミスマシンベンチプレス", m: "大胸筋", eq: "スミス", t: "C" },
+  { n: "ケーブルフライ", m: "大胸筋", eq: "ケーブル", t: "I" },
+  { n: "ディップス", m: "大胸筋", eq: "自重", t: "C", bw: 0.95 },
+  { n: "プッシュアップ", m: "大胸筋", eq: "自重", t: "C", bw: 0.65 },
   // 胸(上部)
-  { n: "インクラインバーベルベンチプレス", m: "胸", eq: "バーベル", t: "C" },
-  { n: "インクラインダンベルプレス", m: "胸", eq: "ダンベル", t: "C", db: true },
-  { n: "インクラインチェストプレス", m: "胸", eq: "マシン", t: "C" },
-  { n: "スミスマシンインクラインプレス", m: "胸", eq: "スミス", t: "C" },
-  { n: "ロー・トゥ・ハイ・ケーブルフライ", m: "胸", eq: "ケーブル", t: "I" },
+  { n: "インクラインバーベルベンチプレス", m: "大胸筋", eq: "バーベル", t: "C" },
+  { n: "インクラインダンベルプレス", m: "大胸筋", eq: "ダンベル", t: "C", db: true },
+  { n: "インクラインチェストプレス", m: "大胸筋", eq: "マシン", t: "C" },
+  { n: "スミスマシンインクラインプレス", m: "大胸筋", eq: "スミス", t: "C" },
+  { n: "ロー・トゥ・ハイ・ケーブルフライ", m: "大胸筋", eq: "ケーブル", t: "I" },
   // 広背筋
   { n: "懸垂", m: "広背筋", eq: "自重", t: "C", bw: 1.0 },
   { n: "アシスト懸垂", m: "広背筋", eq: "マシン", t: "C" },
@@ -440,16 +443,16 @@ const resolveRom = (name, storedRom) => {
 const SPLIT_PRESETS = [
   { name: "全身法", days: [{ name: "全身", muscles: ["全身"] }] },
   { name: "上半身 / 下半身", days: [
-    { name: "上半身", muscles: ["胸", "広背筋", "三角筋中部", "上腕二頭筋", "上腕三頭筋"] },
+    { name: "上半身", muscles: ["大胸筋", "広背筋", "三角筋中部", "上腕二頭筋", "上腕三頭筋"] },
     { name: "下半身", muscles: ["大腿四頭筋", "ハムストリングス", "臀部", "ふくらはぎ"] },
   ]},
   { name: "Push / Pull / Legs", days: [
-    { name: "Push", muscles: ["胸", "三角筋前部", "三角筋中部", "上腕三頭筋"] },
+    { name: "Push", muscles: ["大胸筋", "三角筋前部", "三角筋中部", "上腕三頭筋"] },
     { name: "Pull", muscles: ["広背筋", "三角筋後部", "上腕二頭筋"] },
     { name: "Legs", muscles: ["大腿四頭筋", "ハムストリングス", "臀部", "ふくらはぎ"] },
   ]},
   { name: "5分割(胸/背中/脚/肩/腕)", days: [
-    { name: "胸", muscles: ["胸"] },
+    { name: "胸", muscles: ["大胸筋"] },
     { name: "背中", muscles: ["広背筋", "僧帽筋"] },
     { name: "脚", muscles: ["大腿四頭筋", "ハムストリングス", "臀部", "ふくらはぎ"] },
     { name: "肩", muscles: ["三角筋前部", "三角筋中部", "三角筋後部"] },
@@ -2251,7 +2254,7 @@ function App() {
       <header style={{ padding: "16px 16px 12px", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
         <div>
           <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: 26, letterSpacing: 0.5, lineHeight: 1.15 }}>
-            KURABELL Workout Log
+            KURABELL<span style={{ fontSize: 17 }}> Workout Log</span>
             <span style={{ fontFamily: FONT_UI, fontSize: 12, fontWeight: 700, color: C.green, marginLeft: 8, verticalAlign: "middle" }}>{APP_VERSION}</span>
           </div>
         </div>

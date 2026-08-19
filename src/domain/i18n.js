@@ -561,7 +561,7 @@ const EX_NAMES_EN = {
 // 部位名。解剖学名の直訳(Latissimus Dorsi等)ではなく、英語圏のトレーニングアプリで
 // 実際に使われる呼び方に寄せる(Lats / Traps / Quads)。
 const MUSCLE_NAMES_EN = {
-  "胸": "Chest",
+  "大胸筋": "Chest",
   "広背筋": "Lats",
   "僧帽筋": "Traps",
   "脊柱起立筋": "Lower Back",

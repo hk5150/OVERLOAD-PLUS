@@ -149,13 +149,13 @@ describe("表示名の解決", () => {
   it("日本語のときは元の名前をそのまま返す", () => {
     i18n.setLang("ja");
     expect(i18n.exName("バーベルベンチプレス")).toBe("バーベルベンチプレス");
-    expect(i18n.muscleName("胸")).toBe("胸");
+    expect(i18n.muscleName("大胸筋")).toBe("大胸筋");
   });
 
   it("英語のときは対応表を引く", () => {
     i18n.setLang("en");
     expect(i18n.exName("バーベルベンチプレス")).toBe("Barbell Bench Press");
-    expect(i18n.muscleName("胸")).toBe("Chest");
+    expect(i18n.muscleName("大胸筋")).toBe("Chest");
     expect(i18n.eqName("自重")).toBe("Bodyweight");
     expect(i18n.dayName("背中")).toBe("Back");
   });
@@ -168,7 +168,7 @@ describe("表示名の解決", () => {
 
   it("検索テキストには日英どちらも含まれる(英語UIでも日本語名で引けるように)", () => {
     i18n.setLang("en");
-    const s = i18n.exSearchText({ n: "バーベルベンチプレス", m: "胸", eq: "バーベル" });
+    const s = i18n.exSearchText({ n: "バーベルベンチプレス", m: "大胸筋", eq: "バーベル" });
     expect(s).toContain("バーベルベンチプレス");
     expect(s).toContain("barbell bench press");
     expect(s).toContain("chest");
