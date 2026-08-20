@@ -392,6 +392,7 @@ const STRINGS = {
   "share.perHand":     { ja: "{unit}(片手)",           en: "{unit}/hand" },
   "share.withBw":      { ja: "{unit}(体重込)",         en: "{unit} (incl. bodyweight)" },
   "share.bothHands":   { ja: "{unit}(両手計)",         en: "{unit} (both hands)" },
+  "share.aiPrompt":    { ja: "以下は私の筋トレ記録です。フォーム、重量設定、ボリュームの妥当性についてアドバイスをください。", en: "Below is my workout log. Please advise on form, load selection, and whether the volume is appropriate." },
   "csv.date":          { ja: "日付",                   en: "Date" },
   "csv.session":       { ja: "セッション",             en: "Session" },
   "csv.exercise":      { ja: "種目",                   en: "Exercise" },
