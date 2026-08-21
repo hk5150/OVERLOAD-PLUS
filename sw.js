@@ -1,6 +1,6 @@
 // KURABELL+ Service Worker
 // アプリ本体をキャッシュし、オフラインでも起動できるようにする。ライブラリもすべてローカル同梱(CDN不使用)。
-const CACHE = "kurabell-v92";
+const CACHE = "kurabell-v93";
 
 // ネットワーク優先フェッチのタイムアウト(電波が弱い環境でハングし続けるのを防ぐ)
 const NETWORK_TIMEOUT_MS = 4000;

@@ -226,7 +226,7 @@ const DRAFT_KEY = "workout-draft-v1"; // 入力途中の記録(アプリが落�
 const PRE_IMPORT_BACKUP_KEY = "workout-log-v1-pre-import"; // バックアップ復元前のデータ退避(復元に失敗した場合の保険)
 // ヘッダーのバージョンバッジとバックアップのappVersionで共有する単一の定数。
 // sw.js の CACHE 定数とは tests/version.test.js が数字の一致を機械的に縛っている(CLAUDE.md参照)。
-const APP_VERSION = "v92";
+const APP_VERSION = "v93";
 // store(保存レイヤ)は src/domain/storage.js へ移設(テストのため)。
 // LIBSで<script src>読み込み済みなのでグローバルの store をそのまま参照できる。
 const uid = () => Math.random().toString(36).slice(2, 8);
@@ -2081,6 +2081,11 @@ function App() {
         input:focus, button:focus-visible, select:focus { outline: 2px solid ${C.yellow}; outline-offset: 2px; }
         * { box-sizing: border-box; }
         input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; }
+        /* 見た目のサイズは変えず、タップ領域だけ縦方向に拡張する(HIG推奨の44ptに近づける)。
+           横方向は隣接ボタンとのgapが4〜8pxしかなく、拡張すると隣のボタンを覆って誤タップを
+           誘発するため広げない。 */
+        .tapArea { position: relative; }
+        .tapArea::before { content: ""; position: absolute; top: -6px; bottom: -6px; left: 0; right: 0; }
       `}</style>
 
       {/* ===== インターバル全画面表示 ===== */}
@@ -2442,6 +2447,9 @@ function App() {
                   </button>
                 )}
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 4, alignItems: "center" }}>
+                  {/* この行は flexWrap: "wrap" で折り返しうるため .tapArea を付けない。
+                      縦方向の透明拡張(-6px)が gap: 4px を超え、折り返した隣の行のボタンと
+                      重なって誤タップを誘発するリスクがあるため(reviewer指摘)。 */}
                   <button onClick={() => moveExercise(ex.id, -1)} disabled={exIdx === 0} aria-label={t("log.moveUp")}
                     style={{ ...btn(C.surface2, exIdx === 0 ? C.border : C.muted), padding: "4px 8px", fontSize: 13, cursor: exIdx === 0 ? "default" : "pointer" }}>▲</button>
                   <button onClick={() => moveExercise(ex.id, 1)} disabled={exIdx === today.length - 1} aria-label={t("log.moveDown")}
@@ -2751,6 +2759,7 @@ function App() {
                     }}
                       title={t("set.typeToggle")}
                       aria-label={t("set.typeAria", { n: i + 1 })}
+                      className="tapArea"
                       style={{ width: 24, height: 24, borderRadius: 6, flexShrink: 0, cursor: "pointer", fontSize: 12, fontWeight: 800, fontFamily: "inherit",
                         border: `1px solid ${s.warmup ? C.yellow : s.assisted ? C.blue : C.border}`,
                         background: s.warmup ? C.yellow : s.assisted ? C.blue : "transparent",
@@ -2764,7 +2773,7 @@ function App() {
                       onBlur={() => { if ((num(s.weight) > 0 || num(s.reps) > 0) && isLastInGroup(exIdx)) startRest(); }}
                       onChange={e => updateSet(ex.id, i, "reps", e.target.value)} aria-label={t("set.repsAria", { n: i + 1 })} style={{ ...numInput, flex: 1, opacity: s.warmup ? 0.6 : 1 }} />
                     <button onClick={() => copyFromPrev(ex.id, i)} disabled={i === 0}
-                      title={t("set.copyPrev")} aria-label={t("set.copyPrevShort")}
+                      title={t("set.copyPrev")} aria-label={t("set.copyPrevShort")} className="tapArea"
                       style={{ width: 26, height: 26, borderRadius: 8, flexShrink: 0, cursor: i === 0 ? "default" : "pointer", fontSize: 13,
                         border: `1px solid ${i === 0 ? C.border : C.blue}`, background: C.surface2, color: i === 0 ? C.border : C.blue }}>⧉</button>
                     <div style={{ flex: 2.4, opacity: s.warmup ? 0.35 : 1, pointerEvents: s.warmup ? "none" : "auto" }}>
@@ -2773,7 +2782,7 @@ function App() {
                         if (v !== "" && isLastInGroup(exIdx)) { startRest(); setRestFull(true); }
                       }} />
                     </div>
-                    <button onClick={() => removeSet(ex.id, i)} aria-label={t("set.removeAria", { n: i + 1 })}
+                    <button onClick={() => removeSet(ex.id, i)} aria-label={t("set.removeAria", { n: i + 1 })} className="tapArea"
                       style={{ width: 26, height: 26, borderRadius: 8, border: `1px solid ${C.border}`, background: C.surface2, color: C.muted, fontSize: 13, cursor: "pointer", flexShrink: 0 }}>✕</button>
                   </div>
 
@@ -3314,7 +3323,7 @@ function App() {
                         {copiedIdx === idx ? t("common.copied") : t("common.copy")}
                       </button>
                       <button onClick={() => startEditWorkout(idx)} style={{ ...btn(C.surface2, C.muted), padding: "5px 10px", fontSize: 13 }}>{t("common.edit")}</button>
-                      <button onClick={() => deleteWorkout(idx)} aria-label={t("history.deleteDay")} style={{ ...btn("transparent", C.muted), padding: "5px 6px", fontSize: 13 }}>🗑</button>
+                      <button onClick={() => deleteWorkout(idx)} aria-label={t("history.deleteDay")} className="tapArea" style={{ ...btn("transparent", C.muted), padding: "5px 6px", fontSize: 13 }}>🗑</button>
                     </>
                   )}
                 </div>
@@ -3397,11 +3406,11 @@ function App() {
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, gap: 8 }}>
                         <strong style={{ fontSize: 13, minWidth: 0 }}>{exName(ex.name)}</strong>
                         <div style={{ display: "flex", gap: 4, alignItems: "center", flexShrink: 0 }}>
-                          <button onClick={() => editMoveExercise(exIdx, -1)} disabled={exIdx === 0} aria-label={t("log.moveUp")}
+                          <button onClick={() => editMoveExercise(exIdx, -1)} disabled={exIdx === 0} aria-label={t("log.moveUp")} className="tapArea"
                             style={{ ...btn(C.surface2, exIdx === 0 ? C.border : C.muted), padding: "3px 8px", fontSize: 12, cursor: exIdx === 0 ? "default" : "pointer" }}>▲</button>
-                          <button onClick={() => editMoveExercise(exIdx, 1)} disabled={exIdx === d.exercises.length - 1} aria-label={t("log.moveDown")}
+                          <button onClick={() => editMoveExercise(exIdx, 1)} disabled={exIdx === d.exercises.length - 1} aria-label={t("log.moveDown")} className="tapArea"
                             style={{ ...btn(C.surface2, exIdx === d.exercises.length - 1 ? C.border : C.muted), padding: "3px 8px", fontSize: 12, cursor: exIdx === d.exercises.length - 1 ? "default" : "pointer" }}>▼</button>
-                          <button onClick={() => editRemoveExercise(exIdx)} style={{ ...btn("transparent", C.muted), padding: 2, fontSize: 12 }}>{t("common.delete")}</button>
+                          <button onClick={() => editRemoveExercise(exIdx)} className="tapArea" style={{ ...btn("transparent", C.muted), padding: 2, fontSize: 12 }}>{t("common.delete")}</button>
                         </div>
                       </div>
                       <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 4 }}>
@@ -3414,7 +3423,7 @@ function App() {
                       {ex.sets.map((s, setIdx) => (
                         <div key={setIdx} style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 6 }}>
                           <button onClick={() => editSet(exIdx, setIdx, "warmup", !s.warmup)}
-                            aria-label={t("set.warmupToggle")}
+                            aria-label={t("set.warmupToggle")} className="tapArea"
                             style={{ width: 22, height: 22, borderRadius: 6, flexShrink: 0, cursor: "pointer", fontSize: 11, fontWeight: 800, fontFamily: "inherit",
                               border: `1px solid ${s.warmup ? C.yellow : C.border}`, background: s.warmup ? C.yellow : "transparent", color: s.warmup ? "#141517" : C.muted }}>
                             {s.warmup ? "W" : setIdx + 1}
@@ -3428,7 +3437,7 @@ function App() {
                           <NumInput inputMode="numeric" value={s.rir} placeholder="–"
                             onChange={e => editSet(exIdx, setIdx, "rir", e.target.value)} aria-label={t("rir.short")}
                             style={{ ...numInput, flex: 1, fontSize: 18, padding: "7px 2px", color: C.yellow }} />
-                          <button onClick={() => editRemoveSet(exIdx, setIdx)} aria-label={t("set.removeSet")}
+                          <button onClick={() => editRemoveSet(exIdx, setIdx)} aria-label={t("set.removeSet")} className="tapArea"
                             style={{ width: 24, height: 24, borderRadius: 6, border: `1px solid ${C.border}`, background: C.surface2, color: C.muted, fontSize: 12, cursor: "pointer", flexShrink: 0 }}>✕</button>
                         </div>
                       ))}
@@ -3768,7 +3777,7 @@ function App() {
       {showSplitHistory && todayDay && (
         <div onClick={closeSplitHistory} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.6)", zIndex: 50, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
           <div ref={splitHistoryModalRef} onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-label={t("split.dayHistory", { day: dayName(todayDay.name) })} tabIndex={-1}
-            style={{ background: C.surface, borderTop: `3px solid ${C.blue}`, borderRadius: "16px 16px 0 0", padding: 20, width: "100%", maxWidth: 520, maxHeight: "70vh", overflowY: "auto" }}>
+            style={{ background: C.surface, borderTop: `3px solid ${C.blue}`, borderRadius: "16px 16px 0 0", padding: "20px 20px calc(20px + env(safe-area-inset-bottom))", width: "100%", maxWidth: 520, maxHeight: "70vh", overflowY: "auto" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
               <strong style={{ fontSize: 15 }}>{t("split.dayHistory", { day: dayName(todayDay.name) })}</strong>
               <button onClick={closeSplitHistory} style={{ ...btn(C.surface2, C.muted), padding: "4px 12px", fontSize: 13 }}>{t("common.close")}</button>
