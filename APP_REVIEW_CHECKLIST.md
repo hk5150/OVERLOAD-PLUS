@@ -24,12 +24,14 @@ App Store Connectでの提出直前に、上から順に確認する。チェッ
 ## Support URL
 
 - [ ] `https://hk5150.github.io/OVERLOAD-PLUS/support.html`
-- [ ] GitHub Pagesが有効化されていて、実際にアクセスできることを提出前に確認する
+- [x] GitHub Pagesが有効化されていて、実際にアクセスできることを提出前に確認する
+  (**確認済み 2026-08-22**。日英の言語切替リンクも含めて正常に表示された)
 - [ ] [support.html](support.html) の内容(問い合わせ先・FAQ・バックアップ手順)が最新か確認
 
 ## Privacy Policy URL
 
-- [ ] `https://hk5150.github.io/OVERLOAD-PLUS/privacy.html`
+- [x] `https://hk5150.github.io/OVERLOAD-PLUS/privacy.html`
+  (**アクセス確認済み 2026-08-22**)
 - [ ] [privacy.html](privacy.html) の「3. 通信・トラッキング・広告」がYouTube検索機能の実態と
   矛盾していないか確認(修正済み。今後この機能を変更したら記述もあわせて見直すこと)
 
@@ -48,8 +50,10 @@ App Store Connectでの提出直前に、上から順に確認する。チェッ
 
 - [ ] `TARGETED_DEVICE_FAMILY = "1"`(iPhone専用としてビルド)。iPadでは互換モードで動作する
 - [ ] `IPHONEOS_DEPLOYMENT_TARGET = 13.0`(古めの端末まで対応)
-- [ ] iPhone SE相当(狭い画面)とPro Max相当(広い画面)の両方で崩れがないか、
-  シミュレータで目視確認する(**未検証**、Xcode環境が必要)
+- [x] iPhone SE相当(狭い画面)とPro Max相当(広い画面)の両方で崩れがないか、
+  シミュレータで目視確認する(**検証済み 2026-08-22 / v95**。iPhone SE 3rd(375pt)と
+  iPhone 17 Pro Max(440pt)の両方で、分割・記録・セット入力・設定タブのアコーディオン・
+  インターバル拡大表示(92px)まで崩れなしを確認)
 
 ## 縦画面設定
 
@@ -131,3 +135,13 @@ App Store Connectでの提出直前に、上から順に確認する。チェッ
 - [ ] Releaseビルドでデバッグログ・開発用の分岐が残っていないか確認
   (このリポジトリはAI機能を `const AI_ENABLED = false` で無効化しているのみで、
   デバッグ専用コードパスは無い認識だが、変更を加えた場合は再確認すること)
+- [x] **Release構成でのビルド・起動・永続化を検証済み(2026-08-22 / v95)**。
+  `xcodebuild -configuration Release` がシミュレータ向けに成功(警告213件はすべて
+  SQLCipher由来で自コードからはゼロ)。新規インストールから起動し、初回ガイド通過・
+  種目追加・セット入力・インターバル動作まで確認。SQLiteのDBファイルを直接開いて
+  7テーブルの作成、`settings`行の書き込み(`guideSeen`/`recentNames`/`profile`)、
+  `legacy_migration`が`done`になることを確認した。下書きはPreferences側に保存される
+- [ ] **Archive自体は未実施。** 有料メンバーシップの承認が完了していないため、Xcodeの
+  Signing & Capabilities で選べるのが Personal Team のみで、実機なしでは
+  プロビジョニングプロファイルを生成できない(「Your team has no devices」)。
+  承認後に Team を切り替えれば解消する見込み
