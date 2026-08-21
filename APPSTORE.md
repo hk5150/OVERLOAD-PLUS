@@ -203,13 +203,13 @@ App Store Connectの「App Privacy」セクションでは、以下の方針で�
 
 ## スクリーンショットの実物
 
-`~/Desktop/KURABELL-appstore-screenshots/{en,ja}/` に 1320×2868(6.9インチ)で各5枚。
+`~/Desktop/KURABELL-appstore-screenshots/{en,ja}/` に 1320×2868(6.9インチ)で各5枚(CACHE v93で撮影)。
 iPhone 17 Pro Max のシミュレータで撮影、ステータスバーは 9:41 / 満充電 / 電波・Wi-Fi満に統一してある。
 
 | ファイル | 内容 |
 |---|---|
 | `01-last-session-on-every-set.png` | 記録画面。前回の重量・推移・自己ベストが並ぶ |
-| `02-weight-reps-rir.png` | セット入力とゴースト表示、自己ベスト更新(YOU WIN!) |
+| `02-weight-reps-rir.png` | セット入力とゴースト表示(前回セットとの並び) |
 | `03-todays-menu.png` | 今日のメニュー(前回記録の引き継ぎ) |
 | `04-charts.png` | ボリューム推移と種目別の重量・推定1RM推移 |
 | `05-settings-backup.png` | 言語・単位の切り替えとバックアップ |
