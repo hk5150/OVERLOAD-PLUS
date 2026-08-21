@@ -226,7 +226,7 @@ const DRAFT_KEY = "workout-draft-v1"; // 入力途中の記録(アプリが落�
 const PRE_IMPORT_BACKUP_KEY = "workout-log-v1-pre-import"; // バックアップ復元前のデータ退避(復元に失敗した場合の保険)
 // ヘッダーのバージョンバッジとバックアップのappVersionで共有する単一の定数。
 // sw.js の CACHE 定数とは tests/version.test.js が数字の一致を機械的に縛っている(CLAUDE.md参照)。
-const APP_VERSION = "v93";
+const APP_VERSION = "v95";
 // store(保存レイヤ)は src/domain/storage.js へ移設(テストのため)。
 // LIBSで<script src>読み込み済みなのでグローバルの store をそのまま参照できる。
 const uid = () => Math.random().toString(36).slice(2, 8);
@@ -799,6 +799,7 @@ function App() {
   }, [unit, loaded]);
   const [editAddSearch, setEditAddSearch] = useState("");  // 履歴編集で種目を追加するときの検索語
   const [exSettingSearch, setExSettingSearch] = useState(""); // 設定タブの種目検索
+  const [expandedSettingsMuscles, setExpandedSettingsMuscles] = useState(() => new Set()); // 設定タブでアコーディオン展開中の部位
 
   // タイマー
   const [startAt, setStartAt] = useState(null);   // セッション開始(ms)
@@ -2103,7 +2104,7 @@ function App() {
               <div style={{ fontSize: 11, color: C.muted, letterSpacing: 1 }}>{t("rest.title")}</div>
               <div style={{
                 fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800,
-                fontSize: 76, lineHeight: 1.05,
+                fontSize: 92, lineHeight: 1.05,
                 color: restElapsed >= 180 ? C.red : restElapsed >= 60 ? C.yellow : C.text,
                 fontVariantNumeric: "tabular-nums",
               }}>
@@ -3320,7 +3321,7 @@ function App() {
                     <>
                       <button onClick={() => copyWorkout(w, idx)}
                         style={{ ...btn(copiedIdx === idx ? C.green : C.surface2, copiedIdx === idx ? "#fff" : C.muted), padding: "5px 10px", fontSize: 13 }}>
-                        {copiedIdx === idx ? t("common.copied") : t("common.copy")}
+                        {copiedIdx === idx ? t("history.consultAiDone") : t("history.consultAi")}
                       </button>
                       <button onClick={() => startEditWorkout(idx)} style={{ ...btn(C.surface2, C.muted), padding: "5px 10px", fontSize: 13 }}>{t("common.edit")}</button>
                       <button onClick={() => deleteWorkout(idx)} aria-label={t("history.deleteDay")} className="tapArea" style={{ ...btn("transparent", C.muted), padding: "5px 6px", fontSize: 13 }}>🗑</button>
@@ -3556,9 +3557,10 @@ function App() {
               placeholder={t("settings.exSearch")}
               style={{ width: "100%", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: "9px 10px", fontSize: 16, fontFamily: "inherit", marginBottom: 10 }} />
 
-            {/* 部位フィルター(絞り込みではなく、下の一覧の該当見出しへジャンプするショートカット。
-                実際に一覧に出ている種目の部位だけをチップにする。全種目を母集団にすると、
-                既定表示(使用中の種目のみ)では対応する見出しが無くチップが無反応になるため) */}
+            {/* 部位フィルター(タップした部位だけ下の一覧をアコーディオンで開閉する。
+                複数部位を同時に開ける。実際に一覧に出ている種目の部位だけをチップにする。
+                全種目を母集団にすると、既定表示(使用中の種目のみ)では対応する種目が無く
+                チップが無意味になるため) */}
             {(() => {
               const q = exSettingSearch.trim();
               let pool;
@@ -3576,15 +3578,20 @@ function App() {
               }
               const groups = MUSCLES.filter(m => pool.some(e => e.m === m));
               const unassigned = pool.filter(e => !MUSCLES.includes(e.m));
+              const toggleMuscle = m => setExpandedSettingsMuscles(prev => {
+                const next = new Set(prev);
+                next.has(m) ? next.delete(m) : next.add(m);
+                return next;
+              });
               const chips = (
                 <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 6, marginBottom: 10 }}>
                   {groups.map(m => (
-                    <button key={m} onClick={() => document.getElementById(`ex-settings-${m}`)?.scrollIntoView({ behavior: "smooth", block: "start" })}
-                      style={{ ...chip(false), flexShrink: 0 }}>{muscleName(m)}</button>
+                    <button key={m} onClick={() => toggleMuscle(m)}
+                      style={{ ...chip(expandedSettingsMuscles.has(m)), flexShrink: 0 }}>{muscleName(m)}</button>
                   ))}
                   {unassigned.length > 0 && (
-                    <button onClick={() => document.getElementById("ex-settings-unassigned")?.scrollIntoView({ behavior: "smooth", block: "start" })}
-                      style={{ ...chip(false), flexShrink: 0 }}>{muscleName("未設定")}</button>
+                    <button onClick={() => toggleMuscle("未設定")}
+                      style={{ ...chip(expandedSettingsMuscles.has("未設定")), flexShrink: 0 }}>{muscleName("未設定")}</button>
                   )}
                 </div>
               );
@@ -3657,21 +3664,28 @@ function App() {
                   </div>
                 );
               };
+              const renderGroup = (m, label, items, gi) => {
+                // 検索中は絞り込み済みで件数が少ないため、開閉に関係なく常に表示する
+                const open = !!q || expandedSettingsMuscles.has(m);
+                return (
+                  <React.Fragment key={m}>
+                    <div onClick={() => !q && toggleMuscle(m)}
+                      style={{
+                        fontSize: 12, fontWeight: 800, color: C.muted, margin: gi === 0 ? "0 0 6px" : "14px 0 6px",
+                        cursor: q ? "default" : "pointer", display: "flex", alignItems: "center", gap: 4,
+                      }}>
+                      {!q && <span style={{ fontSize: 10, transform: open ? "rotate(90deg)" : "none", display: "inline-block" }}>▶</span>}
+                      {label} <span style={{ color: C.border }}>({items.length})</span>
+                    </div>
+                    {open && items.map(renderCard)}
+                  </React.Fragment>
+                );
+              };
               return (
                 <>
                   {chips}
-                  {groups.map((m, gi) => (
-                    <React.Fragment key={m}>
-                      <div id={`ex-settings-${m}`} style={{ fontSize: 12, fontWeight: 800, color: C.muted, margin: gi === 0 ? "0 0 6px" : "14px 0 6px" }}>{muscleName(m)}</div>
-                      {pool.filter(e => e.m === m).map(renderCard)}
-                    </React.Fragment>
-                  ))}
-                  {unassigned.length > 0 && (
-                    <React.Fragment key="unassigned">
-                      <div id="ex-settings-unassigned" style={{ fontSize: 12, fontWeight: 800, color: C.muted, margin: groups.length === 0 ? "0 0 6px" : "14px 0 6px" }}>{muscleName("未設定")}</div>
-                      {unassigned.map(renderCard)}
-                    </React.Fragment>
-                  )}
+                  {groups.map((m, gi) => renderGroup(m, muscleName(m), pool.filter(e => e.m === m), gi))}
+                  {unassigned.length > 0 && renderGroup("未設定", muscleName("未設定"), unassigned, groups.length)}
                 </>
               );
             })()}
