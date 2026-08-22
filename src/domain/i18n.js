@@ -121,6 +121,9 @@ const STRINGS = {
   "log.volume":        { ja: "ボリューム", en: "Volume" },
   // 上部バーの到達度ゲージの読み上げ用(画面上は数字を出さずゲージだけ)
   "log.volumeRatio":   { ja: "{pct}%(基準 {v}{unit})", en: "{pct}% of baseline ({v}{unit})" },
+  // ゲージ下の残量テキスト。labelには compare.recentDay/compare.recent の結果(例:「直近3回の胸」)が入る
+  "log.volumeToGo":    { ja: "{label}の平均まであと{v}{unit}", en: "{v}{unit} to {label} avg" },
+  "log.volumeOver":    { ja: "{label}の平均を{v}{unit}上回った", en: "{v}{unit} over {label} avg" },
   "log.tapToExpand":   { ja: "タップで拡大", en: "Tap to expand" },
   "log.saving":        { ja: "保存中…",    en: "Saving…" },
   "log.saved":         { ja: "保存済み",   en: "Saved" },

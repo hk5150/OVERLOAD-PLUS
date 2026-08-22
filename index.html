@@ -227,7 +227,7 @@ const DRAFT_KEY = "workout-draft-v1"; // 入力途中の記録(アプリが落�
 const PRE_IMPORT_BACKUP_KEY = "workout-log-v1-pre-import"; // バックアップ復元前のデータ退避(復元に失敗した場合の保険)
 // ヘッダーのバージョンバッジとバックアップのappVersionで共有する単一の定数。
 // sw.js の CACHE 定数とは tests/version.test.js が数字の一致を機械的に縛っている(CLAUDE.md参照)。
-const APP_VERSION = "v97";
+const APP_VERSION = "v98";
 // store(保存レイヤ)は src/domain/storage.js へ移設(テストのため)。
 // LIBSで<script src>読み込み済みなのでグローバルの store をそのまま参照できる。
 const uid = () => Math.random().toString(36).slice(2, 8);
@@ -2304,10 +2304,8 @@ function App() {
 
             <div onClick={() => { if (sameSplitSessions.length > 0) setShowSplitHistory(true); }}
               style={{ flex: 1, minWidth: 0, textAlign: "center", borderLeft: `1px solid ${C.border}`, borderRight: `1px solid ${C.border}`, padding: "0 6px", cursor: sameSplitSessions.length > 0 ? "pointer" : "default" }}>
-              {/* 基準の説明はliveVolumeに関係なく出す。以前は最初の1セットを終えた瞬間に
-                  「(vs …)」が生えて文字が動いていたし、開始前に今日の目安が読めなかった。 */}
               <div style={{ fontSize: 11, color: C.muted, marginBottom: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                {t("log.volume")}{compareBase && compareBase.avg > 0 ? ` (vs ${compareBase.avgLabel})` : ""}
+                {t("log.volume")}
               </div>
               <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: 30, lineHeight: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                 {Math.round(toU(liveVolume)).toLocaleString()}<span style={{ fontSize: 13, color: C.muted, marginLeft: 1 }}>{uLabel()}</span>
@@ -2342,6 +2340,18 @@ function App() {
                       <div style={{ position: "absolute", left: "80%", top: 0, bottom: 0, width: 2, background: C.surface2 }} />
                     </div>
                   );
+                })()}
+              </div>
+              {/* 基準の説明をゲージの下に移動。以前はラベル行に「(vs 直近3回の胸)」と
+                  付いていたが、記録開始時点でボタン下にラベルと同じ高さで収めるのが窮屈だった。
+                  ここも高さを常に確保する(理由はゲージと同じ、条件表示だとレイアウトが動く)。 */}
+              <div style={{ height: 13, marginTop: 3, fontSize: 10, color: C.muted, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                {compareBase && compareBase.avg > 0 && (() => {
+                  const diff = liveVolume - compareBase.avg;
+                  const v = Math.round(toU(Math.abs(diff))).toLocaleString();
+                  return diff >= 0
+                    ? t("log.volumeOver", { label: compareBase.avgLabel, v, unit: uLabel() })
+                    : t("log.volumeToGo", { label: compareBase.avgLabel, v, unit: uLabel() });
                 })()}
               </div>
             </div>
