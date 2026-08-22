@@ -430,3 +430,106 @@ muscle/eqセレクトを新規追加した。
   維持する判断をしたが、`settings.exercisesDesc`の文言(「内蔵種目も含めて設定を
   変更できます」)とニュアンスが完全には一致しない可能性がある
 - 保留5件のうち10番・11番は引き続き未着手(前セクション参照)
+
+---
+
+# 2026-08-23: Apple Watch連携の代替として休憩タイマーをローカル通知化、収益化方針を決定
+
+Apple Watch連携をやりたいという相談から始まったセッション。調査の結果、watchOSアプリの
+新規開発ではなく、休憩タイマーのローカル通知化という形で実質的な目的を達成する方針にした。
+別件で収益化方針(有料/無料)もこのセッションで決定した。
+
+## 決定事項
+
+### 1. Apple Watch連携はwatchOSアプリを作らず、ローカル通知で代替する
+
+調査の結果、以下が判明した:
+- **watchOSアプリはWebView技術で作れない**。SwiftUI/WatchKitによる完全な新規ネイティブ実装が
+  必須で、`index.html`のコードは1行も再利用できない(Appleのエンジニアがフォーラムで明言)
+- 公式の`@capacitor/watch`プラグインは実質メンテナンス停止(最新v0.1.12、peer依存が
+  `@capacitor/core: ^5.0.0`でこのアプリの6系とは非互換、最終更新2024-04、公式ドキュメントは404)
+- **App Group経由でのSQLite共有は不可能**。`@capacitor-community/sqlite`の実コード
+  (`UtilsFile.swift`の`getFolderURL`)が許可リスト外のパスを拒否する実装になっており、
+  `iosDatabaseLocation`にApp Groupコンテナを指定する手段が無い
+- 一方、**ロック中のiPhoneのローカル通知はApple Watchへ自動転送される**(Apple公式)。
+  Watchアプリを書かずに「手首で休憩の終わりを知る」という目的の大部分を達成できる
+
+将来Watchアプリを作るなら、案B(今日のメニュー・前回実績の閲覧、読み取り専用)が
+片方向同期で済み費用対効果が最良と判断。案C(Watch単体で記録入力)はドメインロジックが
+JSとSwiftに二重化し、個人開発では保守しきれないため非推奨とした。
+
+### 2. 休憩タイマーをローカル通知化(`@capacitor/local-notifications@6.1.3`)
+
+休憩タイマーは`setInterval` + `AudioContext`のみで実装されており、iOSはWebViewが
+バックグラウンドに入るとJSタイマーを止めるため、**アプリを閉じると経過も通知音も止まる**
+という既存の不具合があった(ジムでスマホを置く実際の使い方で機能していなかった)。
+ローカル通知はOS側が発火するためバックグラウンドでも確実に届く。
+
+- **通知と通知音は排他にした**(二重通知の回避)。Capacitor iOSの通知は前面でもバナーを
+  出すのが既定のため、ネイティブ+許可済みのときは分刻みの`beep()`を鳴らさず通知に一本化した
+- **通知操作を`useRef`のPromiseチェーンで直列化した(実バグ対策)**。`startRest()`は
+  重量/回数のonBlurから連続発火し`restStartAt`が短時間に何度も変わるため、直列化しないと
+  前の実行の`cancel`が後の実行の`schedule`を追い越して消す経路が実在した(起動時、初回
+  レンダーの`cancel`が下書き復元の`schedule`を後から消すケースが最悪)
+- 通知許可の要求は「`restStartAt`がnull→非nullに変わったとき」だけ、セッション中1回。
+  設定の`soundOn`トグル操作では要求しない(休憩中にトグルすると唐突にダイアログが出るため)
+- 新しい設定項目は増やさず、既存の「インターバルの通知音」トグルに相乗りさせた
+  (文言は音だけでなく通知も指す内容に更新。「サイレントスイッチがオフだと鳴らない」という
+  記述もネイティブでは不正確になるため書き換えた)
+- 起動時に前回の予約通知を掃除する専用effectを、タイマーeffectより宣言順で先に配置。
+  セット未入力のままインターバルを開始してアプリを終了すると、アプリが存在を知らない
+  通知だけが後から鳴る経路があったため
+
+### 3. 収益化方針を決定(別件)
+
+`MONETIZATION.md`の「案A(買い切り)推奨」という下書きを、**案B(無料ダウンロード+
+記録10回まで試用+非消耗型IAP)**に変更して決定した。試用条件は暦日ベースではなく
+**記録回数ベース**にした。理由: このアプリの中心機能(前回の同じ番手のセットをそのまま
+見せる比較表示)は同じ分割日を2周目に回さないと発動せず、5分割だと1〜2週間かかることが
+多い。暦日ベースの試用だと、多くのユーザーが中心的な価値を体験する前に試用期間が切れて
+しまう。StoreKit実装そのものはこのセッションでは着手せず、Apple Developer Program登録・
+Xcode署名・Archive検証といった提出の段取りを先に固めることを優先した。
+
+## 変更したファイル
+
+| ファイル | 内容 |
+|---|---|
+| `src/domain/restNotifications.js`(新規) | 純粋関数`buildRestNotifications`+Capacitorブリッジ(schedule/cancel/permission) |
+| `index.html` | 休憩タイマーの`useEffect`に統合。直列化キュー・許可要求・孤児通知クリーンアップを追加 |
+| `src/domain/i18n.js` | 通知文言(`rest.notifyTitle`/`rest.notifyBody`/`settings.notifyDenied`)を新規追加、`settings.sound*`の説明文を更新 |
+| `sw.js` / `scripts/sync-www.js` | 3箇所同期(`restNotifications.js`をLIBS/APP_ASSETS/DOMAIN_FILESに追加) |
+| `package.json` / `package-lock.json` / `ios/App/Podfile` / `ios/App/Podfile.lock` | `@capacitor/local-notifications`追加 |
+| `tests/restNotifications.test.js`(新規) | 純粋関数とフェイクプラグインでのブリッジ関数のテスト(20件) |
+| `APP_REVIEW_CHECKLIST.md` | 通知セクション追加。Release構成の検証・GitHub Pagesアクセス確認・iPhone SE/Pro Maxのレイアウト確認など、既存の未検証項目も実機能検証を踏まえてチェック済みに更新 |
+| `MONETIZATION.md` | 収益化方針の決定を記録(既存の「案A推奨」は上書き済みとして明記) |
+
+バージョン: v95 → v96。コミット `bf87224`(push済み、`main`ブランチ)。
+`ios/App/App.xcodeproj/project.pbxproj`は意図的にコミット対象から除外(下記残課題参照)。
+
+## 検証内容
+
+- `npm test` 207件通過(新規20件、既存187件)
+- **iOS Simulatorで実機能検証**: インターバル開始→許可ダイアログ表示→許可→
+  バックグラウンド化→システムログ(`log show --predicate 'process == "App" OR eventMessage
+  CONTAINS "Notification"'`)で実際にバナー通知(`requestIdentifier: 4203`、3分経過)が
+  配信されたことを確認。1・2分の通知(4201/4202)は許可ダイアログの応答待ちの間に「過去」と
+  判定され意図通りスケジュールされなかった(バグではなく`buildRestNotifications`の
+  「過去の分は積まない」フィルタが正しく機能した結果)
+- `reviewer`エージェントによる別文脈レビュー: 重大な指摘なし。改善提案2点を反映済み
+  (許可直後にeffectのdeps変化で`schedule`が二重に呼ばれる経路を解消、クロージャが握る
+  `restStartAt`の鮮度についてコメントを追加)
+- Web版(`kurabell-www`, 8766)で`restNotificationsAvailable()`が`false`を返し、
+  従来通り`beep()`のみで動作する(no-op)ことを確認
+
+## 残っている課題
+
+- `ios/App/App.xcodeproj/project.pbxproj`に、Xcodeでのビルド確認時に自動追加された
+  `DEVELOPMENT_TEAM`(Personal Team ID)が残っており、意図的にコミット対象から除外している。
+  有料メンバーシップ承認後、正式なTeamに切り替えるタイミングで上書きされる見込み
+- **通知音が実際に鳴るかは実機/TestFlightでの確認が必要**(シミュレータでは未確認)。
+  iOS側で`sound`未指定時にデフォルト音になるか無音かはプラグイン実装依存
+- アプリを完全終了(kill)した場合のスケジュール済み通知の挙動、集中モード/通知要約による
+  配信遅延は制御外(`interruptionLevel`はこのプラグインで指定できない)
+- Apple Developer Programの有料メンバーシップ承認待ち。Archiveビルドは未実施
+  (Personal Teamでは実機なしのプロビジョニングプロファイル生成ができないため)
+- 次の話題として「記録画面上部のボリューム周りの見え方整理」が挙がっていた(入力中断、詳細未確認)
