@@ -94,7 +94,6 @@ const STRINGS = {
   "rir.same":          { ja: "→ 同じ",        en: "→ same" },
 
   // ---- 比較の見出し ----
-  "compare.prevDay":   { ja: "前回の{day}",           en: "Last {day}" },
   "compare.recentDay": { ja: "直近{n}回の{day}",      en: "Last {n} {day} sessions" },
   "compare.recent":    { ja: "直近{n}回",             en: "Last {n} sessions" },
   "compare.past":      { ja: "過去の自分",            en: "Your best" },
@@ -120,6 +119,8 @@ const STRINGS = {
   "log.title":         { ja: "今日の記録", en: "Today's workout" },
   "log.elapsed":       { ja: "経過",       en: "Elapsed" },
   "log.volume":        { ja: "ボリューム", en: "Volume" },
+  // 上部バーの到達度ゲージの読み上げ用(画面上は数字を出さずゲージだけ)
+  "log.volumeRatio":   { ja: "{pct}%(基準 {v}{unit})", en: "{pct}% of baseline ({v}{unit})" },
   "log.tapToExpand":   { ja: "タップで拡大", en: "Tap to expand" },
   "log.saving":        { ja: "保存中…",    en: "Saving…" },
   "log.saved":         { ja: "保存済み",   en: "Saved" },

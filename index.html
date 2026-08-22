@@ -227,7 +227,7 @@ const DRAFT_KEY = "workout-draft-v1"; // 入力途中の記録(アプリが落�
 const PRE_IMPORT_BACKUP_KEY = "workout-log-v1-pre-import"; // バックアップ復元前のデータ退避(復元に失敗した場合の保険)
 // ヘッダーのバージョンバッジとバックアップのappVersionで共有する単一の定数。
 // sw.js の CACHE 定数とは tests/version.test.js が数字の一致を機械的に縛っている(CLAUDE.md参照)。
-const APP_VERSION = "v96";
+const APP_VERSION = "v97";
 // store(保存レイヤ)は src/domain/storage.js へ移設(テストのため)。
 // LIBSで<script src>読み込み済みなのでグローバルの store をそのまま参照できる。
 const uid = () => Math.random().toString(36).slice(2, 8);
@@ -1288,8 +1288,10 @@ function App() {
     return a + ex.sets.filter(isDoneSet).reduce((b, s) => b + effWeight(fromU(s.weight), isDb, ex.bwFactor || 0, profile.bodyweight) * Math.round(num(s.reps)) * rom, 0);
   }, 0), [today, profile.bodyweight, exerciseOverrides, unit]);
 
-  // 比較基準は「同じセッション」の記録。前回1回と直近3回の平均の両方を出す。
-  // (前回がたまたま不調だった場合に備え、平均も見られるようにする)
+  // 比較基準は「同じセッション」の直近3回の平均。前回1回だけを基準にすると、
+  // たまたま不調だった日・種目を減らした日が基準になってしまうため平均を使う。
+  // 同名セッションの記録が1件も無ければ、セッションを問わず全記録の直近3回にフォールバックする
+  // (avgLabelもcompare.recentDay/compare.recentで出し分けている)。
   const compareBase = useMemo(() => {
     if (workouts.length === 0) return null;
     const sameList = todayDay ? workouts.filter(w => w.session === todayDay.name) : [];
@@ -1298,10 +1300,7 @@ function App() {
     const recent = list.slice(-3);
     const avg = recent.reduce((a, w) => a + volOf(w), 0) / recent.length;
     return {
-      label: sameList.length > 0 ? t("compare.prevDay", { day: dayName(todayDay.name) }) : t("judge.prev"),
-      volume: volOf(list[list.length - 1]),
       avg,
-      avgCount: recent.length,
       avgLabel: sameList.length > 0 ? t("compare.recentDay", { n: recent.length, day: dayName(todayDay.name) }) : t("compare.recent", { n: recent.length }),
     };
   }, [workouts, split, profile.bodyweight, exerciseOverrides, lang]);
@@ -2147,7 +2146,9 @@ function App() {
   }, [lastBackupAt, workouts.length, hideBackupNag, lang]);
 
   // ================= 画面 =================
-  const showBar = true; // 経過・ボリューム・インターバルは常時表示
+  // 上部バーの表示条件。ノッチ帯を誰が塞ぐか(バー or header + 目隠し)がこれで決まるので、
+  // 参照する3箇所で条件がずれないよう1つにまとめる。
+  const barVisible = view === "log" || restStartAt != null;
 
   return (
     <div style={{ minHeight: "100vh", background: C.bg, color: C.text, maxWidth: 520, margin: "0 auto", paddingBottom: restFull && restStartAt != null ? 250 : 90 }}>
@@ -2282,8 +2283,15 @@ function App() {
         );
       })()}
 
-      {/* ===== 固定バー(タイマー+ボリューム) ===== */}
-      {showBar && (
+      {/* ===== 固定バー(タイマー+ボリューム) =====
+          原則は記録タブ限定。以前は全タブに出していたが、設定・履歴・分割の画面で
+          経過時間とボリュームは判断材料にならず、縦を85px専有するだけだった。
+          ただしインターバル計測中だけは例外で全タブに出す。休憩中に履歴で前回の数字を
+          見るのは実際の動線で、そこでバーが消えると残り時間も見えず止める手段も無くなる
+          (上部バーの「インターバル開始」ボタン経由だとrestFullが開いていないため)。
+          バーを出さないタブでは下の<header>がノッチに潜るので、そちら側で
+          safe-areaを負担する(バーはstickyでtop:0に居るため自分で持つ必要がある)。 */}
+      {barVisible && (
         <div style={{
           position: "sticky", top: 0, zIndex: 20, background: C.surface2, borderBottom: `1px solid ${C.border}`,
           padding: "10px 10px 12px", paddingTop: "calc(10px + env(safe-area-inset-top))",
@@ -2296,24 +2304,46 @@ function App() {
 
             <div onClick={() => { if (sameSplitSessions.length > 0) setShowSplitHistory(true); }}
               style={{ flex: 1, minWidth: 0, textAlign: "center", borderLeft: `1px solid ${C.border}`, borderRight: `1px solid ${C.border}`, padding: "0 6px", cursor: sameSplitSessions.length > 0 ? "pointer" : "default" }}>
+              {/* 基準の説明はliveVolumeに関係なく出す。以前は最初の1セットを終えた瞬間に
+                  「(vs …)」が生えて文字が動いていたし、開始前に今日の目安が読めなかった。 */}
               <div style={{ fontSize: 11, color: C.muted, marginBottom: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                {t("log.volume")}{compareBase && liveVolume > 0 ? ` (vs ${compareBase.avgLabel})` : ""}
+                {t("log.volume")}{compareBase && compareBase.avg > 0 ? ` (vs ${compareBase.avgLabel})` : ""}
               </div>
               <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: 30, lineHeight: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                 {Math.round(toU(liveVolume)).toLocaleString()}<span style={{ fontSize: 13, color: C.muted, marginLeft: 1 }}>{uLabel()}</span>
               </div>
-              {compareBase && compareBase.avg > 0 && liveVolume > 0 && (() => {
-                const pct = (liveVolume / compareBase.avg) * 100;
-                const diff = liveVolume - compareBase.avg;
-                return (
-                  <div style={{ fontSize: 12, marginTop: 2, fontWeight: 700, color: pct >= 100 ? C.green : pct >= 90 ? C.yellow : C.red }}>
-                    {pct.toFixed(0)}%
-                    <span style={{ color: C.muted, fontWeight: 400, marginLeft: 4 }}>
-                      {t("chart.total")} {Math.round(toU(compareBase.avg)).toLocaleString()}
-                    </span>
-                  </div>
-                );
-              })()}
+              {/* 基準への到達度。以前は「63% トータル 3,041」という文字だったが、
+                  (1)平均値を「トータル」と誤って呼んでいた (2)ボリュームは0から積み上がるので
+                  90%を超える終盤まで赤で、「まだ途中」と「不調」が見分けられなかった。
+                  ゲージ全幅を基準の125%とし、80%の位置(=基準ちょうど)に切り欠きを置く。
+                  高さは常に確保する。条件表示のままだと最初のRIRを入れた瞬間にバーが16px伸びて、
+                  stickyバーの下にある入力欄が丸ごとずれてしまう。 */}
+              <div style={{ height: 5, marginTop: 5 }}>
+                {compareBase && compareBase.avg > 0 && (() => {
+                  const ratio = liveVolume / compareBase.avg;
+                  return (
+                    // ゲージは純粋に視覚的なので、文字で持っていた比較情報はaria-valuetextに移す
+                    // (文字表示をやめた分、読み上げからも消えてしまうため)。
+                    <div role="progressbar" aria-label={t("log.volume")}
+                      aria-valuemin={0} aria-valuemax={100}
+                      aria-valuenow={Math.max(0, Math.min(Math.round(ratio * 100), 100))}
+                      aria-valuetext={t("log.volumeRatio", {
+                        pct: Math.round(ratio * 100),
+                        v: Math.round(toU(compareBase.avg)).toLocaleString(),
+                        unit: uLabel(),
+                      })}
+                      style={{ height: "100%", borderRadius: 999, background: C.border, position: "relative", overflow: "hidden" }}>
+                      <div style={{
+                        // 両側クランプ。NumInputはtype="text"で負の重量を打てるため、片側だけだと
+                        // width:"-32%"という不正値になり、宣言ごと無視されてゲージが満杯に見える。
+                        width: `${Math.max(0, Math.min(ratio / 1.25, 1)) * 100}%`, height: "100%",
+                        background: ratio >= 1 ? C.green : C.blue, transition: "width .3s linear",
+                      }} />
+                      <div style={{ position: "absolute", left: "80%", top: 0, bottom: 0, width: 2, background: C.surface2 }} />
+                    </div>
+                  );
+                })()}
+              </div>
             </div>
 
             {restStartAt != null ? (
@@ -2336,7 +2366,22 @@ function App() {
         </div>
       )}
 
-      <header style={{ padding: "16px 16px 12px", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+      {/* バーが無いタブのノッチ帯の目隠し。headerのpaddingTopは初期表示しか守れず、
+          スクロールすると本文がステータスバーの時刻・電池表示の裏を流れてしまう
+          (以前はstickyバーがtop:0に貼り付いて常に塞いでいた)。
+          env()が0のブラウザでは高さ0になり何も起きない。 */}
+      {!barVisible && (
+        <div aria-hidden="true" style={{
+          position: "fixed", top: 0, left: 0, right: 0, height: "env(safe-area-inset-top)",
+          background: C.bg, zIndex: 30, pointerEvents: "none",
+        }} />
+      )}
+
+      {/* 上部バーが出ているときはそちらがsafe-areaを負担しているので、ここでは足さない */}
+      <header style={{
+        padding: "16px 16px 12px", display: "flex", justifyContent: "space-between", alignItems: "flex-start",
+        paddingTop: barVisible ? 16 : "calc(16px + env(safe-area-inset-top))",
+      }}>
         <div>
           <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: 26, letterSpacing: 0.5, lineHeight: 1.15 }}>
             KURABELL<span style={{ fontSize: 17 }}> Workout Log</span>
