@@ -230,6 +230,8 @@ const STRINGS = {
   "rest.until1min":    { ja: "1分まで",                en: "to 1 min" },
   "rest.elapsed":      { ja: "{n}分経過",              en: "{n} min elapsed" },
   "rest.finish":       { ja: "終了",                   en: "Finish" },
+  "rest.notifyTitle":  { ja: "インターバル",           en: "Rest timer" },
+  "rest.notifyBody":   { ja: "{n}分経過しました。次のセットへ。", en: "{n} min elapsed. Time for your next set." },
 
   // ---- 使い方ガイド ----
   "guide.title":       { ja: "アプリの使い方ガイド",   en: "How to use this app" },
@@ -358,9 +360,10 @@ const STRINGS = {
   "settings.muscle":   { ja: "部位",                   en: "Muscle" },
   "settings.equipment": { ja: "器具",                  en: "Equipment" },
   "settings.other":    { ja: "その他",                 en: "Other" },
-  "settings.sound":    { ja: "インターバルの通知音",   en: "Rest timer sound" },
-  "settings.soundDesc": { ja: "インターバル中、1分・2分・3分…の経過時に音が鳴ります(経過が長いほど回数が増えます)。アプリを開いた後、最初のタップで音が有効になります。", en: "The timer chimes at 1, 2, 3 minutes and so on — more beeps the longer you rest. Sound turns on after your first tap in the app." },
-  "settings.soundDesc2": { ja: "iPhoneでは本体のサイレントスイッチがオンだと鳴りません。", en: "On iPhone, nothing plays while the silent switch is on." },
+  "settings.sound":    { ja: "インターバルの通知",     en: "Rest timer alerts" },
+  "settings.soundDesc": { ja: "インターバル中、1分・2分・3分の経過時に知らせます。通知を許可しておくと、アプリを閉じていても届き、Apple Watchを着けていれば手元でも気づけます。", en: "Alerts you at 1, 2 and 3 minutes into your rest. If you allow notifications, they arrive even when the app is closed — and on your wrist if you wear an Apple Watch." },
+  "settings.soundDesc2": { ja: "通知を許可していない場合は、アプリを開いている間だけ音で知らせます(iPhoneのサイレントスイッチがオンだと鳴りません)。", en: "Without notification access, it chimes only while the app is open — and stays silent while the iPhone's silent switch is on." },
+  "settings.notifyDenied": { ja: "通知がオフになっています。iPhoneの「設定」→「通知」→ KURABELL から許可すると、アプリを閉じていても知らせます。", en: "Notifications are off. Allow them in Settings → Notifications → KURABELL to get alerts while the app is closed." },
   "settings.confirmDeleteEx": { ja: "「{name}」を種目一覧から削除します。\n過去の記録は残りますが、一覧には出なくなります。よろしいですか?", en: "Remove \"{name}\" from the exercise list?\nPast records are kept, but it will no longer appear in the list." },
   "settings.confirmDeleteExShort": { ja: "「{name}」を種目一覧から削除します。よろしいですか?", en: "Remove \"{name}\" from the exercise list?" },
 

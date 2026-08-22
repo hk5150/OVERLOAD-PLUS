@@ -166,6 +166,7 @@
     { key:'storage',    urls:['src/domain/storage.js'] },
     { key:'backupValidation', urls:['src/domain/backupValidation.js'] },
     { key:'volume',     urls:['src/domain/volume.js'] },
+    { key:'restNotifications', urls:['src/domain/restNotifications.js'] },
     // iOS版のSQLite永続化層。Web版では何もしない(nativeSqliteDriver()がnullを返すだけ)。
     { key:'dbSchema',    urls:['src/domain/db/schema.js'] },
     { key:'dbMigration', urls:['src/domain/db/migration.js'] },
@@ -226,7 +227,7 @@ const DRAFT_KEY = "workout-draft-v1"; // 入力途中の記録(アプリが落�
 const PRE_IMPORT_BACKUP_KEY = "workout-log-v1-pre-import"; // バックアップ復元前のデータ退避(復元に失敗した場合の保険)
 // ヘッダーのバージョンバッジとバックアップのappVersionで共有する単一の定数。
 // sw.js の CACHE 定数とは tests/version.test.js が数字の一致を機械的に縛っている(CLAUDE.md参照)。
-const APP_VERSION = "v95";
+const APP_VERSION = "v96";
 // store(保存レイヤ)は src/domain/storage.js へ移設(テストのため)。
 // LIBSで<script src>読み込み済みなのでグローバルの store をそのまま参照できる。
 const uid = () => Math.random().toString(36).slice(2, 8);
@@ -985,6 +986,23 @@ function App() {
   const audioRef = useRef(null);
   const firedMinRef = useRef(0); // 何分の通知まで鳴らしたか(再レンダーでも保持)
 
+  // ---- 休憩タイマーのローカル通知 ----
+  // 通知が使えるなら分刻みのbeep()は鳴らさず通知に一本化する(前面でもバナーが出るため
+  // 二重に知らせてしまう。Apple Watchへのハプティックも1回で済む)。
+  // 許可されていない/Web版では従来どおりbeep()にフォールバックする。
+  const [notifyPerm, setNotifyPerm] = useState("unavailable"); // granted | denied | prompt | unavailable
+  const notifyGranted = notifyPerm === "granted";
+  const askedNotifyRef = useRef(false); // 許可要求はセッション中1回だけ
+  // 通知APIの呼び出しを発行順に直列化する。startRest()は重量・回数のonBlurから連続発火し
+  // restStartAtが短時間に何度も変わるため、直列化しないと前の実行のcancelが後の実行の
+  // scheduleを追い越して消してしまう(起動時の「初回レンダーのcancel」が下書き復元の
+  // scheduleを消す経路が実在する)。
+  const notifyQueueRef = useRef(Promise.resolve());
+  const runNotify = (fn) => {
+    notifyQueueRef.current = notifyQueueRef.current.then(fn).catch(() => {});
+    return notifyQueueRef.current;
+  };
+
   // 使える状態のAudioContextを返す(壊れていれば再生成)
   const getAudioCtx = () => {
     const Ctx = window.AudioContext || window.webkitAudioContext;
@@ -1083,9 +1101,56 @@ function App() {
     } catch { /* 音が出せない環境では無視 */ }
   };
 
-  // ---- インターバルタイマー(カウントアップ・1分ごとに通知音) ----
+  // ---- 起動時に前回の予約通知を掃除する ----
+  // 下書きは today.length === 0 && !startAt のとき保存されず、復元条件も today.length > 0。
+  // そのため「セット未入力のままヘッダーからインターバルを開始 → アプリを終了」すると、
+  // アプリ側が存在を知らない通知だけが後から鳴る。宣言順でタイマーeffectより先に置き、
+  // 同じキューを通すことで「掃除 → 下書き復元によるschedule」の順序を保証する。
   useEffect(() => {
-    if (restStartAt == null) { firedMinRef.current = 0; return; }
+    if (!loaded) return;
+    runNotify(async () => {
+      await cancelRestNotifications();
+      await clearDeliveredRestNotifications();
+    });
+    checkRestNotificationPermission().then(setNotifyPerm);
+  }, [loaded]);
+
+  // ---- インターバルタイマー(カウントアップ・1分ごとに知らせる) ----
+  useEffect(() => {
+    if (restStartAt == null) {
+      firedMinRef.current = 0;
+      runNotify(() => cancelRestNotifications());
+      return;
+    }
+    // 通知はOS側が発火するので、アプリがバックグラウンドでも届く(この機能の主目的)。
+    // 許可要求はインターバルを実際に始めたときだけ、セッション中1回。設定トグルの操作で
+    // 出すと、休憩中にトグルしたユーザーへ唐突にダイアログが出るため連動させない。
+    if (soundOn && restNotificationsAvailable()) {
+      runNotify(async () => {
+        let ok = notifyGranted;
+        if (!ok && !askedNotifyRef.current) {
+          askedNotifyRef.current = true;
+          ok = await ensureRestNotificationPermission();
+          if (ok !== notifyGranted) {
+            // 状態が変わるとnotifyGrantedがdepsのこのeffectが再実行され、そちらで
+            // scheduleされる。ここでも続けて呼ぶと同じ内容を二重に予約してしまうので返す。
+            setNotifyPerm(ok ? "granted" : "denied");
+            return;
+          }
+        }
+        if (!ok) return;
+        // このrestStartAtは、この関数がenqueueされた時点の値を閉じ込めている。
+        // 許可ダイアログの応答待ち中に次のセットが記録されrestStartAtが更新された場合、
+        // 一瞬古い基準時刻でscheduleされるが、runNotifyの直列化により直後にそのeffectの
+        // 再実行(新しいrestStartAtでの呼び出し)が続くため、届く前に正しい内容へ上書きされる。
+        await scheduleRestNotifications(restStartAt, Date.now(), {
+          title: t("rest.notifyTitle"),
+          body: (n) => t("rest.notifyBody", { n }),
+        });
+      });
+    } else {
+      runNotify(() => cancelRestNotifications());
+    }
     const tick = () => {
       const sec = Math.floor((Date.now() - restStartAt) / 1000);
       setRestElapsed(sec);
@@ -1093,16 +1158,24 @@ function App() {
       // 1秒ごとの判定で分の境界を飛ばしても、未通知の分を確実に鳴らす
       if (min > firedMinRef.current) {
         firedMinRef.current = min;
-        beep(min === 1 ? 1 : Math.min(min, 3)); // 経過が長いほど回数を増やす
+        // 通知が届く環境では鳴らさない(通知と二重になるため)
+        if (!notifyGranted) beep(min === 1 ? 1 : Math.min(min, 3)); // 経過が長いほど回数を増やす
       }
     };
     // 500msごとに判定して1分の取りこぼしを減らす(表示は秒単位)
     const id = setInterval(tick, 500);
     tick();
-    const onVisible = () => { if (document.visibilityState === "visible") tick(); };
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      tick();
+      // 前面に戻ったら配信済みの通知を消す(通知センターに残骸を残さない)
+      runNotify(() => clearDeliveredRestNotifications());
+    };
     document.addEventListener("visibilitychange", onVisible);
+    // cleanupで通知はキャンセルしない。バックグラウンド化はunmountを起こさないが、
+    // 万一unmountで消すと「アプリを閉じていても知らせる」という目的そのものを損なう。
     return () => { clearInterval(id); document.removeEventListener("visibilitychange", onVisible); };
-  }, [restStartAt, soundOn]);
+  }, [restStartAt, soundOn, notifyGranted]);
 
   const startRest = () => { setRestStartAt(Date.now()); setRestElapsed(0); firedMinRef.current = 0; }; // 記録入力のたびに0から再スタート
   const stopRest = () => { setRestStartAt(null); setRestElapsed(0); firedMinRef.current = 0; setRestFull(false); };
@@ -3737,6 +3810,12 @@ function App() {
               {t("settings.soundDesc")}{" "}
               {t("settings.soundDesc2")}
             </p>
+            {/* 一度拒否されるとiOSは再度ダイアログを出さないため、設定アプリへ誘導するしかない */}
+            {soundOn && notifyPerm === "denied" && (
+              <p style={{ color: C.yellow, fontSize: 13, margin: "10px 0 0", lineHeight: 1.6 }}>
+                {t("settings.notifyDenied")}
+              </p>
+            )}
           </div>
 
           {/* バックアップ */}
