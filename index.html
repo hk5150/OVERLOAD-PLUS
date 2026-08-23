@@ -227,7 +227,7 @@ const DRAFT_KEY = "workout-draft-v1"; // 入力途中の記録(アプリが落�
 const PRE_IMPORT_BACKUP_KEY = "workout-log-v1-pre-import"; // バックアップ復元前のデータ退避(復元に失敗した場合の保険)
 // ヘッダーのバージョンバッジとバックアップのappVersionで共有する単一の定数。
 // sw.js の CACHE 定数とは tests/version.test.js が数字の一致を機械的に縛っている(CLAUDE.md参照)。
-const APP_VERSION = "v100";
+const APP_VERSION = "v101";
 // store(保存レイヤ)は src/domain/storage.js へ移設(テストのため)。
 // LIBSで<script src>読み込み済みなのでグローバルの store をそのまま参照できる。
 const uid = () => Math.random().toString(36).slice(2, 8);
@@ -1466,25 +1466,34 @@ function App() {
     };
   };
 
-  // 今日のセッションのメニュー(分割に登録した種目 > 前回同セッション > 部位一致の履歴)
+  // 前回の同じセッション(Day名一致)の実際の記録。今日のメニューの最優先ソース。
+  const lastSameSession = useMemo(() => {
+    if (!todayDay) return null;
+    return [...workouts].reverse().find(w => w.session === todayDay.name) || null;
+  }, [workouts, todayDay]);
+
+  // 今日のセッションのメニュー(前回同セッションの実際の記録 > 分割に登録した種目 > 部位一致の履歴)。
+  // 以前は分割の登録種目リストを最優先にしていたが、そのリストは手動編集しない限り不変なので、
+  // ある種目をもうやらなくなっても「今日のメニュー」に出続けてしまっていた。前回実際にやった
+  // 記録があるなら、分割の登録内容に関わらずそちらを優先する(前回やっていない種目は出ない)。
   const autoMenu = useMemo(() => {
     if (!todayDay) return [];
     let names = [];
-    if (todayDay.exercises && todayDay.exercises.length) {
+    if (lastSameSession) {
+      names = lastSameSession.exercises.map(e => e.name);
+    } else if (todayDay.exercises && todayDay.exercises.length) {
       names = [...todayDay.exercises];
     } else {
-      const lastSame = [...workouts].reverse().find(w => w.session === todayDay.name);
-      if (lastSame) names = lastSame.exercises.map(e => e.name);
-      else {
-        const seen = new Set();
-        [...workouts].reverse().forEach(w => w.exercises.forEach(ex => {
-          if (!seen.has(ex.name) && muscleMatchesDay(ex.muscle, todayDay)) seen.add(ex.name);
-        }));
-        names = [...seen];
-      }
+      const seen = new Set();
+      [...workouts].reverse().forEach(w => w.exercises.forEach(ex => {
+        if (!seen.has(ex.name) && muscleMatchesDay(ex.muscle, todayDay)) seen.add(ex.name);
+      }));
+      names = [...seen];
     }
     return names.map(buildMenuItem);
-  }, [split, workouts, profile.bodyweight, lang]);
+    // splitは直接参照していない(todayDay経由の間接参照のみ)。lastSameSessionも
+    // workouts/todayDayからの導出値だが、useMemoの依存漏れ検出を素直に通すため明示している。
+  }, [lastSameSession, todayDay, workouts, profile.bodyweight, lang]);
 
   const startAutoMenu = () => {
     ensureStarted();
@@ -2609,7 +2618,10 @@ function App() {
             <div style={{ background: C.surface, borderRadius: 14, padding: 14, marginBottom: 14, border: `1px solid ${C.border}` }}>
               <div style={{ fontSize: 13, fontWeight: 900, marginBottom: 2 }}>{t("menu.title")}</div>
               <div style={{ fontSize: 12, color: C.muted, marginBottom: 10, lineHeight: 1.6 }}>
-                {t("menu.carryover", { src: todayDay.exercises && todayDay.exercises.length ? t("menu.fromSplit") : t("menu.fromLast") })}
+                {/* autoMenuの3分岐(前回同セッション > 分割の登録種目 > 部位一致の履歴)と1対1で対応させる。
+                    以前は3分岐目(部位一致で複数の過去記録から寄せ集め)もfromLastと表示しており、
+                    特定の「前回のセッション」から来たかのように読めて不正確だった。 */}
+                {t("menu.carryover", { src: lastSameSession ? t("menu.fromLast") : (todayDay.exercises && todayDay.exercises.length ? t("menu.fromSplit") : t("menu.fromHistory")) })}
               </div>
               {autoMenu.map((it, i) => {
                 const p = it.prescription;

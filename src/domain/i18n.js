@@ -172,6 +172,7 @@ const STRINGS = {
   // 差し込み側にあるので、ここで "From ..." と書くと "Carried over from From your split." になる。
   "menu.fromSplit":    { ja: "マイ分割に登録した種目", en: "your split" },
   "menu.fromLast":     { ja: "前回のセッション",       en: "your last session" },
+  "menu.fromHistory":  { ja: "過去",                   en: "your past sessions" },
   "menu.start":        { ja: "この内容で記録を開始",   en: "Start with this menu" },
   "menu.carryover":    { ja: "{src}の記録をそのまま引き継いでいます。開始後に調整できます。", en: "Carried over from {src}. You can adjust once you start." },
   "menu.setCount":     { ja: "({n}セット)",            en: "({n} sets)" },
