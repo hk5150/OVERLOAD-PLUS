@@ -42,13 +42,18 @@
 <p>KURABELL Workout Log(以下「本アプリ」)は、トレーニング記録を管理するためのアプリです。本ポリシーは、本アプリが利用者の情報をどのように扱うかを説明します。</p>
 
 <h2>1. 収集する情報</h2>
-<p>本アプリは、いかなる利用者情報も外部サーバーへ送信・収集しません。ユーザー登録・ログイン機能はなく、本アプリの開発者や第三者が利用者を識別できる情報を取得することはありません。種目のやり方をYouTubeで調べる任意の機能がありますが、送信するのは種目名のみで、トレーニング記録などの個人データが含まれることはありません(詳しくは3章)。</p>
+<p>本アプリは、いかなる利用者情報も外部サーバーへ送信・収集しません。ユーザー登録・ログイン機能はなく、本アプリの開発者や第三者が利用者を識別できる情報を取得することはありません。外部サービスを開く任意の機能が2つありますが(YouTubeでの種目検索、AIチャットへの相談)、いずれも本アプリがトレーニング記録を送信することはありません(詳しくは3章)。</p>
 
 <h2>2. データの保存場所</h2>
 <p>入力されたトレーニング記録(重量・回数・RIR・種目・体重などの設定)は、すべて利用者の端末内(ローカルストレージ)にのみ保存されます。これらのデータは本アプリの外部に送信されることはなく、開発者がアクセスすることもできません。</p>
 
 <h2>3. 通信・トラッキング・広告</h2>
-<p>トレーニング記録、集計、グラフ、バックアップなどの主要機能はオフラインで動作します。任意でYouTubeの種目検索を開く場合のみ、外部サービス(YouTube)への接続が発生します。この検索に使うのは種目名だけで、トレーニング記録がYouTubeまたは開発者へ送信されることはありません。アクセス解析(アナリティクス)、広告配信、第三者トラッキングSDKは組み込まれていません。</p>
+<p>トレーニング記録、集計、グラフ、バックアップなどの主要機能はオフラインで動作します。外部サービスへの接続が発生するのは、利用者が次のいずれかを選んだ場合だけです。</p>
+<ul>
+<li><strong>YouTubeでの種目検索</strong>: 検索に使うのは種目名だけで、トレーニング記録が送信されることはありません。</li>
+<li><strong>AIに相談</strong>: 「AI相談」を押すと、記録は<strong>お使いの端末のクリップボードにコピー</strong>され、設定で選んだAIチャットのページが開きます。本アプリが記録をAIサービスへ送信することはなく、URLにも記録を含めません。記録がAIサービスへ渡るのは、利用者自身がチャット欄に貼り付けて送信したときだけです。その後の記録の取り扱いは、そのAIサービスのプライバシーポリシーに従います。</li>
+</ul>
+<p>アクセス解析(アナリティクス)、広告配信、第三者トラッキングSDKは組み込まれていません。</p>
 
 <h2>4. データの削除</h2>
 <p>本アプリをアンインストールする、またはアプリ内の「設定」からデータを削除することで、保存されたすべての記録が端末から完全に削除されます。バックアップとして記録をJSON/CSV形式で書き出す機能がありますが、その書き出し・共有は利用者自身の操作によってのみ行われます。</p>
@@ -74,13 +79,18 @@
 <p>KURABELL Workout Log (the "App") is an app for keeping a strength training log. This policy explains how the App handles your information.</p>
 
 <h2>1. Information We Collect</h2>
-<p>The App does not send or collect any user information to or on any external server. There is no account registration and no sign-in, and neither the developer nor any third party obtains information that could identify you. The App offers an optional feature to look up how to perform an exercise on YouTube; only the exercise name is sent, never your training records or any other personal data (see section 3).</p>
+<p>The App does not send or collect any user information to or on any external server. There is no account registration and no sign-in, and neither the developer nor any third party obtains information that could identify you. The App has two optional features that open an external service — looking up an exercise on YouTube, and asking an AI chat about your log — and in neither case does the App itself send your training records anywhere (see section 3).</p>
 
 <h2>2. Where Your Data Is Stored</h2>
 <p>Everything you enter — weight, reps, RIR, exercises, bodyweight and other settings — is stored solely on your own device (in local storage). This data is never transmitted outside the App, and the developer cannot access it.</p>
 
 <h2>3. Network Use, Tracking and Advertising</h2>
-<p>All the main features — logging, totals, charts and backups — work offline. A connection to an external service (YouTube) occurs only if you choose to open the exercise search. That search uses the exercise name alone; your training records are never sent to YouTube or to the developer. The App contains no analytics, no advertising, and no third-party tracking SDKs.</p>
+<p>All the main features — logging, totals, charts and backups — work offline. A connection to an external service occurs only if you choose one of the following:</p>
+<ul>
+<li><strong>Exercise search on YouTube</strong>: the search uses the exercise name alone; your training records are never sent.</li>
+<li><strong>Ask AI</strong>: tapping "Ask AI" copies your log <strong>to your device's clipboard</strong> and opens the AI chat you selected in Settings. The App does not send your log to the AI service, and never puts it in the URL. Your log reaches the AI service only when you paste it into the chat yourself. What happens to it after that is governed by that service's own privacy policy.</li>
+</ul>
+<p>The App contains no analytics, no advertising, and no third-party tracking SDKs.</p>
 
 <h2>4. Deleting Your Data</h2>
 <p>Uninstalling the App, or deleting your data from the in-app Settings tab, permanently removes all stored records from your device. The App can export your records as JSON or CSV for backup, but that export and any subsequent sharing happen only when you choose to do so.</p>

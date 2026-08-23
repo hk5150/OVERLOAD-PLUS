@@ -227,7 +227,7 @@ const DRAFT_KEY = "workout-draft-v1"; // 入力途中の記録(アプリが落�
 const PRE_IMPORT_BACKUP_KEY = "workout-log-v1-pre-import"; // バックアップ復元前のデータ退避(復元に失敗した場合の保険)
 // ヘッダーのバージョンバッジとバックアップのappVersionで共有する単一の定数。
 // sw.js の CACHE 定数とは tests/version.test.js が数字の一致を機械的に縛っている(CLAUDE.md参照)。
-const APP_VERSION = "v99";
+const APP_VERSION = "v100";
 // store(保存レイヤ)は src/domain/storage.js へ移設(テストのため)。
 // LIBSで<script src>読み込み済みなのでグローバルの store をそのまま参照できる。
 const uid = () => Math.random().toString(36).slice(2, 8);
@@ -261,6 +261,23 @@ const normMuscle = (m) => {
   return m || "";
 };
 
+// 「AIに相談」で開くチャットサービス。プロンプトはクリップボード経由で渡し、URLには一切載せない。
+// URLのクエリ(?q=)に記録を載せる方式は採らない。理由は3つ:
+//   1. privacy.html / APPSTORE.md の「トレーニング記録を外部へ送信しない」が成り立たなくなる
+//      (クリップボードは端末内で完結するので、貼り付けはユーザーの操作として区別できる)
+//   2. Claude・Gemini・Copilotは?q=に非対応。ChatGPT等も対応は非公式で、
+//      プロンプトインジェクション対策として各社が削る流れにある(2025〜2026年に複数の削除実績)
+//   3. 対応していても仕様変更で黙って壊れる。コピーなら壊れようがない
+const AI_SERVICES = [
+  { id: "chatgpt",    label: "ChatGPT",    url: "https://chatgpt.com/" },
+  { id: "claude",     label: "Claude",     url: "https://claude.ai/new" },
+  { id: "gemini",     label: "Gemini",     url: "https://gemini.google.com/app" },
+  { id: "perplexity", label: "Perplexity", url: "https://www.perplexity.ai/" },
+  { id: "grok",       label: "Grok",       url: "https://grok.com/" },
+];
+const DEFAULT_AI_SERVICE = "chatgpt";
+const aiServiceOf = (id) => AI_SERVICES.find(s => s.id === id) || AI_SERVICES[0];
+
 // 保存データの移行処理。通常の起動読み込みとバックアップ復元(importBackup)の両方から使う。
 // 別々に書くと、片方だけ直したときに移行結果が食い違う。
 const migrateWorkouts = (ws) => (ws || []).map(w => ({
@@ -276,6 +293,8 @@ const defaultProfile = (p) => ({
   // 表示単位。lang と同じく null は「未設定=端末に従う」。言語とは独立したスイッチ
   // (日本語UIでlb、英語UIでkg のどちらもあり得るため)。保存される重量は常にkg。
   unit: p?.unit ?? null,
+  // 「AIに相談」で開くチャットサービス。値は AI_SERVICES のid。
+  aiService: p?.aiService ?? DEFAULT_AI_SERVICE,
 });
 
 // extractWorkoutsArray・validateWorkoutsShapeは src/domain/backupValidation.js へ移設(テストのため)。
@@ -719,7 +738,9 @@ class ErrorBoundary extends React.Component {
 }
 
 // 新規インストール時、および全データ削除後の既定値(clearAllで再利用し、削除直後に古いprofileが復活しないようにする)
-const DEFAULT_PROFILE = { bodyweight: 70, soundOn: true, defTargetReps: 10, defIncrement: 2.5, lang: null, unit: null };
+// defaultProfile() と同じフィールドを持たせる。ここに書き忘れると、初回起動と
+// 「全データ削除」直後だけ値がundefinedになり、設定タブの選択状態が消える。
+const DEFAULT_PROFILE = { bodyweight: 70, soundOn: true, defTargetReps: 10, defIncrement: 2.5, lang: null, unit: null, aiService: DEFAULT_AI_SERVICE };
 
 // ================= アプリ本体 =================
 function App() {
@@ -770,7 +791,6 @@ function App() {
   const closeSplitHistory = () => setShowSplitHistory(false);
   useModalA11y(showSplitHistory, closeSplitHistory, splitHistoryModalRef);
   const [insertAt, setInsertAt] = useState(null);     // 種目を挿入する位置(nullなら末尾)
-  const [histMode, setHistMode] = useState("list"); // list | calendar
   const [calMonth, setCalMonth] = useState(() => { const d = new Date(); return { y: d.getFullYear(), m: d.getMonth() }; });
   const [selectedDate, setSelectedDate] = useState(null); // "YYYY-M-D"
   const [editDay, setEditDay] = useState(null);
@@ -1931,26 +1951,129 @@ function App() {
     return lines.join("\n");
   };
 
-  const copyWorkout = async (w, idx) => {
-    const text = workoutToText(w);
-    try {
-      if (navigator.clipboard && window.isSecureContext) {
-        await navigator.clipboard.writeText(text);
-      } else {
-        // 非対応環境向けのフォールバック
-        const ta = document.createElement("textarea");
-        ta.value = text;
-        ta.style.position = "fixed"; ta.style.opacity = "0";
-        document.body.appendChild(ta); ta.select();
-        document.execCommand("copy");
-        document.body.removeChild(ta);
+  // 種目1つ分の相談プロンプト。「次にどの重量・回数で組むか」を判断するのに要る材料を、
+  // 数値の羅列ではなく前提込みで渡す。RIRの説明を必ず添えるのは、注記が無いとAIが
+  // 「余力2」を「2回しかできない」等と誤読して逆方向の助言をするため。
+  const MAX_PROMPT_SESSIONS = 5;
+  const exerciseToText = (ex) => {
+    const name = exName(ex.name);
+    const meta = findExercise(ex.name);
+    const isDb = resolveIsDb(ex.name, ex.isDb);
+    const bwF = ex.bwFactor || 0;
+    // 重量の意味づけ。片手/体重込みのときだけ書く(通常の種目では自明で、書くと冗長)。
+    // これが無いとダンベルの「22kg」を両手合計と誤読して負荷を半分に見積もられる。
+    const unitNote = isDb ? t("share.perHand", { unit: uLabel() })
+      : bwF > 0 ? t("share.withBw", { unit: uLabel() }) : null;
+    // プロンプト内の日付は曜日なし。fmtDateは「8/12 (水)」を返すため、
+    // 「推定1RM 110kg(8/12 (水))」のように括弧が二重になって読みにくくなる。
+    const shortDate = (iso) => { const d = new Date(iso); return `${d.getMonth() + 1}/${d.getDate()}`; };
+    // 保存済みの記録(past)はkg、記録中のセット(today)は表示単位の文字列を持つ
+    // (todayの他の参照は全て fromU() を通している)。ここを一律 wU() にすると、
+    // lb表示のユーザーで今日の分だけ二重換算され、過去と桁が食い違う。
+    const setLine = (s, isKg) => {
+      const rir = (s.rir !== "" && s.rir != null) ? t("share.rirLeft", { n: s.rir }) : "";
+      const tags = [];
+      if (s.warmup) tags.push("W");
+      if (s.assisted) tags.push(t("share.assisted"));
+      const w = isKg ? wU(s.weight) : num(s.weight);
+      return `${w}${uLabel()}×${s.reps}${rir}${tags.length ? `[${tags.join("/")}]` : ""}`;
+    };
+
+    const lines = [t("share.exPrompt", { name }), ""];
+    lines.push(t("share.exMeta", {
+      name,
+      muscle: ex.muscle ? muscleName(ex.muscle) : "-",
+      eq: meta?.eq ? eqName(meta.eq) : "-",
+    }));
+    if (unitNote) lines.push(t("share.exUnit", { unit: unitNote }));
+    lines.push(t("share.exProfile", {
+      bw: `${wU(profile.bodyweight)}${uLabel()}`,
+      reps: ex.repHigh ?? profile.defTargetReps,
+      inc: `${wU(ex.increment ?? profile.defIncrement)}${uLabel()}`,
+    }));
+    const pr = prMap[ex.name];
+    if (pr && pr.best1RM > 0) {
+      lines.push(t("share.exPr", {
+        // 推定1RMは計算値で端数が出る(39.199999999999996 のような値になる)。
+        // 画面側と同じく小数1桁に丸める。
+        rm: `${toU(pr.best1RM).toFixed(1)}${uLabel()}`, rmDate: shortDate(pr.date),
+        top: `${toU(pr.bestWeight).toFixed(1)}${uLabel()}`, topDate: shortDate(pr.weightDate),
+      }));
+      // prMapの値は実効重量(ダンベルは両手合計・自重は体重込み)。セット行は片手/加重の生値なので、
+      // 但し書きが無いとAIが「自己ベスト44kgに対して今日22kgは大幅減」と誤読する。
+      if (unitNote) lines.push(t("share.exPrEff"));
+    }
+
+    // 直近の記録(古い順)。ウォームアップも含めて実施内容をそのまま渡す
+    const past = workouts
+      .map(w => ({ date: w.date, ex: w.exercises.find(e => e.name === ex.name) }))
+      .filter(e => e.ex && (e.ex.sets || []).length > 0)
+      .slice(-MAX_PROMPT_SESSIONS);
+    lines.push("", t("share.exHistory"));
+    if (past.length === 0) {
+      lines.push(t("share.exNoHistory"));
+    } else {
+      past.forEach(e => lines.push(`${fmtDate(e.date)} ${e.ex.sets.map(s => setLine(s, true)).join(" / ")}`));
+      const ins = exerciseInsight(ex.name);
+      if (ins && ins.streak >= 2) {
+        lines.push(t("share.exStreak", { v: `${wU(ins.topWeight)}${uLabel()}`, n: ins.streak }));
       }
-      setCopiedIdx(idx);
-      setTimeout(() => setCopiedIdx(c => (c === idx ? null : c)), 2000);
+    }
+
+    // 今日ここまでの入力。これがあると「次回」だけでなく「次のセット」も相談できる。
+    // 判定は必ずRIRの有無で行う。種目を追加すると前回のセットが重量・回数ごと自動入力されるため、
+    // reps>0 だけで絞ると「まだやっていないセット」を実施済みとしてAIに渡してしまう
+    // (実際にダンベルフライで、前回と同じ14kg×12/14kg×10が「今日ここまで」に出ていた)。
+    const doneToday = (ex.sets || []).filter(s => s.rir !== "" && s.rir != null && Number(s.reps) > 0);
+    if (doneToday.length > 0) {
+      lines.push("", t("share.exToday"), doneToday.map(s => setLine(s, false)).join(" / "));
+    }
+    if (exerciseNotes[ex.name]) lines.push("", `📌 ${exerciseNotes[ex.name]}`);
+
+    lines.push("", t("share.rirNote"), "— KURABELL Workout Log");
+    return lines.join("\n");
+  };
+
+  // クリップボードへのコピーだけを行う(遷移は呼び出し側の責務)。
+  // 同期的に呼べるフォールバックを持たせてあるのは、awaitを挟むと
+  // Safariがユーザー操作の延長と見なさなくなり window.open がブロックされるため。
+  // textareaを挿入してselect()する方式はフォーカスを奪う(重量入力中に押すとiOSのキーボードが閉じる)。
+  // クリップボードAPIが使える通常経路では通らないよう、フォールバックとしてだけ呼ぶ。
+  const execCommandCopy = (text) => {
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed"; ta.style.opacity = "0";
+      document.body.appendChild(ta); ta.select();
+      const ok = document.execCommand("copy"); // 失敗時は例外ではなくfalseを返す
+      document.body.removeChild(ta);
+      return ok;
     } catch {
-      window.prompt(t("err.copyFailed"), text);
+      return false;
     }
   };
+  const copyToClipboard = (text) => {
+    // writeText() の呼び出し自体は同期なので、awaitさえしなければ
+    // 後続の window.open はユーザー操作の延長として扱われる。
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(text).catch(() => execCommandCopy(text));
+      return true;
+    }
+    return execCommandCopy(text);
+  };
+
+  // プロンプトをコピーして、設定で選んだAIのチャット画面を開く。
+  // window.open はユーザー操作の同期的な延長で呼ぶ必要がある(awaitを挟むとブロックされる。
+  // iOSではCapacitorがUIApplication.shared.openに委ねるため、アプリが入っていればアプリが開く)。
+  const consultAi = (text, key) => {
+    const ok = copyToClipboard(text);
+    if (!ok) { window.prompt(t("err.copyFailed"), text); return; }
+    setCopiedIdx(key);
+    setTimeout(() => setCopiedIdx(c => (c === key ? null : c)), 2500);
+    window.open(aiServiceOf(profile.aiService).url, "_blank", "noopener,noreferrer");
+  };
+
+  const copyWorkout = (w, idx) => consultAi(workoutToText(w), `hist:${idx}`);
 
   const deleteWorkout = async (index) => {
     const w = workouts[index];
@@ -2563,13 +2686,20 @@ function App() {
                 </div>
               )}
               <div style={{ marginBottom: 8 }}>
-                <div style={{ fontSize: 14, fontWeight: 700, lineHeight: 1.4, marginBottom: 6 }}>
-                  {inGroup && <span style={{ color: C.blue, fontWeight: 800, marginRight: 6 }}>{ssLetter}.</span>}
-                  {exName(ex.name)}
-                  {ex.muscle && <span style={{ color: C.muted, fontSize: 12, fontWeight: 400, marginLeft: 6 }}>{muscleName(ex.muscle)}</span>}
-                  {resolveIsDb(ex.name, ex.isDb) && <span style={{ color: C.muted, fontSize: 12, marginLeft: 4 }}>{t("menu.perHandShort")}</span>}
-                  {resolveRom(ex.name, ex.rom) < 1 && <span style={{ color: C.blue, fontSize: 11, marginLeft: 4 }}>ROM×{resolveRom(ex.name, ex.rom)}</span>}
-                  {todayDay && ex.muscle && !muscleMatchesDay(ex.muscle, todayDay) && <span style={{ color: C.yellow, fontSize: 12, marginLeft: 6 }}>{t("log.offDay")}</span>}
+                {/* YouTubeは種目に紐づく参照リンクなので、操作ボタン群ではなく種目名の行の右端に置く。
+                    ボタン行から67px抜けることで、「AI相談」を足しても375px幅で1行に収まる
+                    (移動前は既に溢れて2行になっていた)。 */}
+                <div style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 6 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, lineHeight: 1.4, flex: 1, minWidth: 0 }}>
+                    {inGroup && <span style={{ color: C.blue, fontWeight: 800, marginRight: 6 }}>{ssLetter}.</span>}
+                    {exName(ex.name)}
+                    {ex.muscle && <span style={{ color: C.muted, fontSize: 12, fontWeight: 400, marginLeft: 6 }}>{muscleName(ex.muscle)}</span>}
+                    {resolveIsDb(ex.name, ex.isDb) && <span style={{ color: C.muted, fontSize: 12, marginLeft: 4 }}>{t("menu.perHandShort")}</span>}
+                    {resolveRom(ex.name, ex.rom) < 1 && <span style={{ color: C.blue, fontSize: 11, marginLeft: 4 }}>ROM×{resolveRom(ex.name, ex.rom)}</span>}
+                    {todayDay && ex.muscle && !muscleMatchesDay(ex.muscle, todayDay) && <span style={{ color: C.yellow, fontSize: 12, marginLeft: 6 }}>{t("log.offDay")}</span>}
+                  </div>
+                  <button onClick={() => openYouTube(ex.name)} aria-label={t("log.youtube")}
+                    style={{ ...btn(C.surface2, C.red), padding: "4px 8px", fontSize: 12, fontWeight: 700, whiteSpace: "nowrap", flexShrink: 0 }}>YouTube</button>
                 </div>
                 {exIdx > 0 && (
                   <button onClick={() => toggleSuperset(ex.id)} style={{
@@ -2587,7 +2717,16 @@ function App() {
                     style={{ ...btn(C.surface2, exIdx === 0 ? C.border : C.muted), padding: "4px 8px", fontSize: 13, cursor: exIdx === 0 ? "default" : "pointer" }}>▲</button>
                   <button onClick={() => moveExercise(ex.id, 1)} disabled={exIdx === today.length - 1} aria-label={t("log.moveDown")}
                     style={{ ...btn(C.surface2, exIdx === today.length - 1 ? C.border : C.muted), padding: "4px 8px", fontSize: 13, cursor: exIdx === today.length - 1 ? "default" : "pointer" }}>▼</button>
-                  <button onClick={() => openYouTube(ex.name)} aria-label={t("log.youtube")} style={{ ...btn(C.surface2, C.red), padding: "4px 8px", fontSize: 12, fontWeight: 700, whiteSpace: "nowrap", flexShrink: 0 }}>YouTube</button>
+                  <button onClick={() => consultAi(exerciseToText(ex), `ex:${ex.id}`)}
+                    style={{
+                      ...btn(C.surface2, copiedIdx === `ex:${ex.id}` ? C.green : C.muted), padding: "4px 9px", fontSize: 13,
+                      whiteSpace: "nowrap", flexShrink: 0,
+                      // コピー後の「✓ コピー / ✓ Copied」は元のラベルより長い。幅を固定しないと
+                      // 押した瞬間にボタン行が折り返して、下のUIがずれる(英語+375pxで顕著)。
+                      minWidth: 74, textAlign: "center",
+                    }}>
+                    {copiedIdx === `ex:${ex.id}` ? t("log.consultAiDone") : t("log.consultAi")}
+                  </button>
                   <button onClick={() => { setSwapEx(swapEx === ex.id ? null : ex.id); setSwapSearch(""); setSwapMuscle(""); }}
                     style={{ ...btn(C.surface2, swapEx === ex.id ? C.blue : C.muted), padding: "4px 9px", fontSize: 13, whiteSpace: "nowrap", flexShrink: 0 }}>{t("log.swap")}</button>
                   <button onClick={() => setOpenHist({ ...openHist, [ex.id]: !openHist[ex.id] })}
@@ -3372,14 +3511,12 @@ function App() {
 
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: "8px 0 12px" }}>
             <h2 style={{ fontSize: 16, fontWeight: 900, margin: 0 }}>{t("history.title")} <span style={{ color: C.muted, fontWeight: 400, fontSize: 13 }}>{t("common.timesShort", { n: workouts.length })}</span></h2>
-            <div style={{ display: "flex", gap: 6 }}>
-              <button onClick={() => { setHistMode("list"); setSelectedDate(null); }} style={chip(histMode === "list")}>{t("history.list")}</button>
-              <button onClick={() => setHistMode("calendar")} style={chip(histMode === "calendar")}>{t("history.calendar")}</button>
-            </div>
           </div>
 
-          {/* カレンダー */}
-          {histMode === "calendar" && (() => {
+          {/* カレンダーは常時表示。以前はリスト/カレンダーの切替チップがあったが、
+              どちらか一方しか見られない作りで、切替の存在自体が余計だった。
+              日付をタップするとその日の記録だけに絞り込む挙動はそのまま残している。 */}
+          {(() => {
             const trainedDates = new Set(workouts.map(w => { const d = new Date(w.date); return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`; }));
             const first = new Date(calMonth.y, calMonth.m, 1);
             const startDow = first.getDay();
@@ -3432,7 +3569,7 @@ function App() {
           {loaded && workouts.length === 0 && <div style={{ border: `1px dashed ${C.border}`, borderRadius: 14, padding: 20, color: C.muted, fontSize: 14, textAlign: "center" }}>{t("history.empty")}</div>}
           {[...workouts].map((w, revIdx) => ({ w, idx: revIdx })).reverse()
             .filter(({ w }) => {
-              if (!(histMode === "calendar" && selectedDate)) return true;
+              if (!selectedDate) return true;
               const d = new Date(w.date);
               return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}` === selectedDate;
             })
@@ -3452,8 +3589,8 @@ function App() {
                   ) : (
                     <>
                       <button onClick={() => copyWorkout(w, idx)}
-                        style={{ ...btn(copiedIdx === idx ? C.green : C.surface2, copiedIdx === idx ? "#fff" : C.muted), padding: "5px 10px", fontSize: 13 }}>
-                        {copiedIdx === idx ? t("history.consultAiDone") : t("history.consultAi")}
+                        style={{ ...btn(copiedIdx === `hist:${idx}` ? C.green : C.surface2, copiedIdx === `hist:${idx}` ? "#fff" : C.muted), padding: "5px 10px", fontSize: 13 }}>
+                        {copiedIdx === `hist:${idx}` ? t("history.consultAiDone") : t("history.consultAi")}
                       </button>
                       <button onClick={() => startEditWorkout(idx)} style={{ ...btn(C.surface2, C.muted), padding: "5px 10px", fontSize: 13 }}>{t("common.edit")}</button>
                       <button onClick={() => deleteWorkout(idx)} aria-label={t("history.deleteDay")} className="tapArea" style={{ ...btn("transparent", C.muted), padding: "5px 6px", fontSize: 13 }}>🗑</button>
@@ -3823,6 +3960,25 @@ function App() {
             })()}
             <p style={{ color: C.muted, fontSize: 12, margin: "6px 0 0", lineHeight: 1.6 }}>
               {t("settings.exNote")}
+            </p>
+          </div>
+
+          <div style={{ background: C.surface, borderRadius: 14, padding: 16, border: `1px solid ${C.border}`, marginBottom: 12 }}>
+            <div style={{ fontSize: 14, fontWeight: 900, marginBottom: 10 }}>{t("settings.ai")}</div>
+            <div role="radiogroup" aria-label={t("settings.ai")} style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+              {AI_SERVICES.map(s => {
+                const on = profile.aiService === s.id;
+                return (
+                  <button key={s.id} role="radio" aria-checked={on}
+                    onClick={() => persist({ profile: { ...profile, aiService: s.id } })}
+                    style={{ ...btn(on ? C.blue : C.surface2, on ? "#fff" : C.text), fontSize: 14, padding: "10px 14px" }}>
+                    {s.label}
+                  </button>
+                );
+              })}
+            </div>
+            <p style={{ color: C.muted, fontSize: 13, margin: "10px 0 0", lineHeight: 1.6 }}>
+              {t("settings.aiDesc")}
             </p>
           </div>
 
