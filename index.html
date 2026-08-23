@@ -227,7 +227,7 @@ const DRAFT_KEY = "workout-draft-v1"; // 入力途中の記録(アプリが落�
 const PRE_IMPORT_BACKUP_KEY = "workout-log-v1-pre-import"; // バックアップ復元前のデータ退避(復元に失敗した場合の保険)
 // ヘッダーのバージョンバッジとバックアップのappVersionで共有する単一の定数。
 // sw.js の CACHE 定数とは tests/version.test.js が数字の一致を機械的に縛っている(CLAUDE.md参照)。
-const APP_VERSION = "v98";
+const APP_VERSION = "v99";
 // store(保存レイヤ)は src/domain/storage.js へ移設(テストのため)。
 // LIBSで<script src>読み込み済みなのでグローバルの store をそのまま参照できる。
 const uid = () => Math.random().toString(36).slice(2, 8);
@@ -1367,7 +1367,11 @@ function App() {
     const notAdded = (e) => !inToday.has(e.n);
     const q = search.trim();
     if (q) return allExercises.filter(e => notAdded(e) && exMatches(e, q));
-    if (pickerMuscle) return allExercises.filter(e => notAdded(e) && e.m === pickerMuscle);
+    if (pickerMuscle) {
+      // 部位で絞り込んだ中でも、最近使った種目を上位に出す(それ以外はDB定義順のまま)
+      const rankInMuscle = (e) => { const r = recentNames.indexOf(e.n); return r >= 0 ? r : 1000; };
+      return allExercises.filter(e => notAdded(e) && e.m === pickerMuscle).sort((a, b) => rankInMuscle(a) - rankInMuscle(b));
+    }
     // 既定: 最近使った順 → 今日の部位 → 残り
     const rank = (e) => {
       const r = recentNames.indexOf(e.n);
