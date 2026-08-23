@@ -28,6 +28,7 @@ const APP_ASSETS = [
   "./src/domain/volume.js",
   "./src/domain/coefficients.js",
   "./src/domain/restNotifications.js",
+  "./src/domain/iap.js",
   "./src/domain/db/schema.js",
   "./src/domain/db/migration.js",
   "./src/domain/db/workoutStore.js",
