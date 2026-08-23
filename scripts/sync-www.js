@@ -38,6 +38,7 @@ const DOMAIN_FILES = [
   "storage.js",
   "backupValidation.js",
   "volume.js",
+  "coefficients.js",
   "restNotifications.js",
 ];
 // iOS版のSQLite永続化層(src/domain/db/以下)。DOMAIN_FILESと同じ理由でapp.bundle.jsより先に読み込む。

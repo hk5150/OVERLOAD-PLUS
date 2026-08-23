@@ -166,6 +166,7 @@
     { key:'storage',    urls:['src/domain/storage.js'] },
     { key:'backupValidation', urls:['src/domain/backupValidation.js'] },
     { key:'volume',     urls:['src/domain/volume.js'] },
+    { key:'coefficients', urls:['src/domain/coefficients.js'] },
     { key:'restNotifications', urls:['src/domain/restNotifications.js'] },
     // iOS版のSQLite永続化層。Web版では何もしない(nativeSqliteDriver()がnullを返すだけ)。
     { key:'dbSchema',    urls:['src/domain/db/schema.js'] },
@@ -227,7 +228,7 @@ const DRAFT_KEY = "workout-draft-v1"; // 入力途中の記録(アプリが落�
 const PRE_IMPORT_BACKUP_KEY = "workout-log-v1-pre-import"; // バックアップ復元前のデータ退避(復元に失敗した場合の保険)
 // ヘッダーのバージョンバッジとバックアップのappVersionで共有する単一の定数。
 // sw.js の CACHE 定数とは tests/version.test.js が数字の一致を機械的に縛っている(CLAUDE.md参照)。
-const APP_VERSION = "v101";
+const APP_VERSION = "v102";
 // store(保存レイヤ)は src/domain/storage.js へ移設(テストのため)。
 // LIBSで<script src>読み込み済みなのでグローバルの store をそのまま参照できる。
 const uid = () => Math.random().toString(36).slice(2, 8);
@@ -312,7 +313,7 @@ const EXERCISE_DB = [
   { n: "スミスマシンベンチプレス", m: "大胸筋", eq: "スミス", t: "C" },
   { n: "ケーブルフライ", m: "大胸筋", eq: "ケーブル", t: "I" },
   { n: "ディップス", m: "大胸筋", eq: "自重", t: "C", bw: 0.95 },
-  { n: "プッシュアップ", m: "大胸筋", eq: "自重", t: "C", bw: 0.65 },
+  { n: "プッシュアップ", m: "大胸筋", eq: "自重", t: "C", bw: 0.7, rom: 0.65 },
   // 胸(上部)
   { n: "インクラインバーベルベンチプレス", m: "大胸筋", eq: "バーベル", t: "C" },
   { n: "インクラインダンベルプレス", m: "大胸筋", eq: "ダンベル", t: "C", db: true },
@@ -333,15 +334,15 @@ const EXERCISE_DB = [
   { n: "チェストサポートダンベルロウ", m: "広背筋", eq: "ダンベル", t: "C", db: true },
   { n: "ケーブルシーテッドロウ", m: "広背筋", eq: "ケーブル", t: "C" },
   { n: "マシンロウ", m: "広背筋", eq: "マシン", t: "C" },
-  { n: "インバーテッドロウ", m: "広背筋", eq: "自重", t: "C", bw: 0.7 },
+  { n: "インバーテッドロウ", m: "広背筋", eq: "自重", t: "C", bw: 0.65, rom: 0.75 },
   // 僧帽筋
-  { n: "バーベルシュラッグ", m: "僧帽筋", eq: "バーベル", t: "I", rom: 0.5 },
-  { n: "ダンベルシュラッグ", m: "僧帽筋", eq: "ダンベル", t: "I", db: true, rom: 0.5 },
-  { n: "ケーブルシュラッグ", m: "僧帽筋", eq: "ケーブル", t: "I", rom: 0.5 },
+  { n: "バーベルシュラッグ", m: "僧帽筋", eq: "バーベル", t: "I", rom: 0.3 },
+  { n: "ダンベルシュラッグ", m: "僧帽筋", eq: "ダンベル", t: "I", db: true, rom: 0.3 },
+  { n: "ケーブルシュラッグ", m: "僧帽筋", eq: "ケーブル", t: "I", rom: 0.3 },
   // 脊柱起立筋
   { n: "デッドリフト", m: "脊柱起立筋", eq: "バーベル", t: "C" },
-  { n: "ラックプル", m: "脊柱起立筋", eq: "バーベル", t: "C" },
-  { n: "バックエクステンション", m: "脊柱起立筋", eq: "マシン", t: "I", bw: 0.5 },
+  { n: "ラックプル", m: "脊柱起立筋", eq: "バーベル", t: "C", rom: 0.65 },
+  { n: "バックエクステンション", m: "脊柱起立筋", eq: "マシン", t: "I", bw: 0.4 },
   // 三角筋前部
   { n: "バーベルオーバーヘッドプレス", m: "三角筋前部", eq: "バーベル", t: "C" },
   { n: "ダンベルショルダープレス", m: "三角筋前部", eq: "ダンベル", t: "C", db: true },
@@ -376,10 +377,10 @@ const EXERCISE_DB = [
   { n: "ダンベルオーバーヘッドエクステンション", m: "上腕三頭筋", eq: "ダンベル", t: "I" },
   { n: "トライセップキックバック", m: "上腕三頭筋", eq: "ダンベル", t: "I", db: true },
   { n: "マシントライセップエクステンション", m: "上腕三頭筋", eq: "マシン", t: "I" },
-  { n: "ベンチディップス", m: "上腕三頭筋", eq: "自重", t: "C", bw: 0.6 },
+  { n: "ベンチディップス", m: "上腕三頭筋", eq: "自重", t: "C", bw: 0.75 },
   // 前腕
-  { n: "リストカール", m: "前腕", eq: "バーベル", t: "I", rom: 0.5 },
-  { n: "リバースリストカール", m: "前腕", eq: "バーベル", t: "I", rom: 0.5 },
+  { n: "リストカール", m: "前腕", eq: "バーベル", t: "I", rom: 0.3 },
+  { n: "リバースリストカール", m: "前腕", eq: "バーベル", t: "I", rom: 0.3 },
   { n: "ファーマーズウォーク", m: "前腕", eq: "ダンベル", t: "C", db: true },
   // 大腿四頭筋
   { n: "バーベルスクワット", m: "大腿四頭筋", eq: "バーベル", t: "C" },
@@ -397,23 +398,23 @@ const EXERCISE_DB = [
   { n: "ライイングレッグカール", m: "ハムストリングス", eq: "マシン", t: "I" },
   { n: "シーテッドレッグカール", m: "ハムストリングス", eq: "マシン", t: "I" },
   { n: "グッドモーニング", m: "ハムストリングス", eq: "バーベル", t: "C" },
-  { n: "ノルディックハムカール", m: "ハムストリングス", eq: "自重", t: "I", bw: 0.6 },
+  { n: "ノルディックハムカール", m: "ハムストリングス", eq: "自重", t: "I", bw: 0.85 },
   // 臀部
-  { n: "ヒップスラスト", m: "臀部", eq: "バーベル", t: "C" },
+  { n: "ヒップスラスト", m: "臀部", eq: "バーベル", t: "C", rom: 0.7 },
   { n: "ケーブルキックバック", m: "臀部", eq: "ケーブル", t: "I" },
   { n: "ヒップアブダクション", m: "臀部", eq: "マシン", t: "I" },
   { n: "ステップアップ", m: "臀部", eq: "ダンベル", t: "C", db: true },
   // ふくらはぎ
-  { n: "スタンディングカーフレイズ", m: "ふくらはぎ", eq: "マシン", t: "I", rom: 0.5 },
-  { n: "シーテッドカーフレイズ", m: "ふくらはぎ", eq: "マシン", t: "I", rom: 0.5 },
-  { n: "レッグプレスカーフレイズ", m: "ふくらはぎ", eq: "マシン", t: "I", rom: 0.5 },
+  { n: "スタンディングカーフレイズ", m: "ふくらはぎ", eq: "マシン", t: "I", rom: 0.3 },
+  { n: "シーテッドカーフレイズ", m: "ふくらはぎ", eq: "マシン", t: "I", rom: 0.3 },
+  { n: "レッグプレスカーフレイズ", m: "ふくらはぎ", eq: "マシン", t: "I", rom: 0.3 },
   // 腹筋
-  { n: "クランチ", m: "腹筋", eq: "自重", t: "I", bw: 0.4 },
-  { n: "ケーブルクランチ", m: "腹筋", eq: "ケーブル", t: "I" },
-  { n: "レッグレイズ", m: "腹筋", eq: "自重", t: "I", bw: 0.4 },
-  { n: "ハンギングレッグレイズ", m: "腹筋", eq: "自重", t: "I", bw: 0.5 },
-  { n: "アブローラー", m: "腹筋", eq: "自重", t: "C", bw: 0.5 },
-  { n: "アブドミナルマシン", m: "腹筋", eq: "マシン", t: "I" },
+  { n: "クランチ", m: "腹筋", eq: "自重", t: "I", bw: 0.35, rom: 0.5 },
+  { n: "ケーブルクランチ", m: "腹筋", eq: "ケーブル", t: "I", rom: 0.75 },
+  { n: "レッグレイズ", m: "腹筋", eq: "自重", t: "I", bw: 0.25 },
+  { n: "ハンギングレッグレイズ", m: "腹筋", eq: "自重", t: "I", bw: 0.3 },
+  { n: "アブローラー", m: "腹筋", eq: "自重", t: "C", bw: 0.45 },
+  { n: "アブドミナルマシン", m: "腹筋", eq: "マシン", t: "I", rom: 0.75 },
 ];
 const DB_BY_NAME = Object.fromEntries(EXERCISE_DB.map(e => [e.n, e]));
 const ALIASES = {
@@ -438,8 +439,6 @@ const resolveIsDb = (name, storedIsDb) => {
   const k = dbLookup(name);
   return k ? !!k.db : !!storedIsDb;
 };
-// 可動域係数: 集計ボリュームのみに適用(判定・1RM・PRには影響させない)。
-// シュラッグ/カーフレイズ/リストカール=0.5、その他=1.0。保存値(ユーザー調整)があれば優先。
 // 種目に応じた推奨の増加幅(kg)。小さな単関節種目に2.5kgは大きすぎるため実態に合わせる。
 const recommendedIncrement = (name, fallback = 2.5) => {
   const k = dbLookup(name);
@@ -450,6 +449,10 @@ const recommendedIncrement = (name, fallback = 2.5) => {
   return k.db ? 2 : 2.5;                          // 多関節: ダンベル片手2kg、バーベル等2.5kg
 };
 
+// 可動域係数: 集計ボリュームのみに適用(判定・1RM・PRには影響させない)。
+// 値と導出の根拠は docs/係数の根拠.md(ここに書き写すと実装より先に腐る)。
+// 注意: storedRomが無い古い記録は現在のマスター値にフォールバックするため、
+// マスターを変えるとその記録の過去ボリュームは遡って変わる(bwFactorは遡らない)。
 const resolveRom = (name, storedRom) => {
   const v = parseFloat(storedRom);
   if (!isNaN(v) && v > 0) return v;
@@ -1380,6 +1383,12 @@ function App() {
     () => [...EXERCISE_DB, ...customExercises].map(e => ({ ...e, ...(exerciseOverrides[e.n] || {}) })),
     [customExercises, exerciseOverrides]);
   const findExercise = (name) => allExercises.find(e => e.n === name) || dbLookup(name);
+
+  // 係数の解決は src/domain/coefficients.js へ移設(テストのため)。
+  // findExercise を渡すのが要点で、カスタム種目と上書きを含まない索引を渡すと
+  // 自重のカスタム種目が壊れる。lastConfig と buildMenuItem の両方から呼ぶこと
+  // (片方だけだと、手で種目を足したときと「今日のメニュー」で係数が食い違う)。
+  const coefficientsOf = (name) => window.resolveCoefficients(name, findExercise);
   const pickerList = useMemo(() => {
     // 今日の記録に既にある種目名は候補から外す(同名重複すると、履歴参照が
     // 名前ベースの.findのため一方のカードの記録が以後参照できなくなるため)
@@ -1409,7 +1418,16 @@ function App() {
       if (ex) return {
         repLow: ex.repLow ?? 8, repHigh: ex.repHigh ?? 12, targetRirLow: ex.targetRirLow ?? 1, targetRirHigh: ex.targetRirHigh ?? 2,
         increment: ex.increment ?? 2.5, muscle: ex.muscle ?? dbLookup(name)?.m ?? "",
-        bwFactor: ex.bwFactor ?? dbLookup(name)?.bw ?? 0, isDb: resolveIsDb(name, ex.isDb), rom: resolveRom(name, ex.rom),
+        // rom / bwFactor は過去の記録から引き継がない。記録側の値は「その日の計算に使った値」の
+        // スナップショットであって、ユーザーがそう決めたという意思表示ではない。引き継ぐと、
+        // saveWorkoutが毎回それを書き戻すため、一度記録した種目は種目マスターの既定値を
+        // 更新しても永久に古い値のまま回り続ける(v102で係数を見直したときに実際に踏んだ)。
+        //
+        // 解決元は findExercise。dbLookup ではカスタム種目を見ないため、自重のカスタム種目が
+        // bwFactor:0 になって実効重量もボリュームも0になる(この修正の初版で実際に作り込んだ)。
+        // findExercise は allExercises(EXERCISE_DB + customExercises に exerciseOverrides を
+        // マージ済み)を引くので、「ユーザー調整 > カスタム種目の定義 > マスター既定値」になる。
+        ...coefficientsOf(name), isDb: resolveIsDb(name, ex.isDb),
         lastWeight: Math.max(...ex.sets.map(s => s.weight)),
       };
     }
@@ -1417,8 +1435,9 @@ function App() {
     return {
       repLow: num(profile.defTargetReps) || 8, repHigh: num(profile.defTargetReps) || 12,
       targetRirLow: db ? (db.t === "C" ? 1 : 0) : 1, targetRirHigh: db ? (db.t === "C" ? 3 : 2) : 2,
-      increment: recommendedIncrement(name, num(profile.defIncrement) || 2.5), muscle: db?.m ?? customDraft.muscle ?? "", bwFactor: db?.bw ?? 0,
-      isDb: db ? !!db.db : (customDraft.eq === "ダンベル"), rom: db?.rom ?? 1.0,
+      increment: recommendedIncrement(name, num(profile.defIncrement) || 2.5), muscle: db?.m ?? customDraft.muscle ?? "",
+      ...coefficientsOf(name), // 同じ式を手書きすると、既定値を変えたときにここだけ取り残される
+      isDb: db ? !!db.db : (customDraft.eq === "ダンベル"),
       lastWeight: null,
     };
   };
@@ -1442,8 +1461,13 @@ function App() {
         type: "previous",
         reason: t("menu.reasonPrev", { date: prevEntry ? fmtDate(prevEntry.date) : t("menu.reasonPrevFallback") }),
         prescription: {
-          name, muscle: prevEx.muscle ?? cfg.muscle, bwFactor: prevEx.bwFactor ?? cfg.bwFactor,
-          isDb: resolveIsDb(name, prevEx.isDb), rom: prevEx.rom ?? cfg.rom ?? 1.0,
+          // bwFactor / rom は prevEx から取らない。saveWorkout が必ず数値を書き込むため
+          // `prevEx.rom ?? cfg.rom` の ?? は絶対にフォールバックせず、古い値が延々と
+          // 引き継がれてしまう。cfg(= lastConfig)側で coefficientsOf 済み。
+          // v101以降「今日のメニュー」は前回の実記録を最優先するので、継続ユーザーが
+          // 毎日通るのはこの経路。ここを直さないと係数の更新が誰にも届かない。
+          name, muscle: prevEx.muscle ?? cfg.muscle, bwFactor: cfg.bwFactor,
+          isDb: resolveIsDb(name, prevEx.isDb), rom: cfg.rom ?? 1.0,
           weight: workingW.length ? Math.max(...workingW) : 0,
           prevSets, sets: prevSets.length,
           targetReps: prevSets.map(x => x.reps),
@@ -1876,9 +1900,8 @@ function App() {
         exercises: [...ew.draft.exercises, {
           name: n,
           muscle: db?.m ?? "",
-          bwFactor: db?.bw ?? 0,
+          ...coefficientsOf(n), // 上と同じ理由で式を手書きしない
           isDb: !!db?.db,
-          rom: db?.rom ?? 1.0,
           bwAtLog: profile.bodyweight,
           repLow: 8, repHigh: 12, increment: recommendedIncrement(n),
           formBroke: false, pain: false,
@@ -2956,7 +2979,20 @@ function App() {
                     {!ex.muscle && (
                       <label style={{ fontSize: 13, color: C.yellow }}>{t("cfg.muscleUnset")} <select value={ex.muscle} onChange={e => updEx(ex.id, { muscle: e.target.value })} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: "5px 6px", fontSize: 16, fontFamily: "inherit" }}><option value="">{t("common.notSet")}</option>{MUSCLES.map(m => <option key={m} value={m}>{muscleName(m)}</option>)}</select></label>
                     )}
-                    <label style={{ fontSize: 13, color: C.muted, display: "flex", alignItems: "center", gap: 4 }}><input type="checkbox" checked={ex.bwFactor > 0} onChange={e => updEx(ex.id, { bwFactor: e.target.checked ? 0.7 : 0 })} />{t("cfg.bodyweightEx")}</label>
+                    {/* ON/OFFの両方を種目設定にも書く。lastConfigが記録側の値を見なくなったので、
+                        ここに書かないとOFFが翌日に残らない(マスターにbwを持つ種目では0.7が復活し、
+                        重量欄の意味が「加重」に戻るため、同じ数字を入れると体重分ずれる)。 */}
+                    <label style={{ fontSize: 13, color: C.muted, display: "flex", alignItems: "center", gap: 4 }}>
+                      <input type="checkbox" checked={ex.bwFactor > 0}
+                        onChange={e => {
+                          const v = e.target.checked ? 0.7 : 0;
+                          updEx(ex.id, { bwFactor: v });
+                          // 下のNumInputと同じく、マスターと違うときだけ上書きを作る。
+                          // onChangeなので「今日の記録」側は必ず変わるが、書き込み先は種目マスター側。
+                          // OFF→ONと戻すだけでマスターと同値の上書きが永久に残り、以後その種目に
+                          // 既定値の更新が届かなくなる(潰したはずの自己固定を2タップで再生産する)。
+                          if (v !== (findExercise(ex.name)?.bw ?? 0)) updateCustomExercise(ex.name, { bw: v });
+                        }} />{t("cfg.bodyweightEx")}</label>
                   </div>
 
                   {/* 体重係数(自重種目のみ) */}
@@ -2964,9 +3000,20 @@ function App() {
                     <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 10, marginBottom: 10 }}>
                       <label style={{ fontSize: 13, color: C.text, display: "flex", alignItems: "center", gap: 6 }}>
                         {t("cfg.bwFactor")}
+                        {/* 今日の記録だけでなく種目設定にも書く。記録側の値は毎回スナップショット
+                            されるだけで「ユーザーがそう決めた」という区別がつかず、lastConfigが
+                            それを引き継がなくなった今は、ここに書かないと調整が翌日に残らない。
+                            ただし**値が変わったときだけ**書く。触っただけで上書きを作ると、
+                            以後その種目にマスターの既定値が永久に届かなくなり、
+                            今まさに潰したバグをUI経由で再生産する。 */}
                         <NumInput inputMode="decimal" value={ex.bwFactor} style={cfgInput}
                           onChange={e => updEx(ex.id, { bwFactor: e.target.value })}
-                          onBlur={e => { const v = num(e.target.value); updEx(ex.id, { bwFactor: v > 0 ? v : 0 }); }} />
+                          onBlur={e => {
+                            const n = num(e.target.value);
+                            const v = n > 0 ? n : 0;
+                            updEx(ex.id, { bwFactor: v });
+                            if (v !== (findExercise(ex.name)?.bw ?? 0)) updateCustomExercise(ex.name, { bw: v });
+                          }} />
                       </label>
                       <p style={{ fontSize: 11, color: C.muted, margin: "6px 0 0", lineHeight: 1.7 }}>
                         {t("cfg.bwFactorHelp")}{" "}
@@ -2981,7 +3028,13 @@ function App() {
                       {t("cfg.rom")}
                       <NumInput inputMode="decimal" value={ex.rom ?? 1} style={cfgInput}
                         onChange={e => updEx(ex.id, { rom: e.target.value })}
-                        onBlur={e => { const v = num(e.target.value); updEx(ex.id, { rom: v > 0 ? Math.min(1, Math.max(0.1, v)) : 1 }); }} />
+                        onBlur={e => {
+                          const n = num(e.target.value);
+                          const v = n > 0 ? Math.min(1, Math.max(0.1, n)) : 1;
+                          updEx(ex.id, { rom: v });
+                          // 上のbwFactorと同じ理由。差があるときだけ上書きを作る
+                          if (v !== (findExercise(ex.name)?.rom ?? 1.0)) updateCustomExercise(ex.name, { rom: v });
+                        }} />
                     </label>
                     <p style={{ fontSize: 11, color: C.muted, margin: "6px 0 0", lineHeight: 1.7 }}>
                       {t("cfg.romHelp")}{" "}
@@ -3932,14 +3985,25 @@ function App() {
                           {t("cfg.bwFactor")}{" "}
                           <NumInput inputMode="decimal" value={e.bw} style={cfgInput}
                             onChange={ev => updateCustomExercise(e.n, { bw: ev.target.value })}
-                            onBlur={ev => { const v = num(ev.target.value); updateCustomExercise(e.n, { bw: v > 0 ? v : 0.7 }); }} />
+                            /* 値が変わったときだけ書く。記録画面の⚙と同じ理由で、欄を触って
+                               他所をタップしただけの無編集フォーカスアウトで上書きを作ると、
+                               以後その種目にマスターの既定値が届かなくなる。 */
+                            onBlur={ev => {
+                              const n = num(ev.target.value);
+                              const v = n > 0 ? n : 0.7;
+                              if (v !== e.bw) updateCustomExercise(e.n, { bw: v });
+                            }} />
                         </label>
                       )}
                       <label style={{ fontSize: 13, color: C.muted }}>
                         {t("cfg.rom")}{" "}
                         <NumInput inputMode="decimal" value={e.rom ?? 1} style={cfgInput}
                           onChange={ev => updateCustomExercise(e.n, { rom: ev.target.value })}
-                          onBlur={ev => { const v = num(ev.target.value); updateCustomExercise(e.n, { rom: v > 0 ? Math.min(1, Math.max(0.1, v)) : 1 }); }} />
+                          onBlur={ev => { // 上のbwと同じ理由で、変わったときだけ書く
+                            const n = num(ev.target.value);
+                            const v = n > 0 ? Math.min(1, Math.max(0.1, n)) : 1;
+                            if (v !== (e.rom ?? 1)) updateCustomExercise(e.n, { rom: v });
+                          }} />
                       </label>
                     </div>
                   </div>

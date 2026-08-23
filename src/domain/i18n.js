@@ -210,10 +210,10 @@ const STRINGS = {
   "cfg.bodyweightEx":  { ja: "自重種目",               en: "Bodyweight exercise" },
   "cfg.bwFactor":      { ja: "体重係数",               en: "Bodyweight factor" },
   "cfg.bwFactorHelp":  { ja: "自重のうち何割が負荷になるかの目安です。重量は「体重×係数＋加重」で計算されます。", en: "Roughly what share of your bodyweight is loaded. Weight is calculated as bodyweight × factor + added weight." },
-  "cfg.bwFactorHelp2": { ja: "懸垂は体重のほぼ全部を持ち上げるので1.0、ディップスは0.95、腕立ては足で支える分を除いて0.65前後が目安です。", en: "Pull-ups lift nearly all of your bodyweight, so 1.0; dips 0.95; push-ups around 0.65 since your feet carry part of the load." },
+  "cfg.bwFactorHelp2": { ja: "懸垂は体重のほぼ全部を持ち上げるので1.0、ディップスは0.95、腕立ては足で支える分を除いて0.7が目安です。体格やフォームで変わるので、自分に合う値に調整してください。", en: "Pull-ups lift nearly all of your bodyweight, so 1.0; dips 0.95; push-ups 0.7 since your feet carry part of the load. These vary with build and form, so adjust them to fit you." },
   "cfg.rom":           { ja: "可動域係数",             en: "ROM factor" },
   "cfg.romHelp":       { ja: "動かす距離が短い種目のボリュームを控えめに数えるための係数です。", en: "Counts volume more conservatively for exercises with a short range of motion." },
-  "cfg.romHelp2":      { ja: "シュラッグやカーフレイズは重量の割に可動域が数cmしかないため0.5、通常の種目は1.0にしています。", en: "Shrugs and calf raises move only a few centimetres for the load, so 0.5; everything else is 1.0." },
+  "cfg.romHelp2":      { ja: "荷重が動く距離を標準的な種目(約40cm)と比べた比率を初期値にしています。シュラッグやカーフレイズは数cmしか動かないため0.3、通常の種目は1.0です。", en: "Defaults come from how far the load travels versus a typical lift (about 40cm). Shrugs and calf raises move only a few centimetres, so 0.3; ordinary lifts are 1.0." },
   "cfg.romHelp3":      { ja: "集計ボリュームにのみ影響し、推定1RMやPRには影響しません。", en: "This affects volume totals only — not estimated 1RM or PRs." },
 
   // ---- 種目の追加・検索 ----
@@ -443,7 +443,7 @@ const STRINGS = {
 
   // ---- 注記 ----
   "note.kcal":         { ja: "※カロリーはMETs×体重×時間による概算の目安で、医療・栄養管理用の正確な値ではありません。自重種目のボリュームは体重×係数+加重で換算しています。", en: "Calories are a rough estimate (METs × bodyweight × time), not a medical or nutritional figure. Bodyweight volume is calculated as bodyweight × factor + added weight." },
-  "note.rom":          { ja: "シュラッグ・カーフレイズ・リストカールは可動域が小さいため、集計ボリュームを0.5倍で換算しています(推定1RM・PR・次回メニューの判定には影響しません)。種目ごとに⚙から調整できます。", en: "Shrugs, calf raises and wrist curls have a short range of motion, so their volume counts at 0.5× (estimated 1RM, PRs and the next menu are unaffected). Adjust per exercise via ⚙." },
+  "note.rom":          { ja: "シュラッグ・カーフレイズ・クランチなど可動域が小さい種目は、荷重が動く距離に応じて集計ボリュームを0.3〜0.75倍で換算しています(推定1RM・PR・次回メニューの判定には影響しません)。種目ごとに⚙から調整できます。", en: "Shrugs, calf raises, crunches and other short-range exercises have their volume scaled to 0.3–0.75× based on how far the load travels (estimated 1RM, PRs and the next menu are unaffected). Adjust per exercise via ⚙." },
 
   // YouTubeのフォーム検索。表示文言ではなく検索クエリなので、言語ごとに語順ごと変える。
   "youtube.query":     { ja: "{name} やり方 フォーム", en: "{name} how to proper form" },
