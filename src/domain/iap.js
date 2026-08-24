@@ -66,6 +66,15 @@ async function readCachedPurchaseFlag() {
   } catch { return false; }
 }
 
+// ペイウォール表示用の価格情報取得。呼び出し元(index.html)がwindow.Capacitor.Pluginsを
+// 直接触らずに済むよう、他の関数と同じくここでプラグイン呼び出しを閉じる。
+async function fetchUnlockProduct() {
+  const plugin = capIapPlugin();
+  if (!plugin) return null;
+  const r = await plugin.getProducts({ productIds: [IAP_PRODUCT_ID] });
+  return r?.products?.[0] ?? null;
+}
+
 async function purchaseUnlock() {
   const plugin = capIapPlugin();
   if (!plugin) throw new Error("iap.unavailable");
@@ -93,5 +102,6 @@ globalThis.iapAvailable = iapAvailable;
 globalThis.isTrialLimitReached = isTrialLimitReached;
 globalThis.refreshPurchaseState = refreshPurchaseState;
 globalThis.readCachedPurchaseFlag = readCachedPurchaseFlag;
+globalThis.fetchUnlockProduct = fetchUnlockProduct;
 globalThis.purchaseUnlock = purchaseUnlock;
 globalThis.restorePurchase = restorePurchase;

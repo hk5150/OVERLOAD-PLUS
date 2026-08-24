@@ -94,8 +94,12 @@ describe("readCachedPurchaseFlag", () => {
 });
 
 function fakeIapPlugin(overrides = {}) {
-  const calls = { purchase: [], restorePurchases: 0, refreshEntitlements: 0 };
+  const calls = { purchase: [], restorePurchases: 0, refreshEntitlements: 0, getProducts: [] };
   const plugin = {
+    async getProducts(arg) {
+      calls.getProducts.push(arg);
+      return overrides.productsResult ?? { products: [{ id: arg.productIds[0], displayPrice: "¥980" }] };
+    },
     async purchase(arg) {
       calls.purchase.push(arg);
       return overrides.purchaseResult ?? { purchased: true };
@@ -139,6 +143,39 @@ describe("refreshPurchaseState", () => {
     const m = load({ store, ...globals });
     expect(await m.refreshPurchaseState()).toBe(false);
     expect(store._data.get("iap-unlocked-v1")).toBe("0");
+  });
+});
+
+describe("fetchUnlockProduct", () => {
+  it("プラグインが無い環境ではnullを返す(呼び出せない)", async () => {
+    const store = fakeStore();
+    const m = load({ store });
+    expect(await m.fetchUnlockProduct()).toBe(null);
+  });
+
+  it("商品情報を取得し、IAP_PRODUCT_IDで問い合わせる", async () => {
+    const store = fakeStore();
+    const { globals, calls } = fakeIapPlugin({
+      productsResult: { products: [{ id: "com.hajime5150.kurabellplus.unlock", displayPrice: "¥980" }] },
+    });
+    const m = load({ store, ...globals });
+    const product = await m.fetchUnlockProduct();
+    expect(product).toEqual({ id: "com.hajime5150.kurabellplus.unlock", displayPrice: "¥980" });
+    expect(calls.getProducts[0]).toEqual({ productIds: ["com.hajime5150.kurabellplus.unlock"] });
+  });
+
+  it("productsが空配列でもnullを返す(未定義アクセスにならない)", async () => {
+    const store = fakeStore();
+    const { globals } = fakeIapPlugin({ productsResult: { products: [] } });
+    const m = load({ store, ...globals });
+    expect(await m.fetchUnlockProduct()).toBe(null);
+  });
+
+  it("productsフィールド自体が無くてもnullを返す", async () => {
+    const store = fakeStore();
+    const { globals } = fakeIapPlugin({ productsResult: {} });
+    const m = load({ store, ...globals });
+    expect(await m.fetchUnlockProduct()).toBe(null);
   });
 });
 

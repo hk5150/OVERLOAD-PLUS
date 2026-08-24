@@ -229,7 +229,7 @@ const DRAFT_KEY = "workout-draft-v1"; // 入力途中の記録(アプリが落�
 const PRE_IMPORT_BACKUP_KEY = "workout-log-v1-pre-import"; // バックアップ復元前のデータ退避(復元に失敗した場合の保険)
 // ヘッダーのバージョンバッジとバックアップのappVersionで共有する単一の定数。
 // sw.js の CACHE 定数とは tests/version.test.js が数字の一致を機械的に縛っている(CLAUDE.md参照)。
-const APP_VERSION = "v102";
+const APP_VERSION = "v103";
 // store(保存レイヤ)は src/domain/storage.js へ移設(テストのため)。
 // LIBSで<script src>読み込み済みなのでグローバルの store をそのまま参照できる。
 const uid = () => Math.random().toString(36).slice(2, 8);
@@ -778,6 +778,29 @@ function App() {
   const guideModalRef = useRef(null);
   const finishGuide = () => { persist({ guideSeen: true }); setGuideStep(0); setView("split"); };
   useModalA11y(loaded && !guideSeen, finishGuide, guideModalRef);
+  // IAP(非消耗型・買い切りフル解除)。Web版はiapAvailable()が常にfalseを返すため
+  // purchasedは事実上参照されず、試用制限自体が発動しない。詳細はdocs/IAP実装方針.mdを参照。
+  const [purchased, setPurchased] = useState(false);
+  const [showPaywall, setShowPaywall] = useState(false);
+  const [iapProduct, setIapProduct] = useState(null); // ペイウォール表示用の価格情報(getProductsの結果)
+  const [iapBusy, setIapBusy] = useState(false); // 購入/復元の通信中(二重タップ防止)
+  const [iapError, setIapError] = useState(""); // 設定タブでの購入/復元エラー(記録タブのerrorとは独立)
+  const paywallModalRef = useRef(null);
+  const closePaywall = () => { setShowPaywall(false); setIapError(""); };
+  useModalA11y(showPaywall, closePaywall, paywallModalRef);
+  // ペイウォールを開いたとき、または設定タブを開いたときに価格を取り直す。
+  // 起動時に先読みしない理由: 未購入者が試用上限に達するか設定を開くまでは
+  // 参照されない値で、毎回の起動コストに見合わない。
+  useEffect(() => {
+    if (!(showPaywall || (view === "settings" && iapAvailable() && !purchased))) return;
+    (async () => {
+      try {
+        const p = await fetchUnlockProduct();
+        setIapProduct(p);
+        setIapError(p ? "" : t("paywall.priceLoadFailed")); // 前回の失敗表示を成功時に消す
+      } catch { setIapProduct(null); setIapError(t("paywall.priceLoadFailed")); }
+    })();
+  }, [showPaywall, view, purchased]);
   const [chartMuscle, setChartMuscle] = useState("");   // 種目別グラフ: 先に部位を選ぶ
   const [chartExercise, setChartExercise] = useState("");
   const [volMode, setVolMode] = useState("total"); // total | muscle
@@ -937,6 +960,21 @@ function App() {
       } catch { /* noop */ }
 
       setLoaded(true);
+    })();
+  }, []);
+
+  // IAPの権利確認。データ読み込みとは無関係な処理なので別のuseEffectに分離する。
+  // Web版はiapAvailable()が常にfalseなので、即座にpurchased=true(フル解除扱い)にして
+  // 試用制限自体を発動させない。ネイティブはキャッシュ値で先に表示し、その後
+  // Transaction.currentEntitlementsで再検証する(AppStore.sync()は呼ばない。
+  // 起動時に自動でsyncを呼ぶとApple IDパスワード確認が入りUXを損なうため)。
+  useEffect(() => {
+    (async () => {
+      if (!iapAvailable()) { setPurchased(true); return; }
+      setPurchased(await readCachedPurchaseFlag());
+      try {
+        setPurchased(await refreshPurchaseState());
+      } catch { /* ネイティブ呼び出しに失敗してもキャッシュ値のまま運用を続ける */ }
     })();
   }, []);
 
@@ -1715,6 +1753,15 @@ function App() {
       setSaving(false);
       return;
     }
+    // 試用上限(10回)。空の記録を弾いた後に判定する — 何も入力していない状態で
+    // ペイウォールを出すと「何も記録していないのに課金を迫られた」という誤解を生む。
+    // Web版はpurchasedが常にtrueなのでここには来ない。
+    if (isTrialLimitReached(workouts.length, purchased, iapAvailable())) {
+      setIapError(""); // 前回開いたときのエラーを持ち越さない
+      setShowPaywall(true);
+      setSaving(false);
+      return;
+    }
     const totalVolume = exercises.reduce((a, ex) => a + exVolume(ex), 0);
     const entry = {
       date: new Date(end).toISOString(), session: todayDay ? todayDay.name : undefined,
@@ -2442,6 +2489,36 @@ function App() {
           </div>
         );
       })()}
+
+      {/* ===== ペイウォール(試用10回を超えたときのsaveWorkoutから) =====
+          記録・比較・グラフ・バックアップの閲覧は制限しない。保存の直前だけで判定する
+          (saveWorkout参照)ので、このモーダルもshowPaywallの単発フラグで出すだけでよい。
+          購入成功時も自動保存はしない。todayはそのまま残るので、ユーザーが改めて
+          保存ボタンを押せば今度は通る(purchaseの完了とReactのstate更新のタイミングが
+          絡む自動保存より、ユーザー操作を挟む方が事故が少ない)。 */}
+      {showPaywall && (
+        <div onClick={closePaywall} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.6)", zIndex: 90, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+          <div ref={paywallModalRef} onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-label={t("paywall.title")} tabIndex={-1}
+            style={{ background: C.surface, borderRadius: "18px 18px 0 0", padding: "20px 20px calc(20px + env(safe-area-inset-bottom))", maxWidth: 520, width: "100%" }}>
+            <h2 style={{ fontSize: 18, fontWeight: 900, margin: "0 0 10px" }}>{t("paywall.title")}</h2>
+            <p style={{ fontSize: 14, color: C.muted, lineHeight: 1.7, margin: "0 0 18px" }}>{t("paywall.body")}</p>
+            {iapError && <div role="alert" style={{ fontSize: 13, color: C.red, marginBottom: 10 }}>{iapError}</div>}
+            <button disabled={iapBusy} onClick={async () => {
+              setIapBusy(true); setIapError("");
+              try {
+                const ok = await purchaseUnlock();
+                if (ok) { setPurchased(true); setShowPaywall(false); }
+              } catch { setIapError(t("paywall.purchaseFailed")); }
+              setIapBusy(false);
+            }} style={{ ...btn(C.red), width: "100%", padding: 16, fontSize: 16, opacity: iapBusy ? 0.6 : 1 }}>
+              {t("paywall.unlock", { price: iapProduct?.displayPrice ?? "…" })}
+            </button>
+            <button onClick={closePaywall} style={{ ...btn("transparent", C.muted), width: "100%", padding: 12, fontSize: 13, marginTop: 6 }}>
+              {t("paywall.later")}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ===== 固定バー(タイマー+ボリューム) =====
           原則は記録タブ限定。以前は全タブに出していたが、設定・履歴・分割の画面で
@@ -3874,6 +3951,44 @@ function App() {
             style={{ ...btn(C.surface2, C.text), width: "100%", padding: 14, fontSize: 14, marginBottom: 12, border: `1px solid ${C.border}` }}>
             {t("settings.guideAgain")}
           </button>
+
+          {/* Web版には出さない(iapAvailable()が常にfalse)。購入済みでも「購入を復元」は
+              常設する(Guideline 3.1.1: 復元可能なIAPには復元手段が必須)。 */}
+          {iapAvailable() && (
+            <div style={{ background: C.surface, borderRadius: 14, padding: 16, border: `1px solid ${C.border}`, marginBottom: 12 }}>
+              <div style={{ fontSize: 14, fontWeight: 900, marginBottom: 10 }}>{t("settings.iap.title")}</div>
+              {iapError && <div role="alert" style={{ fontSize: 13, color: C.red, marginBottom: 10 }}>{iapError}</div>}
+              {purchased ? (
+                <p style={{ color: C.muted, fontSize: 13, lineHeight: 1.7, margin: "0 0 10px" }}>{t("settings.iap.unlocked")}</p>
+              ) : (
+                // 価格は上のuseEffect(view==="settings"の条件)で既に先読み済みなので、
+                // ここではpurchaseUnlock()だけ呼べば足りる(ペイウォール側と同じ形)。
+                // 以前はここでfetchUnlockProduct()を取り直していたが、Swift側の
+                // purchase()も内部でfetchProducts()をもう一度呼ぶため二重フェッチだった。
+                <button disabled={iapBusy} onClick={async () => {
+                  setIapBusy(true); setIapError("");
+                  try {
+                    const ok = await purchaseUnlock();
+                    if (ok) setPurchased(true);
+                  } catch { setIapError(t("paywall.purchaseFailed")); }
+                  setIapBusy(false);
+                }} style={{ ...btn(C.red), width: "100%", padding: 14, fontSize: 14, marginBottom: 8, opacity: iapBusy ? 0.6 : 1 }}>
+                  {t("settings.iap.unlock", { price: iapProduct?.displayPrice ?? "…" })}
+                </button>
+              )}
+              <button disabled={iapBusy} onClick={async () => {
+                setIapBusy(true); setIapError("");
+                try {
+                  const ok = await restorePurchase();
+                  setPurchased(ok);
+                  if (!ok) setIapError(t("settings.iap.restoreNotFound"));
+                } catch { setIapError(t("settings.iap.restoreFailed")); }
+                setIapBusy(false);
+              }} style={{ ...btn(C.surface2, C.text), width: "100%", padding: 14, fontSize: 14, border: `1px solid ${C.border}`, opacity: iapBusy ? 0.6 : 1 }}>
+                {t("settings.iap.restore")}
+              </button>
+            </div>
+          )}
 
           <div style={{ background: C.surface, borderRadius: 14, padding: 16, border: `1px solid ${C.border}`, marginBottom: 12 }}>
             <label style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 14 }}>

@@ -340,8 +340,22 @@ const STRINGS = {
   "pr.stale":          { ja: "1RM {n}日間未更新",      en: "1RM unchanged for {n}d" },
   "pr.weightByReps":   { ja: "{w}{unit}×{reps}回",     en: "{w}{unit} × {reps}" },
 
+  // ---- ペイウォール(記録タブ、試用10回を超えたとき) ----
+  "paywall.title":     { ja: "試用は10回までです",     en: "You've reached the 10-workout trial limit" },
+  "paywall.body":      { ja: "ここまでの記録・比較・グラフ・バックアップはこのまま何回でもご覧いただけます。今日の記録を保存するには、フル解除の購入が必要です。", en: "Everything you've logged — comparisons, charts, backups — stays available. To save today's workout, unlock the full version." },
+  "paywall.unlock":    { ja: "{price}でフル解除",       en: "Unlock for {price}" },
+  "paywall.later":     { ja: "あとで",                 en: "Not now" },
+  "paywall.priceLoadFailed": { ja: "価格を取得できませんでした。電波の良い場所でもう一度お試しください。", en: "Couldn't load the price. Please try again with a better connection." },
+  "paywall.purchaseFailed": { ja: "購入を完了できませんでした。もう一度お試しください。", en: "Couldn't complete the purchase. Please try again." },
+
   // ---- 設定タブ ----
   "settings.title":    { ja: "設定",                   en: "Settings" },
+  "settings.iap.title":    { ja: "購入",               en: "Purchase" },
+  "settings.iap.unlocked": { ja: "フル解除済みです。試用の記録上限はありません。", en: "You've unlocked the full version. There's no trial limit." },
+  "settings.iap.unlock":   { ja: "{price}でフル解除を購入", en: "Unlock full version for {price}" },
+  "settings.iap.restore":  { ja: "購入を復元",         en: "Restore purchase" },
+  "settings.iap.restoreNotFound": { ja: "この端末のApple IDに購入履歴が見つかりませんでした。", en: "No purchase found for this Apple ID." },
+  "settings.iap.restoreFailed": { ja: "復元できませんでした。もう一度お試しください。", en: "Couldn't restore. Please try again." },
   "settings.ai":       { ja: "AIに相談",               en: "Ask AI" },
   "settings.aiDesc":   { ja: "「AI相談」を押すと、記録がクリップボードにコピーされ、ここで選んだAIのチャット画面が開きます。貼り付けて送ってください。記録がアプリから自動で送信されることはありません。", en: "Tapping \"Ask AI\" copies your log to the clipboard and opens the chat you pick here — just paste it. The app never sends your log anywhere on its own." },
   "settings.language": { ja: "言語",                   en: "Language" },
