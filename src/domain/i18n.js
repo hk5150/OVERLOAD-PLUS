@@ -101,9 +101,13 @@ const STRINGS = {
   "log.lastDate":      { ja: "前回 {date}",           en: "Last {date}" },
   // 元は「回連続」だけ<strong>で囲っていたが、英語だと語順が変わって太字の範囲を保てない。
   // 1文にまとめ、強調は span 側の fontWeight でかける。
-  "log.streak":        { ja: "{w}{unit} で {n}回連続", en: "{n} sessions in a row at {w}{unit}" },
+  "log.streak":        { ja: "{w}{unit} で {n}セッション連続", en: "{n} sessions in a row at {w}{unit}" },
   "log.trend":         { ja: "推移 {list}",           en: "Trend {list}" },
-  "log.plateauAlert":  { ja: "⚠ 重量が{n}回連続で頭打ち。そろそろ上げどき", en: "⚠ Stuck at this weight for {n} sessions — time to add more" },
+  "log.plateauAlert":  { ja: "⚠ 重量が{n}セッション連続で頭打ち。そろそろ上げどき", en: "⚠ Stuck at this weight for {n} sessions — time to add more" },
+  // 同じ重量が続いていても回数が落ちている場合。「上げどき」とは言わず事実だけ渡す。
+  // {best}は直近数回での最高であって「前々回」ではないので、矢印で繋がない。
+  // 連続回数({n})は隣のlog.streakが既に言っているので繰り返さない。
+  "log.repsDown":      { ja: "直近3セッションの最高 {best}回 / 前回 {prev}回", en: "Best {best} reps in the last 3 sessions, {prev} last time" },
   "compare.now":       { ja: "今日の自分",            en: "Today" },
   "compare.est1RM":    { ja: "推定1RM",               en: "Est. 1RM" },
   "compare.maxWeight": { ja: "最大重量",              en: "Top weight" },
@@ -436,7 +440,7 @@ const STRINGS = {
   "share.exPrEff":     { ja: "(自己ベストの数値は実効重量。ダンベルは両手合計、自重種目は体重込み。各セットの数値とは基準が違います)", en: "(Personal bests are effective load: dumbbells count both hands, bodyweight lifts include bodyweight — a different basis from the per-set numbers.)" },
   "share.exHistory":   { ja: "■ 直近の記録(古い順)", en: "■ Recent sessions (oldest first)" },
   "share.exNoHistory": { ja: "(この種目の記録はまだありません)", en: "(No previous sessions for this exercise yet.)" },
-  "share.exStreak":    { ja: "→ {v}が{n}回連続", en: "→ {v} for {n} sessions in a row" },
+  "share.exStreak":    { ja: "→ {v}が{n}セッション連続", en: "→ {v} for {n} sessions in a row" },
   "share.exToday":     { ja: "■ 今日ここまで", en: "■ Today so far" },
   "share.rirNote":     { ja: "※「余力」はそのセット後にあと何回挙げられたか(RIR)。0が限界。Wはウォームアップ。", en: "Note: RIR is how many more reps I could have done in that set; 0 means failure. W means warm-up." },
   // 分割の1日分について相談するプロンプト。種目単位(share.ex*)が「次の重量・回数」を聞くのに対し、

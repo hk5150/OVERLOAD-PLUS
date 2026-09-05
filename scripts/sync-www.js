@@ -39,6 +39,7 @@ const DOMAIN_FILES = [
   "backupValidation.js",
   "volume.js",
   "coefficients.js",
+  "insight.js",
   "restNotifications.js",
   "iap.js",
 ];

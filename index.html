@@ -167,6 +167,7 @@
     { key:'backupValidation', urls:['src/domain/backupValidation.js'] },
     { key:'volume',     urls:['src/domain/volume.js'] },
     { key:'coefficients', urls:['src/domain/coefficients.js'] },
+    { key:'insight',    urls:['src/domain/insight.js'] },
     { key:'restNotifications', urls:['src/domain/restNotifications.js'] },
     { key:'iap',        urls:['src/domain/iap.js'] },
     // iOS版のSQLite永続化層。Web版では何もしない(nativeSqliteDriver()がnullを返すだけ)。
@@ -229,7 +230,7 @@ const DRAFT_KEY = "workout-draft-v1"; // 入力途中の記録(アプリが落�
 const PRE_IMPORT_BACKUP_KEY = "workout-log-v1-pre-import"; // バックアップ復元前のデータ退避(復元に失敗した場合の保険)
 // ヘッダーのバージョンバッジとバックアップのappVersionで共有する単一の定数。
 // sw.js の CACHE 定数とは tests/version.test.js が数字の一致を機械的に縛っている(CLAUDE.md参照)。
-const APP_VERSION = "v106";
+const APP_VERSION = "v107";
 // store(保存レイヤ)は src/domain/storage.js へ移設(テストのため)。
 // LIBSで<script src>読み込み済みなのでグローバルの store をそのまま参照できる。
 const uid = () => Math.random().toString(36).slice(2, 8);
@@ -1376,46 +1377,10 @@ function App() {
       .reverse();
   }, [workouts, split, profile.bodyweight, exerciseOverrides]);
 
-  // 種目の判断材料: 前回のセット内容(RIR込み)と、同じ重量が何回続いているか
-  const exerciseInsight = (name) => {
-    const entries = [];
-    for (let i = workouts.length - 1; i >= 0; i--) {
-      const ex = workouts[i].exercises.find(e => e.name === name);
-      if (ex) entries.push({ date: workouts[i].date, ex });
-    }
-    if (entries.length === 0) return null;
-
-    const topOf = (ex) => {
-      const ws = (ex.sets || []).filter(s => !s.warmup && !s.assisted && s.reps > 0);
-      if (ws.length === 0) return null;
-      return ws.reduce((best, s) => (s.weight > best.weight ? s : best), ws[0]);
-    };
-
-    const prev = entries[0];
-    const prevTop = topOf(prev.ex);
-    if (!prevTop) return null;
-
-    // 同じトップ重量が何回連続しているか
-    let streak = 0;
-    for (const e of entries) {
-      const t = topOf(e.ex);
-      if (t && t.weight === prevTop.weight) streak++; else break;
-    }
-
-    // 直近のトップ重量の推移(古い順に最大4件)
-    const trend = entries.slice(0, 4).map(e => topOf(e.ex)?.weight).filter(v => v != null).reverse();
-
-    return {
-      date: prev.date,
-      sets: (prev.ex.sets || []).filter(s => !s.warmup),
-      topWeight: prevTop.weight,
-      topReps: prevTop.reps,
-      topRir: prevTop.rir,
-      isDb: resolveIsDb(name, prev.ex.isDb),
-      streak,
-      trend,
-    };
-  };
+  // 種目の判断材料: 前回のセット内容(RIR込み)と、同じ重量が何セッション続いているか。
+  // 判定そのものは src/domain/insight.js へ移設した(テストのため)。
+  // ローカル名が同名なので window. 経由で呼ぶ(付けないと自己再帰になる)。
+  const exerciseInsight = (name) => window.exerciseInsight(workouts, name, resolveIsDb);
 
   // ---- 種目リスト(内蔵 + 保存済みカスタム) ----
   const allExercises = useMemo(
@@ -3069,21 +3034,36 @@ function App() {
                 return (
                   <div style={{ background: C.bg, borderRadius: 10, padding: "6px 10px", marginBottom: 10, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
                     <span style={{ fontSize: 12, color: C.muted }}>{t("log.lastDate", { date: fmtDate(ins.date) })}</span>
-                    {hasStreak && (
+                    {/* 加重できない種目(腕立てなど)では重量の連続に意味がない。「0kgで5セッション連続」
+                        としか言えず、取れる行動もない。推移の回数だけを見せる。 */}
+                    {hasStreak && ins.canAddWeight && (
                       <span style={{ fontSize: 12, fontWeight: 700, color: ins.streak >= 4 ? C.yellow : C.muted }}>
                         {t("log.streak", { w: wU(ins.topWeight), unit, n: ins.streak })}
                       </span>
                     )}
                     {/* 同じ重量が3回続いたら、そろそろ重量を上げる判断材料として明示する。
-                        自動で重量を決めるのではなく、気づきを渡すだけに留める(アプリの中心思想)。 */}
-                    {ins.streak >= 3 && (
-                      <span style={{ fontSize: 12, fontWeight: 800, color: C.yellow, background: "rgba(232,179,60,0.15)", padding: "2px 8px", borderRadius: 999 }}>
-                        {t("log.plateauAlert", { n: ins.streak })}
-                      </span>
+                        自動で重量を決めるのではなく、気づきを渡すだけに留める(アプリの中心思想)。
+                        回数が直近の最高を下回っている間は「上げどき」と言わず事実だけ渡す
+                        (実データで15kg×13回→9回の後退局面に「そろそろ上げどき」が出ていた)。
+                        加重できない種目(常に自重のみ)では重量の助言自体が成立しないので出さない。 */}
+                    {ins.streak >= 3 && ins.canAddWeight && (
+                      ins.readyToProgress ? (
+                        <span style={{ fontSize: 12, fontWeight: 800, color: C.yellow, background: "rgba(232,179,60,0.15)", padding: "2px 8px", borderRadius: 999 }}>
+                          {t("log.plateauAlert", { n: ins.streak })}
+                        </span>
+                      ) : (
+                        <span style={{ fontSize: 12, color: C.muted }}>
+                          {t("log.repsDown", { best: ins.bestRecentReps, prev: ins.topReps })}
+                        </span>
+                      )
                     )}
+                    {/* 加重できない種目では重量を書かず回数だけ並べる(「0×20 → 0×22」は読みづらい)。
+                        weightフィールドを持たない旧データは0扱いになるため、ここでも0kgと同じ扱いになる。 */}
                     {hasTrend && (
                       <span style={{ fontSize: 12, color: C.muted }}>
-                        {t("log.trend", { list: ins.trend.map(wU).join(" → ") })}
+                        {t("log.trend", {
+                          list: ins.trend.map(v => ins.canAddWeight ? `${wU(v.weight)}×${v.reps}` : `${v.reps}`).join(" → "),
+                        })}
                       </span>
                     )}
                   </div>
