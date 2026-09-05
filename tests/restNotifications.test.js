@@ -59,6 +59,20 @@ describe("buildRestNotifications", () => {
     expect(threads[0]).toBeTruthy();
   });
 
+  // iOSはsoundを省略すると無音の通知になる(プラグインの公式仕様)。通知を許可した端末では
+  // beep()を止めて通知に一本化しているため、ここが抜けると音が一切出ない。
+  // v96〜v108で実際にそうなっていて、「インターバルの音が鳴らない時がある」として報告された。
+  it("全ての通知にsoundが付いている(iOSで無音にならないため)", () => {
+    const { buildRestNotifications } = load();
+    const start = 1_000_000;
+    const list = buildRestNotifications(start, start, TEXTS);
+
+    expect(list).toHaveLength(3);
+    // "default" は存在しないファイル名で、システム既定音へのフォールバックを踏む設計。
+    // 同梱ファイル名に変えるなら、Xcodeプロジェクト(pbxproj)へのリソース追加も要る。
+    for (const n of list) expect(n.sound).toBe("default");
+  });
+
   // ここが最も壊れやすい。下書き復元でタイマーが途中から再開したとき、
   // 既に過ぎた分を予約すると復元した瞬間に通知が発火してしまう。
   it("下書き復元で途中から再開したとき、過ぎた分は予約しない", () => {

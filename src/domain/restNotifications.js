@@ -39,6 +39,12 @@ function buildRestNotifications(restStartAt, now, texts) {
       body: texts.body(min),
       threadIdentifier: REST_NOTIFICATION_THREAD,
       schedule: { at: new Date(at) },
+      // iOSはsoundを省略すると無音の通知になる(プラグインの公式仕様。Androidは既定音)。
+      // 通知を許可した端末ではbeep()を止めて通知に一本化しているので、ここが無音だと
+      // 音が一切出なくなる(v96〜v108で実際にそうなっていた)。
+      // 存在しないファイル名を渡すとシステムの既定通知音にフォールバックすることも
+      // 公式仕様に明記されているため、音源ファイルは同梱しない。
+      sound: "default",
     });
   }
   return out;

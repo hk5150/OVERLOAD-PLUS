@@ -397,7 +397,11 @@ const STRINGS = {
   "settings.other":    { ja: "その他",                 en: "Other" },
   "settings.sound":    { ja: "インターバルの通知",     en: "Rest timer alerts" },
   "settings.soundDesc": { ja: "インターバル中、1分・2分・3分の経過時に知らせます。通知を許可しておくと、アプリを閉じていても届き、Apple Watchを着けていれば手元でも気づけます。", en: "Alerts you at 1, 2 and 3 minutes into your rest. If you allow notifications, they arrive even when the app is closed — and on your wrist if you wear an Apple Watch." },
-  "settings.soundDesc2": { ja: "通知を許可していない場合は、アプリを開いている間だけ音で知らせます(iPhoneのサイレントスイッチがオンだと鳴りません)。", en: "Without notification access, it chimes only while the app is open — and stays silent while the iPhone's silent switch is on." },
+  // 通知音もアプリ内の音も、iPhoneのサイレントスイッチには従う。以前は「許可していない場合」に
+  // だけ掛かる書き方で、通知の方はサイレントでも鳴ると読めてしまっていた。
+  // 「バナーとWatchのハプティックは届く」は通知を許可した側にだけ掛ける。未許可側はbeep()だけで、
+  // navigator.vibrateはiOSのWKWebViewでは動かないので、バイブが来ると書くと嘘になる。
+  "settings.soundDesc2": { ja: "通知を許可していない場合は、アプリを開いている間だけ音で知らせます。iPhoneのサイレントスイッチがオンだと、どちらの場合も音は鳴りません(通知を許可していれば、バナーとApple Watchのハプティックは届きます)。", en: "Without notification access, it chimes only while the app is open. While the iPhone's silent switch is on, neither plays a sound — with notification access you still get the banner and the Apple Watch tap." },
   "settings.notifyDenied": { ja: "通知がオフになっています。iPhoneの「設定」→「通知」→ KURABELL から許可すると、アプリを閉じていても知らせます。", en: "Notifications are off. Allow them in Settings → Notifications → KURABELL to get alerts while the app is closed." },
   "settings.confirmDeleteEx": { ja: "「{name}」を種目一覧から削除します。\n過去の記録は残りますが、一覧には出なくなります。よろしいですか?", en: "Remove \"{name}\" from the exercise list?\nPast records are kept, but it will no longer appear in the list." },
   "settings.confirmDeleteExShort": { ja: "「{name}」を種目一覧から削除します。よろしいですか?", en: "Remove \"{name}\" from the exercise list?" },
