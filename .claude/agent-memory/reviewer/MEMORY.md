@@ -1,3 +1,5 @@
 - [select センチネル不一致](kurabell-select-sentinel-mismatch.md) — 保存時フォールバック値と`<option value>`のセンチネルがずれるバグクラス(eqで実例)
 - [チップ→ジャンプ の母集団不一致](kurabell-chip-jump-pool-mismatch.md) — 絞り込みチップをジャンプ用に転用する際、表示母集団とジャンプ先存在条件がずれると無反応になる
 - [ゲージ幅の片側クランプ](kurabell-gauge-width-clamp.md) — `${x*100}%` を片側しかクランプしないと負値/NaNで幅autoになり満杯に見える
+- [固定px paddingとsafe-area](kurabell-fixed-padding-vs-safe-area.md) — fixed要素避けの実測px paddingBottomはenv()の分だけiOS実機で不足する
+- [1RMのフィルタ不一致](kurabell-1rm-filter-divergence.md) — 推定1RMの算出が4箇所、除外条件が3種類。workingSetsはassistedを除かない

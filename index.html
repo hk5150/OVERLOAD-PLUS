@@ -229,7 +229,7 @@ const DRAFT_KEY = "workout-draft-v1"; // 入力途中の記録(アプリが落�
 const PRE_IMPORT_BACKUP_KEY = "workout-log-v1-pre-import"; // バックアップ復元前のデータ退避(復元に失敗した場合の保険)
 // ヘッダーのバージョンバッジとバックアップのappVersionで共有する単一の定数。
 // sw.js の CACHE 定数とは tests/version.test.js が数字の一致を機械的に縛っている(CLAUDE.md参照)。
-const APP_VERSION = "v103";
+const APP_VERSION = "v104";
 // store(保存レイヤ)は src/domain/storage.js へ移設(テストのため)。
 // LIBSで<script src>読み込み済みなのでグローバルの store をそのまま参照できる。
 const uid = () => Math.random().toString(36).slice(2, 8);
@@ -2149,7 +2149,8 @@ function App() {
     const ok = copyToClipboard(text);
     if (!ok) { window.prompt(t("err.copyFailed"), text); return; }
     setCopiedIdx(key);
-    setTimeout(() => setCopiedIdx(c => (c === key ? null : c)), 2500);
+    // 2.5秒だと、AI側の画面から戻ったときには消えていて貼り付けの案内(log.pasteHint)を読めない。
+    setTimeout(() => setCopiedIdx(c => (c === key ? null : c)), 6000);
     window.open(aiServiceOf(profile.aiService).url, "_blank", "noopener,noreferrer");
   };
 
@@ -2292,7 +2293,9 @@ function App() {
       const ex = w.exercises.find(e => e.name === chartExercise); if (!ex) return null;
       const ws = workingSets(ex); if (ws.length === 0) return null;
       const d = new Date(w.date);
-      const best = ws.reduce((max, s) => Math.max(max, est1RM(setEff(ex, s), s.reps)), 0);
+      // workingSetsはウォームアップしか除かないので、ここで直接reduceすると補助ありセットが
+      // 混ざり、同じ日についてグラフだけが自己ベスト・履歴と違う値を出していた。
+      const best = dayBest1RM(ex.sets, resolveIsDb(ex.name, ex.isDb), ex.bwFactor ?? 0, ex.bwAtLog ?? profile.bodyweight);
       return {
         date: `${d.getMonth() + 1}/${d.getDate()}`,
         最大重量: wU(Math.max(...ws.map(s => s.weight))),
@@ -2357,8 +2360,14 @@ function App() {
   // 参照する3箇所で条件がずれないよう1つにまとめる。
   const barVisible = view === "log" || restStartAt != null;
 
+  // 322px = インターバル展開パネルの実測高さ(266px) + タブバー(56px)。パネルはfixedなので
+  // この余白が足りないと、本文の末尾(保存ボタン)がパネルの裏に入って押せなくなる。
+  // env()を2回足しているのは、パネルが下端から `56px + env()` の位置にあり、さらにパネル自身の
+  // padding-bottomにも `env()` が入っているため。実測値はブラウザ(env()=0)で採ったもので、
+  // pxの決め打ちだけにするとiOS実機(env()≈34px)で68px不足して隠れる。
+  // パネルの中身(数字のfontSize等)を変えたら266pxの部分を実測し直すこと。
   return (
-    <div style={{ minHeight: "100vh", background: C.bg, color: C.text, maxWidth: 520, margin: "0 auto", paddingBottom: restFull && restStartAt != null ? 250 : 90 }}>
+    <div style={{ minHeight: "100vh", background: C.bg, color: C.text, maxWidth: 520, margin: "0 auto", paddingBottom: restFull && restStartAt != null ? "calc(322px + env(safe-area-inset-bottom) * 2)" : 90 }}>
       <style>{`
         input:focus, button:focus-visible, select:focus { outline: 2px solid ${C.yellow}; outline-offset: 2px; }
         * { box-sizing: border-box; }
@@ -2371,7 +2380,13 @@ function App() {
       `}</style>
 
       {/* ===== インターバル全画面表示 ===== */}
-      {restFull && restStartAt != null && (
+      {restFull && restStartAt != null && (() => {
+        // 桁数でサイズを落とす。fmtClockは分を丸めないので、タイマーを止め忘れたまま
+        // 翌日開くと(下書きは24時間前まで復元される)「780:12」のような6〜7文字になる。
+        // 128pxのままだと375px幅でも溢れるし、4文字でも320px幅(iPhone SE 1st)には収まらない。
+        const clock = fmtClock(restElapsed);
+        const clockSize = clock.length <= 4 ? 128 : clock.length === 5 ? 104 : 72;
+        return (
         <div style={{
           position: "fixed", left: 0, right: 0, bottom: "calc(56px + env(safe-area-inset-bottom))", zIndex: 90,
           maxWidth: 520, margin: "0 auto",
@@ -2380,37 +2395,36 @@ function App() {
           borderRadius: "18px 18px 0 0", boxShadow: "0 -12px 40px rgba(0,0,0,0.6)",
           padding: "14px 16px calc(14px + env(safe-area-inset-bottom))",
         }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-            <div style={{ flexShrink: 0 }}>
-              <div style={{ fontSize: 11, color: C.muted, letterSpacing: 1 }}>{t("rest.title")}</div>
-              <div style={{
-                fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800,
-                fontSize: 92, lineHeight: 1.05,
-                color: restElapsed >= 180 ? C.red : restElapsed >= 60 ? C.yellow : C.text,
-                fontVariantNumeric: "tabular-nums",
-              }}>
-                {fmtClock(restElapsed)}
-              </div>
-            </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ display: "flex", gap: 4, marginBottom: 6 }}>
-                {/* 60秒ごとに区切ったセグメントを、そのセグメント内の経過割合に応じて連続的に塗る。
-                    以前は`restElapsed >= m*60`の二値でセグメント全体の色が切り替わるだけで、
-                    数値は0.5秒ごとに動いていてもゲージ自体は1分単位でしか変化せず「止まって見える」問題があった。 */}
-                {[1, 2, 3].map(m => {
-                  const segProgress = Math.max(0, Math.min(1, (restElapsed - (m - 1) * 60) / 60));
-                  const color = m >= 3 ? C.red : m >= 2 ? C.yellow : C.green;
-                  return (
-                    <div key={m} style={{ flex: 1, height: 5, borderRadius: 999, background: C.border, overflow: "hidden" }}>
-                      <div style={{ width: `${segProgress * 100}%`, height: "100%", background: color, transition: "width .3s linear" }} />
-                    </div>
-                  );
-                })}
-              </div>
-              <div style={{ fontSize: 12, color: C.muted }}>
-                {restElapsed < 60 ? t("rest.until1min") : t("rest.elapsed", { n: Math.floor(restElapsed / 60) })}
-              </div>
-            </div>
+          {/* ジムでスマホを置いたまま離れた位置から読めるよう、数字は横幅いっぱいまで使う。
+              以前は数字とゲージを横並びにしていたが、「15:06」のような5文字で数字だけで219pxを
+              占め、ゲージ側に110pxしか残らなかった。縦積みにして数字とゲージの両方に幅を与えている。
+              このパネルだけ中央揃えなのは、時計として読ませるため(アプリの他の面は左揃え)。
+              数字だけを中央にするとラベルとの軸がずれて見えたので、文字要素は揃えてある。 */}
+          <div style={{ fontSize: 11, color: C.muted, letterSpacing: 1, textAlign: "center" }}>{t("rest.title")}</div>
+          <div style={{
+            fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800,
+            fontSize: clockSize, lineHeight: 1.02, textAlign: "center",
+            color: restElapsed >= 180 ? C.red : restElapsed >= 60 ? C.yellow : C.text,
+            fontVariantNumeric: "tabular-nums",
+          }}>
+            {clock}
+          </div>
+          <div style={{ display: "flex", gap: 4, marginTop: 4, marginBottom: 6 }}>
+            {/* 60秒ごとに区切ったセグメントを、そのセグメント内の経過割合に応じて連続的に塗る。
+                以前は`restElapsed >= m*60`の二値でセグメント全体の色が切り替わるだけで、
+                数値は0.5秒ごとに動いていてもゲージ自体は1分単位でしか変化せず「止まって見える」問題があった。 */}
+            {[1, 2, 3].map(m => {
+              const segProgress = Math.max(0, Math.min(1, (restElapsed - (m - 1) * 60) / 60));
+              const color = m >= 3 ? C.red : m >= 2 ? C.yellow : C.green;
+              return (
+                <div key={m} style={{ flex: 1, height: 5, borderRadius: 999, background: C.border, overflow: "hidden" }}>
+                  <div style={{ width: `${segProgress * 100}%`, height: "100%", background: color, transition: "width .3s linear" }} />
+                </div>
+              );
+            })}
+          </div>
+          <div style={{ fontSize: 12, color: C.muted, textAlign: "center" }}>
+            {restElapsed < 60 ? t("rest.until1min") : t("rest.elapsed", { n: Math.floor(restElapsed / 60) })}
           </div>
 
           <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
@@ -2428,7 +2442,8 @@ function App() {
             </button>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* ===== 初回ガイド ===== */}
       {loaded && !guideSeen && (() => {
@@ -2849,6 +2864,14 @@ function App() {
                   <div style={{ flex: 1 }} />
                   <button onClick={() => removeExercise(ex.id)} aria-label={t("log.removeExercise")} style={{ ...btn("transparent", C.muted), padding: "4px 6px", fontSize: 13, whiteSpace: "nowrap", flexShrink: 0 }}>{t("log.removeExerciseBtn")}</button>
                 </div>
+                {/* コピーしただけでは「次に何をすればいいか」が伝わらないため、貼り付けが要ることを明示する。
+                    ボタン行(375pxで既に一杯)には入らないので、行の下に全幅で出す。
+                    高さは常に確保する。条件表示にすると、AI側から戻ってきた直後に文言が消えた瞬間
+                    セット行が上へ飛び、狙った入力欄の1つ下を押してしまう(ボタン幅をminWidthで
+                    固定したのと同じ理由)。role="status"もDOMに常駐させないと読み上げられない。 */}
+                <div role="status" style={{ fontSize: 12, color: C.green, marginTop: 6, height: 17 }}>
+                  {copiedIdx === `ex:${ex.id}` ? t("log.pasteHint") : ""}
+                </div>
               </div>
 
               {/* 種目の差し替え(セットは新しい種目の前回記録から入れ直す) */}
@@ -3034,19 +3057,33 @@ function App() {
                     </div>
                     {hist.length === 0 ? (
                       <div style={{ fontSize: 13, color: C.muted, textAlign: "center", padding: "8px 0" }}>{t("log.noHistory")}</div>
-                    ) : hist.map((h, hi) => (
+                    ) : hist.map((h, hi) => {
+                      // その日の推定1RM。除外条件(ウォームアップ・補助あり)をprMapや履歴タブの
+                      // ⚡バッジと揃えるため、src/domain/oneRm.jsのdayBest1RMに集約してある。
+                      // 体重は記録当時のスナップショット(bwAtLog)を優先する。
+                      const histIsDb = resolveIsDb(h.ex.name, h.ex.isDb);
+                      const best1RM = dayBest1RM(h.ex.sets, histIsDb, h.ex.bwFactor ?? 0, h.ex.bwAtLog ?? profile.bodyweight);
+                      // 下の行に並ぶセットは片手/加重の生値なので、1RM側が両手合計・体重込みで
+                      // あることを単位で示す(比較カードと同じ表記に揃えている)。
+                      const histUnit = (h.ex.bwFactor ?? 0) > 0 ? t("share.withBw", { unit: uLabel() })
+                        : histIsDb ? t("share.bothHands", { unit: uLabel() }) : uLabel();
+                      return (
                       <div key={hi} style={{ marginBottom: 8, paddingBottom: 6, borderBottom: hi < hist.length - 1 ? `1px solid ${C.border}` : "none" }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, marginBottom: 2 }}>
                           <span style={{ fontSize: 13, fontWeight: 700, color: hi === 0 ? C.text : C.muted }}>
                             {fmtDate(h.date)}{hi === 0 && <span style={{ color: C.blue, fontSize: 11, marginLeft: 6 }}>{t("judge.prev")}</span>}
                           </span>
-                          <span style={{ fontSize: 12, color: C.yellow, flexShrink: 0 }}>{Math.round(toU(h.volume)).toLocaleString()}{uLabel()}</span>
+                          <span style={{ display: "flex", gap: 8, alignItems: "baseline", flexShrink: 0 }}>
+                            {best1RM > 0 && <span style={{ fontSize: 12, color: C.text }}>1RM {toU(best1RM).toFixed(1)}{histUnit}</span>}
+                            <span style={{ fontSize: 12, color: C.yellow }}>{Math.round(toU(h.volume)).toLocaleString()}{uLabel()}</span>
+                          </span>
                         </div>
                         <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.6, wordBreak: "break-word" }}>
                           {h.ex.sets.map(s => `${s.warmup ? t("menu.warmupShort") : ""}${s.assisted ? t("menu.assistedShort") : ""}${wU(s.weight)}×${s.reps}${s.rir != null ? `(RIR${s.rir})` : ""}`).join(" / ")}
                         </div>
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 );
               })()}
@@ -3740,6 +3777,11 @@ function App() {
                     </>
                   )}
                 </div>
+              </div>
+
+              {/* 種目カード側と同じ理由(コピーの次に何をするかが伝わらない)。文言・高さの扱いも共通。 */}
+              <div role="status" style={{ fontSize: 12, color: C.green, marginBottom: 8, height: 17 }}>
+                {copiedIdx === `hist:${idx}` ? t("log.pasteHint") : ""}
               </div>
 
               {!editing && (() => {

@@ -147,6 +147,9 @@ const STRINGS = {
   "log.youtube":       { ja: "YouTubeでフォームを検索", en: "Search form on YouTube" },
   "log.consultAi":     { ja: "AI相談",                 en: "Ask AI" },
   "log.consultAiDone": { ja: "✓ コピー",               en: "✓ Copied" },
+  // ボタンのラベルには入れない(minWidth 74の枠に収まらず、押した瞬間に行が折り返す)。
+  // ボタン行の下に一時表示する注記として使う。
+  "log.pasteHint":     { ja: "※AIの画面に貼り付けて送信してください", en: "※Paste it into the AI chat and send it" },
   "log.swap":          { ja: "変更",                   en: "Swap" },
   "log.history":       { ja: "履歴",                   en: "History" },
   "log.exerciseConfig": { ja: "種目の詳細設定",        en: "Exercise settings" },
