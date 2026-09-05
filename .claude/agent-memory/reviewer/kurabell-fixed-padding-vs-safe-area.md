@@ -1,6 +1,6 @@
 ---
 name: kurabell-fixed-padding-vs-safe-area
-description: fixed要素の高さをブラウザ実測した固定pxでpaddingBottomに入れると、iOS実機のenv(safe-area-inset-bottom)分だけ足りずコンテンツが隠れるバグクラス
+description: 固定バー/パネルの高さをブラウザ実測した固定pxで書くと、iOS実機のenv(safe-area-inset-*)分だけ足りず隠れるバグクラス(paddingBottom・scrollMarginTop・rootMargin)
 metadata:
   type: project
 ---
@@ -18,3 +18,13 @@ metadata:
 必要なのは `calc(<実測px> + env(safe-area-inset-bottom) * n)`。
 「ブラウザで実測して収まることを確認した」という報告は iOS の検証にはならない
 ([[kurabell-1rm-filter-divergence]] と同じく、Web/iOSの2経路のうち片方しか見ていない型)。
+
+**上側にも同じ型がある。** 上部バーは `position: sticky, top: 0` で
+`paddingTop: calc(10px + env(safe-area-inset-top))` を持つ。だから
+- `scrollIntoView({block:"start"})` の着地点を決める `scrollMarginTop: <実測px>`
+- `IntersectionObserver` の `rootMargin: "-<実測px>px ..."`
+
+も同じだけ iOS で不足する(env(top) は notch 47px / Dynamic Island 59px)。
+`scrollMarginTop` は `calc(...px + env(safe-area-inset-top))` で直せるが、
+**`rootMargin` は calc()/env() を受け付けない**ので、直すならバー要素を
+`getBoundingClientRect().height` で実測して state に持つしかない。v105で該当。

@@ -229,7 +229,7 @@ const DRAFT_KEY = "workout-draft-v1"; // 入力途中の記録(アプリが落�
 const PRE_IMPORT_BACKUP_KEY = "workout-log-v1-pre-import"; // バックアップ復元前のデータ退避(復元に失敗した場合の保険)
 // ヘッダーのバージョンバッジとバックアップのappVersionで共有する単一の定数。
 // sw.js の CACHE 定数とは tests/version.test.js が数字の一致を機械的に縛っている(CLAUDE.md参照)。
-const APP_VERSION = "v104";
+const APP_VERSION = "v105";
 // store(保存レイヤ)は src/domain/storage.js へ移設(テストのため)。
 // LIBSで<script src>読み込み済みなのでグローバルの store をそのまま参照できる。
 const uid = () => Math.random().toString(36).slice(2, 8);
@@ -2360,6 +2360,46 @@ function App() {
   // 参照する3箇所で条件がずれないよう1つにまとめる。
   const barVisible = view === "log" || restStartAt != null;
 
+  // 「現在の種目へ」ボタンの飛び先。RIRが入って初めて実施済みなので、まだRIRを入れていない
+  // セットを持つ最初の種目を「今やっている種目」とみなす(ウォームアップはRIR不要なので数えない)。
+  // 全部埋まっている場合は最後の種目 = これから追加する位置に近い方へ飛ばす。
+  const currentEx = today.length === 0 ? null
+    : (today.find(ex => ex.sets.some(s => !s.warmup && (s.rir === "" || s.rir == null))) || today[today.length - 1]);
+
+  // 上部バーとタブバーは自分でsafe-areaを負担しているので、実際の高さは端末で変わる
+  // (バーは 約95px + env(top)、タブバーは 56px + env(bottom))。ここをpxで決め打つと
+  // ブラウザでは合っていてもiOS実機だけ数十pxずれるので、必ず実測して使う。
+  // rootMarginはcalc()/env()を受け付けないため、そもそも実測しないと書けない。
+  const topBarRef = useRef(null);
+  const navRef = useRef(null);
+  const chromeHeights = () => ({
+    top: Math.round(topBarRef.current?.getBoundingClientRect().height ?? 110),
+    bottom: Math.round(navRef.current?.getBoundingClientRect().height ?? 80),
+  });
+
+  // 現在の種目が画面に見えているならボタンは出さない。固定ボタンは右下に居座るので、
+  // 出しっぱなしにすると種目名の行のYouTubeボタンやセット行の×を覆って押せなくする
+  // (実際に覆っているのを確認した)。見えていれば戻る必要もない。
+  const [currentExVisible, setCurrentExVisible] = useState(true);
+  useEffect(() => {
+    if (view !== "log" || !currentEx) { setCurrentExVisible(true); return; }
+    const el = document.getElementById(`ex-${currentEx.id}`);
+    if (!el) { setCurrentExVisible(false); return; }
+    // 上部バーと下部タブバーの裏は「見えている」に数えない。
+    const { top, bottom } = chromeHeights();
+    const io = new IntersectionObserver(([e]) => setCurrentExVisible(e.isIntersecting), { rootMargin: `-${top}px 0px -${bottom}px 0px` });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [view, currentEx?.id, today.length, restStartAt != null]);
+
+  // scrollIntoViewのscroll-marginではsafe-areaぶんを式で書けないので、自分で位置を計算する。
+  const scrollToCurrentEx = () => {
+    const el = currentEx && document.getElementById(`ex-${currentEx.id}`);
+    if (!el) return;
+    const top = el.getBoundingClientRect().top + window.scrollY - chromeHeights().top - 8;
+    window.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
+  };
+
   // 322px = インターバル展開パネルの実測高さ(266px) + タブバー(56px)。パネルはfixedなので
   // この余白が足りないと、本文の末尾(保存ボタン)がパネルの裏に入って押せなくなる。
   // env()を2回足しているのは、パネルが下端から `56px + env()` の位置にあり、さらにパネル自身の
@@ -2378,6 +2418,35 @@ function App() {
         .tapArea { position: relative; }
         .tapArea::before { content: ""; position: absolute; top: -6px; bottom: -6px; left: 0; right: 0; }
       `}</style>
+
+      {/* ===== 「現在の種目へ」ボタン ===== */}
+      {/* 記録タブでは種目カードが縦に長く連なり、種目を足そうと下まで行くと入力中の種目を見失う。
+          タブバー(56px)のすぐ上に置く。インターバル展開パネル(zIndex 90)が出ているときは
+          そちらが優先されて隠れるが、休憩中は時間の方を見たいので意図どおり。 */}
+      {view === "log" && currentEx && !currentExVisible && (
+        // 他の固定要素(インターバルパネル・タブバー)と同じく520pxのアプリ列に追従させる。
+        // ビューポート右端に貼ると、520pxより広い画面で列の外側に浮いてしまう。
+        // 下端から100px上げているのは「ワークアウトを保存」を避けるため。保存ボタンは
+        // ルートのpaddingBottom(90px)の上に高さ56pxで座るので、下端から146pxまでを占める。
+        // ここを詰めると保存ボタンの右3分の1がこのボタンに食われ、押したつもりがスクロールする
+        // (64pxで実際に26px重なっていた)。
+        // ラッパーは画面幅いっぱいなのでpointerEventsを切り、ボタンだけ拾う。
+        <div style={{
+          position: "fixed", left: 0, right: 0, bottom: "calc(56px + env(safe-area-inset-bottom) + 100px)", zIndex: 40,
+          maxWidth: 520, margin: "0 auto", padding: "0 16px",
+          display: "flex", justifyContent: "flex-end", pointerEvents: "none",
+        }}>
+          <button onClick={scrollToCurrentEx}
+            style={{
+              ...btn(C.surface2, C.text), padding: "10px 14px", fontSize: 12, fontWeight: 700,
+              border: `1px solid ${C.border}`, boxShadow: "0 4px 16px rgba(0,0,0,0.5)",
+              maxWidth: "60%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+              pointerEvents: "auto",
+            }}>
+            {t("log.toCurrent")}
+          </button>
+        </div>
+      )}
 
       {/* ===== インターバル全画面表示 ===== */}
       {restFull && restStartAt != null && (() => {
@@ -2544,7 +2613,7 @@ function App() {
           バーを出さないタブでは下の<header>がノッチに潜るので、そちら側で
           safe-areaを負担する(バーはstickyでtop:0に居るため自分で持つ必要がある)。 */}
       {barVisible && (
-        <div style={{
+        <div ref={topBarRef} style={{
           position: "sticky", top: 0, zIndex: 20, background: C.surface2, borderBottom: `1px solid ${C.border}`,
           padding: "10px 10px 12px", paddingTop: "calc(10px + env(safe-area-inset-top))",
         }}>
@@ -2801,7 +2870,8 @@ function App() {
             }
             return (
             <React.Fragment key={ex.id}>
-            <div style={{
+            {/* id は「現在の種目へ」ボタンのスクロール先(位置の計算はscrollToCurrentEx側)。 */}
+            <div id={`ex-${ex.id}`} style={{
               background: C.surface, padding: 14,
               border: `1px solid ${inGroup ? C.blue : C.border}`,
               borderTopWidth: inGroup && !groupStart ? 0 : 1,
@@ -3697,7 +3767,15 @@ function App() {
               どちらか一方しか見られない作りで、切替の存在自体が余計だった。
               日付をタップするとその日の記録だけに絞り込む挙動はそのまま残している。 */}
           {(() => {
-            const trainedDates = new Set(workouts.map(w => { const d = new Date(w.date); return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`; }));
+            // 日付キー → その日の分割名。同じ日に複数回記録した場合、名前が付いている方を残す
+            // (2本目を分割なしで記録すると名前が消えてしまうため。配列の順序には依存しない)。
+            const trainedSessions = new Map();
+            workouts.forEach(w => {
+              const d = new Date(w.date);
+              const k = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+              const name = (w.session || "").trim();
+              if (!trainedSessions.has(k) || (name && !trainedSessions.get(k))) trainedSessions.set(k, name);
+            });
             const first = new Date(calMonth.y, calMonth.m, 1);
             const startDow = first.getDay();
             const daysInMonth = new Date(calMonth.y, calMonth.m + 1, 0).getDate();
@@ -3721,19 +3799,36 @@ function App() {
                   {cells.map((d, i) => {
                     if (d === null) return <div key={`e${i}`} />;
                     const key = `${calMonth.y}-${calMonth.m}-${d}`;
-                    const trained = trainedDates.has(key);
+                    const trained = trainedSessions.has(key);
+                    const session = trained ? trainedSessions.get(key) : "";
                     const isToday = today.getFullYear() === calMonth.y && today.getMonth() === calMonth.m && today.getDate() === d;
                     const isSel = selectedDate === key;
                     return (
                       <button key={key} onClick={() => setSelectedDate(isSel ? null : key)}
                         style={{
-                          aspectRatio: "1", borderRadius: 8, border: isToday ? `1px solid ${C.muted}` : "1px solid transparent",
+                          // aspectRatioは外した。分割名の行を入れると正方形では潰れるため、
+                          // 高さを内容に合わせて確保する(名前の有無で高さが変わらないよう固定)。
+                          minHeight: 46, borderRadius: 8, border: isToday ? `1px solid ${C.muted}` : "1px solid transparent",
                           background: isSel ? C.blue : trained ? "rgba(226,69,60,0.18)" : "transparent",
                           color: isSel ? "#fff" : C.text, fontSize: 13, fontFamily: "inherit", cursor: "pointer",
-                          display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 2,
+                          display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 1,
+                          padding: "2px 1px", overflow: "hidden",
                         }}>
                         {d}
-                        {trained && <span style={{ width: 5, height: 5, borderRadius: "50%", background: isSel ? "#fff" : C.red }} />}
+                        {/* 分割名が付いている日は名前を出す。名前自体がトレーニング日の印になるので
+                            点は出さない。分割を設定せずに記録した日はsessionが空なので点で示す。
+                            セル幅は375px端末で約41pxしかなく、長いカスタム名は入らないので省略する。 */}
+                        {trained && (session ? (
+                          <span style={{
+                            fontSize: 9, lineHeight: 1.1, maxWidth: "100%",
+                            overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                            // 赤字は薄い赤背景の上でコントラストが3.3:1しかなく9pxでは読めない。
+                            // トレーニング日であることはセルの背景色が示しているので、文字は本文色にする。
+                            color: isSel ? "#fff" : C.text,
+                          }}>{dayName(session)}</span>
+                        ) : (
+                          <span style={{ width: 5, height: 5, borderRadius: "50%", background: isSel ? "#fff" : C.red }} />
+                        ))}
                       </button>
                     );
                   })}
@@ -3759,7 +3854,7 @@ function App() {
             return (
             <div key={idx} style={{ background: C.surface, borderRadius: 14, padding: 14, marginBottom: 10, border: `1px solid ${editing ? C.blue : C.border}` }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4, gap: 8 }}>
-                <div style={{ fontWeight: 900, fontSize: 14, minWidth: 0 }}>{fmtDate(w.date)}{w.session && <span style={{ color: C.blue, marginLeft: 8, fontSize: 13 }}>{w.session}</span>}</div>
+                <div style={{ fontWeight: 900, fontSize: 14, minWidth: 0 }}>{fmtDate(w.date)}{w.session && <span style={{ color: C.blue, marginLeft: 8, fontSize: 13 }}>{dayName(w.session)}</span>}</div>
                 <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
                   {editing ? (
                     <>
@@ -4351,7 +4446,7 @@ function App() {
       )}
 
       {/* タブバー */}
-      <nav style={{ position: "fixed", bottom: 0, left: 0, right: 0, maxWidth: 520, margin: "0 auto", display: "flex", background: C.surface, borderTop: `1px solid ${C.border}`, paddingBottom: "env(safe-area-inset-bottom)" }}>
+      <nav ref={navRef} style={{ position: "fixed", bottom: 0, left: 0, right: 0, maxWidth: 520, margin: "0 auto", display: "flex", background: C.surface, borderTop: `1px solid ${C.border}`, paddingBottom: "env(safe-area-inset-bottom)" }}>
         {[["split", t("tab.split")], ["log", t("tab.log")], ["history", t("tab.history")], ["settings", t("tab.settings")]].map(([k, label]) => (
           <button key={k} onClick={() => setView(k)} style={{ flex: 1, padding: "14px 0 18px", background: "none", border: "none", color: view === k ? C.red : C.muted, fontWeight: view === k ? 900 : 400, fontSize: 13, cursor: "pointer", fontFamily: "inherit", borderTop: view === k ? `2px solid ${C.red}` : "2px solid transparent" }}>{label}</button>
         ))}

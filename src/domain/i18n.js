@@ -150,6 +150,9 @@ const STRINGS = {
   // ボタンのラベルには入れない(minWidth 74の枠に収まらず、押した瞬間に行が折り返す)。
   // ボタン行の下に一時表示する注記として使う。
   "log.pasteHint":     { ja: "※AIの画面に貼り付けて送信してください", en: "※Paste it into the AI chat and send it" },
+  // 矢印は入れない。現在の種目より上を見ているときもボタンは出る(前回実績を見に上へ
+  // 戻るのは主機能の動線)ので、方向を書くと逆を指すことがある。
+  "log.toCurrent":     { ja: "現在の種目へ",           en: "Current exercise" },
   "log.swap":          { ja: "変更",                   en: "Swap" },
   "log.history":       { ja: "履歴",                   en: "History" },
   "log.exerciseConfig": { ja: "種目の詳細設定",        en: "Exercise settings" },
@@ -319,7 +322,8 @@ const STRINGS = {
   "history.title":     { ja: "履歴",                   en: "History" },
   "history.count":     { ja: "履歴 {n}回",             en: "History · {n}" },
   "history.empty":     { ja: "まだ記録がありません。", en: "No records yet." },
-  "history.calendarHint": { ja: "赤い点=トレーニング日。タップでその日の記録を表示", en: "Red dot = training day. Tap to see that day's workout." },
+  // 分割名が付いた日は名前が、付いていない日は赤い点が出る(セルの実装参照)。
+  "history.calendarHint": { ja: "赤い文字・点=トレーニング日。タップでその日の記録を表示", en: "Red label or dot = training day. Tap to see that day's workout." },
   "history.tapAgain":  { ja: "日付をもう一度タップで解除", en: "Tap the date again to clear" },
   "history.deleteDay": { ja: "この記録を削除",         en: "Delete this workout" },
   "history.deleteWhole": { ja: "この日の記録をまるごと削除", en: "Delete this entire workout" },
