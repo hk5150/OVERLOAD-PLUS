@@ -230,7 +230,7 @@ const DRAFT_KEY = "workout-draft-v1"; // 入力途中の記録(アプリが落�
 const PRE_IMPORT_BACKUP_KEY = "workout-log-v1-pre-import"; // バックアップ復元前のデータ退避(復元に失敗した場合の保険)
 // ヘッダーのバージョンバッジとバックアップのappVersionで共有する単一の定数。
 // sw.js の CACHE 定数とは tests/version.test.js が数字の一致を機械的に縛っている(CLAUDE.md参照)。
-const APP_VERSION = "v107";
+const APP_VERSION = "v108";
 // store(保存レイヤ)は src/domain/storage.js へ移設(テストのため)。
 // LIBSで<script src>読み込み済みなのでグローバルの store をそのまま参照できる。
 const uid = () => Math.random().toString(36).slice(2, 8);
@@ -3029,7 +3029,10 @@ function App() {
               {/* 判断材料: 重量の停滞と推移。前回の各セットはセット行に並べて出すのでここでは繰り返さない */}
               {(() => {
                 if (!ins) return null;
-                const hasStreak = ins.streak >= 2, hasTrend = ins.trend.length >= 2;
+                // topWeightがnullの日(全セットが補助あり等)は重量の判断材料を出せない。
+                // 日付・ゴースト表示・推移は出せるので、この行ごと消さずに畳むだけにする。
+                const hasStreak = ins.topWeight != null && ins.streak >= 2;
+                const hasTrend = ins.trend.length >= 2;
                 const unit = ins.isDb ? t("share.perHand", { unit: uLabel() }) : uLabel();
                 return (
                   <div style={{ background: C.bg, borderRadius: 10, padding: "6px 10px", marginBottom: 10, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
@@ -3046,7 +3049,7 @@ function App() {
                         回数が直近の最高を下回っている間は「上げどき」と言わず事実だけ渡す
                         (実データで15kg×13回→9回の後退局面に「そろそろ上げどき」が出ていた)。
                         加重できない種目(常に自重のみ)では重量の助言自体が成立しないので出さない。 */}
-                    {ins.streak >= 3 && ins.canAddWeight && (
+                    {ins.topWeight != null && ins.streak >= 3 && ins.canAddWeight && (
                       ins.readyToProgress ? (
                         <span style={{ fontSize: 12, fontWeight: 800, color: C.yellow, background: "rgba(232,179,60,0.15)", padding: "2px 8px", borderRadius: 999 }}>
                           {t("log.plateauAlert", { n: ins.streak })}

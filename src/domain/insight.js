@@ -44,22 +44,47 @@ function exerciseInsight(workouts, name, isDbOf) {
 
   const prev = entries[0];
   const prevTop = topSetOf(prev.ex);
-  if (!prevTop) return null;
+
+  // 推移(古い順)。代表セットを持たない日は飛ばすので、直近が全セット補助ありでも
+  // それ以前の推移は出せる。重量だけだと「15kg×13回 → 15kg×9回」の後退が
+  // 「15 → 15」と横ばいに見えるので、トップセットの回数も一緒に持つ。
+  const trend = entries.slice(0, INSIGHT_TREND_LEN)
+    .map(e => { const t = topSetOf(e.ex); return t ? { weight: insightNum(t.weight), reps: insightNum(t.reps) } : null; })
+    .filter(Boolean).reverse();
+
+  // 加重が0のまま続く種目(腕立てなど加重できないもの)に「重量が頭打ち」と言っても
+  // 取れる行動がない。回数の伸びは推移で見えるので、重量の助言だけを抑える。
+  // 前回1回だけで判断すると「今回はたまたま自重だけだった懸垂」を加重不可と誤判定するため、
+  // 推移の範囲に一度でも加重があるかで見る。
+  const canAddWeight = trend.some(v => v.weight > 0);
+
+  // 日付と前回のセットは、代表セットが取れるかどうかとは無関係に返す。
+  // ここを一緒くたにnullで返すと、その日の全セットに「補助あり」を付けただけで
+  // セット行のゴースト表示まで消え、「前回の実績をそのまま見せる」という中心機能が
+  // 働かなくなる(アシストマシンを常用する種目で実際に起きる)。
+  const base = {
+    date: prev.date,
+    sets: (prev.ex.sets || []).filter(s => !s.warmup),
+    isDb: isDbOf ? isDbOf(name, prev.ex.isDb) : !!prev.ex.isDb,
+    trend,
+    canAddWeight,
+  };
+
+  // 代表セットが取れない日(全セットが補助あり、または回数未入力)。重量にまつわる判断材料は
+  // 出せないので、消費側が畳めるよう topWeight を null にして知らせる。
+  if (!prevTop) {
+    return { ...base, topWeight: null, topReps: null, topRir: null, streak: 0, readyToProgress: false, bestRecentReps: 0 };
+  }
+
   const prevWeight = insightNum(prevTop.weight);
   const prevReps = insightNum(prevTop.reps);
 
-  // 同じトップ重量が何回連続しているか
+  // 同じトップ重量が何セッション連続しているか
   let streak = 0;
   for (const e of entries) {
     const t = topSetOf(e.ex);
     if (t && insightNum(t.weight) === prevWeight) streak++; else break;
   }
-
-  // 推移(古い順)。重量だけだと「15kg×13回 → 15kg×9回」の後退が「15 → 15」と
-  // 横ばいに見えるので、トップセットの回数も一緒に持つ。
-  const trend = entries.slice(0, INSIGHT_TREND_LEN)
-    .map(e => { const t = topSetOf(e.ex); return t ? { weight: insightNum(t.weight), reps: insightNum(t.reps) } : null; })
-    .filter(Boolean).reverse();
 
   // 重量が同じでも回数が伸びていれば過負荷は掛かっている。逆に回数が落ちている最中に
   // 重量を上げるのは順序が逆なので、そのときは「上げどき」と言わない。
@@ -71,19 +96,13 @@ function exerciseInsight(workouts, name, isDbOf) {
   const readyToProgress = prevReps >= bestRecentReps;
 
   return {
-    date: prev.date,
-    sets: (prev.ex.sets || []).filter(s => !s.warmup),
+    ...base,
     topWeight: prevWeight,
     topReps: prevReps,
     topRir: prevTop.rir,
-    isDb: isDbOf ? isDbOf(name, prev.ex.isDb) : !!prev.ex.isDb,
     streak,
-    trend,
     readyToProgress,
     bestRecentReps,
-    // 加重が0のまま続く種目(腕立てなど加重できないもの)に「重量が頭打ち」と言っても
-    // 取れる行動がない。回数の伸びは推移で見えるので、重量の助言だけを抑える。
-    canAddWeight: prevWeight > 0,
   };
 }
 

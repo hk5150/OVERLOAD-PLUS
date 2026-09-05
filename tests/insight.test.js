@@ -118,13 +118,55 @@ describe("exerciseInsight の境界(記録が無いときに画面へ出すも�
     expect(exerciseInsight(ws, "ダンベルカール")).not.toBe(null);
   });
 
-  // 1つ前の有効なセッションへはフォールバックしない、という現状の挙動。
-  it("直近セッションのセットが全てウォームアップならnull", () => {
+  // 代表セットが取れない日でも、前回の日付とセット内容は返す。
+  // ここでnullを返していた頃は、その日の全セットに「補助あり」を付けただけで
+  // セット行のゴースト表示まで消え、「前回の実績をそのまま見せる」中心機能が働かなかった。
+  // 補助ありは保存時のフィルタ(!s.warmup)を通るので、通常操作で到達する。
+  it("直近セッションが全て補助ありでも、前回の日付とセットは返す", () => {
+    const ws = [
+      sampleWorkout({ date: "2026-09-01", sets: [sampleSet({ weight: 15, reps: 8 })] }),
+      sampleWorkout({ date: "2026-09-02", sets: [sampleSet({ weight: 0, reps: 12, assisted: true })] }),
+    ];
+    const ins = exerciseInsight(ws, NAME);
+    expect(ins).not.toBe(null);
+    expect(ins.date).toBe("2026-09-02");
+    expect(ins.sets).toHaveLength(1); // ゴースト表示の入力。補助ありは実施した事実として残す
+    expect(ins.sets[0].assisted).toBe(true);
+  });
+
+  it("代表セットが取れない日は、重量まわりの判断材料をnull・0で返す", () => {
+    const ws = [
+      sampleWorkout({ date: "2026-09-01", sets: [sampleSet({ weight: 15, reps: 8 })] }),
+      sampleWorkout({ date: "2026-09-02", sets: [sampleSet({ weight: 0, reps: 12, assisted: true })] }),
+    ];
+    const ins = exerciseInsight(ws, NAME);
+    expect(ins.topWeight).toBe(null);
+    expect(ins.topReps).toBe(null);
+    expect(ins.streak).toBe(0);
+    expect(ins.readyToProgress).toBe(false);
+  });
+
+  it("直近が全て補助ありでも、それ以前のセッションの推移は出す", () => {
+    const ws = [
+      sampleWorkout({ date: "2026-09-01", sets: [sampleSet({ weight: 15, reps: 8 })] }),
+      sampleWorkout({ date: "2026-09-03", sets: [sampleSet({ weight: 15, reps: 10 })] }),
+      sampleWorkout({ date: "2026-09-05", sets: [sampleSet({ weight: 0, reps: 12, assisted: true })] }),
+    ];
+    const ins = exerciseInsight(ws, NAME);
+    expect(ins.trend).toEqual([{ weight: 15, reps: 8 }, { weight: 15, reps: 10 }]);
+  });
+
+  // 直近セッションが全てウォームアップの場合(保存時のフィルタで潰されるので通常は到達しない)。
+  it("直近セッションが全てウォームアップでも、日付は返す(セットは空になる)", () => {
     const ws = [
       sampleWorkout({ date: "2026-09-01", sets: [sampleSet({ weight: 15, reps: 8 })] }),
       sampleWorkout({ date: "2026-09-02", sets: [sampleSet({ weight: 15, reps: 8, warmup: true })] }),
     ];
-    expect(exerciseInsight(ws, NAME)).toBe(null);
+    const ins = exerciseInsight(ws, NAME);
+    expect(ins).not.toBe(null);
+    expect(ins.date).toBe("2026-09-02");
+    expect(ins.sets).toEqual([]);
+    expect(ins.topWeight).toBe(null);
   });
 
   // docs/AppStore提出準備.md の「6. 種目名の重複防止」の前提。同名2枚目は死蔵する。
@@ -325,5 +367,23 @@ describe("canAddWeight (加重できない種目に重量の助言をしない)"
     expect(exerciseInsight(sessions([[15, 8]]), NAME).canAddWeight).toBe(true);
     expect(exerciseInsight(sessions([[5, 12]]), NAME).canAddWeight).toBe(true);
     expect(exerciseInsight(sessions([[2.5, 12]]), NAME).canAddWeight).toBe(true);
+  });
+
+  // 前回1回だけで判断すると、加重できる種目を「できない」と誤判定する。
+  it("前回がたまたま自重だけでも、推移の中に加重した日があればtrue", () => {
+    expect(exerciseInsight(sessions([[15, 8], [0, 12]]), NAME).canAddWeight).toBe(true);
+  });
+
+  it("推移の全ての日が自重だけならfalse", () => {
+    expect(exerciseInsight(sessions([[0, 20], [0, 22], [0, 25]]), NAME).canAddWeight).toBe(false);
+  });
+
+  // 代表セットが取れない日(全セット補助あり)でも、過去の加重から判定できる。
+  it("直近が全て補助ありでも、それ以前に加重した日があればtrue", () => {
+    const ws = [
+      sampleWorkout({ date: "2026-09-01", sets: [sampleSet({ weight: 15, reps: 8 })] }),
+      sampleWorkout({ date: "2026-09-02", sets: [sampleSet({ weight: 0, reps: 12, assisted: true })] }),
+    ];
+    expect(exerciseInsight(ws, NAME).canAddWeight).toBe(true);
   });
 });
