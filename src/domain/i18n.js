@@ -240,8 +240,11 @@ const STRINGS = {
   "rest.title":        { ja: "インターバル",           en: "Rest" },
   "rest.start":        { ja: "インターバル",           en: "Start" },
   "rest.startLine2":   { ja: "開始",                   en: "rest" },
-  "rest.until1min":    { ja: "1分まで",                en: "to 1 min" },
-  "rest.elapsed":      { ja: "{n}分経過",              en: "{n} min elapsed" },
+  // ゲージの3セグメント(1分ごと・緑/黄/赤)と対になる声かけ。経過時間そのものは
+  // すぐ上の数字が出しているので、この行は「今どうすべきか」だけを言う。
+  "rest.coach1":       { ja: "しっかり休め",           en: "Rest up" },
+  "rest.coach2":       { ja: "そろそろ始めろ",         en: "Time to move" },
+  "rest.coach3":       { ja: "パンプが冷めるぞ",       en: "Your pump's fading" },
   "rest.finish":       { ja: "終了",                   en: "Finish" },
   "rest.notifyTitle":  { ja: "インターバル",           en: "Rest timer" },
   "rest.notifyBody":   { ja: "{n}分経過しました。次のセットへ。", en: "{n} min elapsed. Time for your next set." },
@@ -436,6 +439,17 @@ const STRINGS = {
   "share.exStreak":    { ja: "→ {v}が{n}回連続", en: "→ {v} for {n} sessions in a row" },
   "share.exToday":     { ja: "■ 今日ここまで", en: "■ Today so far" },
   "share.rirNote":     { ja: "※「余力」はそのセット後にあと何回挙げられたか(RIR)。0が限界。Wはウォームアップ。", en: "Note: RIR is how many more reps I could have done in that set; 0 means failure. W means warm-up." },
+  // 分割の1日分について相談するプロンプト。種目単位(share.ex*)が「次の重量・回数」を聞くのに対し、
+  // こちらは「この日の種目構成」を聞く。他の日の担当を渡すのは、分割の設計と衝突する助言
+  // (「胸の日に背中も入れては」等)を避けるため。
+  "share.dayPrompt":     { ja: "以下は私のトレーニング分割の1日分「{name}」です。種目の選択・順番・ボリュームのバランスについてアドバイスをください。", en: "Below is one day (\"{name}\") of my training split. Please advise on exercise selection, order, and volume balance." },
+  "share.dayMeta":       { ja: "分割: {split}(全{total}日) / この日: {n}日目「{name}」", en: "Split: {split} ({total} days) / This day: day {n}, \"{name}\"" },
+  "share.dayMuscles":    { ja: "対象部位: {muscles}", en: "Target muscles: {muscles}" },
+  "share.dayOthers":     { ja: "他の日の担当: {list}", en: "Other days cover: {list}" },
+  "share.dayExercises":  { ja: "登録種目: {list}", en: "Registered exercises: {list}" },
+  "share.dayNoExercises":{ ja: "(この日にはまだ種目を登録していません)", en: "(No exercises registered for this day yet.)" },
+  "share.dayHistory":    { ja: "■ この日の直近の実績(古い順)", en: "■ Recent sessions for this day (oldest first)" },
+  "share.dayNoHistory":  { ja: "(この日の記録はまだありません)", en: "(No sessions recorded for this day yet.)" },
   "csv.date":          { ja: "日付",                   en: "Date" },
   "csv.session":       { ja: "セッション",             en: "Session" },
   "csv.exercise":      { ja: "種目",                   en: "Exercise" },

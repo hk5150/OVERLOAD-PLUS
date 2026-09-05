@@ -229,7 +229,7 @@ const DRAFT_KEY = "workout-draft-v1"; // 入力途中の記録(アプリが落�
 const PRE_IMPORT_BACKUP_KEY = "workout-log-v1-pre-import"; // バックアップ復元前のデータ退避(復元に失敗した場合の保険)
 // ヘッダーのバージョンバッジとバックアップのappVersionで共有する単一の定数。
 // sw.js の CACHE 定数とは tests/version.test.js が数字の一致を機械的に縛っている(CLAUDE.md参照)。
-const APP_VERSION = "v105";
+const APP_VERSION = "v106";
 // store(保存レイヤ)は src/domain/storage.js へ移設(テストのため)。
 // LIBSで<script src>読み込み済みなのでグローバルの store をそのまま参照できる。
 const uid = () => Math.random().toString(36).slice(2, 8);
@@ -1828,6 +1828,9 @@ function App() {
     else if (cur === j) cursor = split.cursor - dir;
     updSplit({ days, cursor: (cursor + days.length) % days.length });
     if (editDay === i) setEditDay(j); else if (editDay === j) setEditDay(i);
+    // コピー直後の表示もインデックス基準なので、一緒に付け替える。放置すると
+    // 実際にコピーしたのとは別のDayに「✓ コピー」と貼り付けの案内が出る。
+    if (copiedIdx === `day:${i}`) setCopiedIdx(`day:${j}`); else if (copiedIdx === `day:${j}`) setCopiedIdx(`day:${i}`);
   };
   const deleteSplit = () => { if (!window.confirm(t("split.confirmDelete"))) return; persist({ split: null }); setEditDay(null); };
 
@@ -2031,6 +2034,18 @@ function App() {
     return lines.join("\n");
   };
 
+  // セット1つ分の表記。種目単位(exerciseToText)と分割の日単位(dayToText)で共通。
+  // 重量と単位は呼び出し側で作って渡す(記録中のセットは表示単位の文字列、保存済みはkg、
+  // 自重種目は実効重量、と作り方が違うため)。同じ整形をコピーして持つと、v104で踏んだ
+  // 「同じ計算が3通りに割れる」を繰り返すのでここに集約する。
+  const shareSetLine = (s, weight, unit) => {
+    const rir = (s.rir !== "" && s.rir != null) ? t("share.rirLeft", { n: s.rir }) : "";
+    const tags = [];
+    if (s.warmup) tags.push("W");
+    if (s.assisted) tags.push(t("share.assisted"));
+    return `${weight}${unit}×${s.reps}${rir}${tags.length ? `[${tags.join("/")}]` : ""}`;
+  };
+
   // 種目1つ分の相談プロンプト。「次にどの重量・回数で組むか」を判断するのに要る材料を、
   // 数値の羅列ではなく前提込みで渡す。RIRの説明を必ず添えるのは、注記が無いとAIが
   // 「余力2」を「2回しかできない」等と誤読して逆方向の助言をするため。
@@ -2050,14 +2065,7 @@ function App() {
     // 保存済みの記録(past)はkg、記録中のセット(today)は表示単位の文字列を持つ
     // (todayの他の参照は全て fromU() を通している)。ここを一律 wU() にすると、
     // lb表示のユーザーで今日の分だけ二重換算され、過去と桁が食い違う。
-    const setLine = (s, isKg) => {
-      const rir = (s.rir !== "" && s.rir != null) ? t("share.rirLeft", { n: s.rir }) : "";
-      const tags = [];
-      if (s.warmup) tags.push("W");
-      if (s.assisted) tags.push(t("share.assisted"));
-      const w = isKg ? wU(s.weight) : num(s.weight);
-      return `${w}${uLabel()}×${s.reps}${rir}${tags.length ? `[${tags.join("/")}]` : ""}`;
-    };
+    const setLine = (s, isKg) => shareSetLine(s, isKg ? wU(s.weight) : num(s.weight), uLabel());
 
     const lines = [t("share.exPrompt", { name }), ""];
     lines.push(t("share.exMeta", {
@@ -2109,6 +2117,69 @@ function App() {
       lines.push("", t("share.exToday"), doneToday.map(s => setLine(s, false)).join(" / "));
     }
     if (exerciseNotes[ex.name]) lines.push("", `📌 ${exerciseNotes[ex.name]}`);
+
+    lines.push("", t("share.rirNote"), "— KURABELL Workout Log");
+    return lines.join("\n");
+  };
+
+  // 分割の1日分の相談プロンプト。種目単位(exerciseToText)が「次の重量・回数」を聞くのに対し、
+  // こちらは「この日の種目の選び方・並び・量」を聞く。分割全体の中での位置づけ(何分割の何日目、
+  // 他の日が何を担当しているか)が無いと、AIは「胸の日に背中も入れては」のような、
+  // 分割の設計と衝突する助言をしてくる。
+  const dayToText = (d, i) => {
+    const dName = dayName(d.name);
+    const lines = [t("share.dayPrompt", { name: dName }), ""];
+    lines.push(t("share.dayMeta", { split: splitName(split.name), n: i + 1, total: split.days.length, name: dName }));
+    const muscles = (d.muscles || []).map(m => muscleName(m)).join(" / ");
+    if (muscles) lines.push(t("share.dayMuscles", { muscles }));
+    // 他の日の担当を渡すのは、この日に何を足す/足さないかの判断材料になるため。
+    // 区切りは中黒でなく"・"を避けた形にする(英語UIで和文の約物が混ざるため)。
+    const others = split.days
+      .map((o, oi) => oi === i ? null : `${dayName(o.name)}(${(o.muscles || []).map(m => muscleName(m)).join(", ") || "-"})`)
+      .filter(Boolean);
+    if (others.length) lines.push(t("share.dayOthers", { list: others.join(" / ") }));
+
+    const regd = (d.exercises || []).map(n => exName(n));
+    lines.push(regd.length ? t("share.dayExercises", { list: regd.join(" / ") }) : t("share.dayNoExercises"));
+
+    // この日の過去の実績。session名で引く(todayDay専用のlastSameSessionは使えない)。
+    const past = workouts.filter(w => w.session === d.name).slice(-MAX_PROMPT_SESSIONS);
+    lines.push("", t("share.dayHistory"));
+    if (past.length === 0) {
+      lines.push(t("share.dayNoHistory"));
+    } else {
+      past.forEach(w => {
+        lines.push(fmtDate(w.date));
+        w.exercises.forEach(ex => {
+          // 単位の意味づけは種目ごとに変わる。書かないとダンベルの重量を両手合計と誤読され、
+          // 負荷を半分に見積もられる。
+          // 自重種目だけは実効重量(体重×係数+加重)に置き換える。記録側のweightは加重だけなので、
+          // そのまま「(体重込)」と書くと懸垂が「0kg(体重込)×10」になり、AIは総負荷0と読む。
+          // ここは種目ごとに単位が変わるためexerciseToTextのようなメタ行に逃がせず、
+          // 体重を別に渡しても復元をAIに任せることになるので、数値の側を実効重量にする。
+          const isDb = resolveIsDb(ex.name, ex.isDb);
+          const bwF = ex.bwFactor || 0;
+          const unit = isDb ? t("share.perHand", { unit: uLabel() })
+            : bwF > 0 ? t("share.withBw", { unit: uLabel() }) : uLabel();
+          const sets = (ex.sets || []).map(s => {
+            const w = bwF > 0
+              ? Math.round(toU(effWeight(s.weight, false, bwF, ex.bwAtLog ?? profile.bodyweight)) * 10) / 10
+              : wU(s.weight);
+            return shareSetLine(s, w, unit);
+          }).join(" / ");
+          lines.push(`  ■ ${exName(ex.name)} ${sets}`);
+        });
+      });
+    }
+
+    // 種目メモ(「右肩が痛いので浅め」等)は、種目の選び方を聞くこの用途でこそ効く。
+    // 登録種目と実績に出てくる種目の両方から集める。
+    const noted = [...new Set([...(d.exercises || []), ...past.flatMap(w => w.exercises.map(e => e.name))])]
+      .filter(n => exerciseNotes[n]);
+    if (noted.length) {
+      lines.push("");
+      noted.forEach(n => lines.push(`📌 ${exName(n)}: ${exerciseNotes[n]}`));
+    }
 
     lines.push("", t("share.rirNote"), "— KURABELL Workout Log");
     return lines.join("\n");
@@ -2400,12 +2471,13 @@ function App() {
     window.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
   };
 
-  // 322px = インターバル展開パネルの実測高さ(266px) + タブバー(56px)。パネルはfixedなので
+  // 322px = インターバル展開パネルの高さ + タブバー(56px)。パネルはfixedなので
   // この余白が足りないと、本文の末尾(保存ボタン)がパネルの裏に入って押せなくなる。
   // env()を2回足しているのは、パネルが下端から `56px + env()` の位置にあり、さらにパネル自身の
   // padding-bottomにも `env()` が入っているため。実測値はブラウザ(env()=0)で採ったもので、
   // pxの決め打ちだけにするとiOS実機(env()≈34px)で68px不足して隠れる。
-  // パネルの中身(数字のfontSize等)を変えたら266pxの部分を実測し直すこと。
+  // パネルの高さは時計の桁数で変わる(4桁=243px / 5桁以上はフォントが小さくなるのでさらに低い)。
+  // 322pxは最大ケース(243+56=299)に余裕を持たせた値。パネルの中身を変えたら実測し直すこと。
   return (
     <div style={{ minHeight: "100vh", background: C.bg, color: C.text, maxWidth: 520, margin: "0 auto", paddingBottom: restFull && restStartAt != null ? "calc(322px + env(safe-area-inset-bottom) * 2)" : 90 }}>
       <style>{`
@@ -2492,8 +2564,13 @@ function App() {
               );
             })}
           </div>
-          <div style={{ fontSize: 12, color: C.muted, textAlign: "center" }}>
-            {restElapsed < 60 ? t("rest.until1min") : t("rest.elapsed", { n: Math.floor(restElapsed / 60) })}
+          {/* ゲージのセグメントと同じ区切り・同じ色で声をかける。経過時間は上の数字が
+              出しているので、ここは「何分経ったか」ではなく「今どうすべきか」を言う。 */}
+          <div style={{
+            fontSize: 13, fontWeight: 700, textAlign: "center",
+            color: restElapsed >= 120 ? C.red : restElapsed >= 60 ? C.yellow : C.green,
+          }}>
+            {restElapsed < 60 ? t("rest.coach1") : restElapsed < 120 ? t("rest.coach2") : t("rest.coach3")}
           </div>
 
           <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
@@ -3568,6 +3645,24 @@ function App() {
                       {editing ? MUSCLES.map(m => <button key={m} onClick={() => toggleDayMuscle(i, m)} style={chip(d.muscles.includes(m))}>{muscleName(m)}</button>)
                         : d.muscles.length ? d.muscles.map(m => <span key={m} style={{ ...chip(false), cursor: "default" }}>{muscleName(m)}</span>)
                           : <span style={{ color: C.muted, fontSize: 13 }}>{t("split.muscleUnset")}</span>}
+                    </div>
+
+                    {/* ヘッダー行は▲▼・今日にする・編集で埋まっているので、この行に置く。
+                        ペースト注記はボタンの左に横並びにする(下に出すと、Dayの数だけ
+                        高さを常時確保することになる)。カードは丸ごとタップで記録画面へ
+                        飛ぶ領域なので、伝播を止めないと押した瞬間に画面が変わる。 */}
+                    <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 8, marginTop: 10 }}
+                      onClick={e => e.stopPropagation()}>
+                      <span role="status" style={{ fontSize: 12, color: C.green, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {copiedIdx === `day:${i}` ? t("log.pasteHint") : ""}
+                      </span>
+                      <button onClick={() => consultAi(dayToText(d, i), `day:${i}`)}
+                        style={{
+                          ...btn(C.surface2, copiedIdx === `day:${i}` ? C.green : C.muted), padding: "4px 9px", fontSize: 13,
+                          whiteSpace: "nowrap", flexShrink: 0, minWidth: 74, textAlign: "center",
+                        }}>
+                        {copiedIdx === `day:${i}` ? t("log.consultAiDone") : t("log.consultAi")}
+                      </button>
                     </div>
 
                     {/* 種目の登録(この日の固定メニュー) */}
