@@ -61,15 +61,51 @@ if (isTrialLimitReached(workouts.length, purchased, iapAvailable())) {
 
 ## Xcodeでの手動作業(このリポジトリのコード変更だけでは完結しない)
 
-- `ios/App/App/Iap/StoreManager.swift` / `IapPlugin.swift` を、Xcode で
-  `ios/App/App.xcworkspace`(`.xcodeproj`ではなくworkspace側、CocoaPods管理のため)を開き、
-  「Add Files to "App"」でターゲット`App`に追加する。**`npm run ios:sync` / `cap sync`では
-  追加されない**(`.pbxproj`の手編集は壊れやすいため避け、Xcode GUIで行うこと)
+**Xcode統合(以下2点)は2026-08-24に完了済み**。生テキストでの`.pbxproj`手編集は壊れやすいため、
+CocoaPods/fastlaneが内部で使う`xcodeproj` gem(Rubyの専用ツール、手編集ではない)で行った。
+手順は`git log`の当該コミットを参照。
+
+1. `ios/App/App/Iap/StoreManager.swift` / `IapPlugin.swift` をターゲット`App`のCompile Sourcesに追加
+2. `StoreKit.framework`をFrameworksにリンク
+
+残っているのは以下2点(有料Apple Developer Programの承認待ちのため未着手。
+[docs/vite移行.md](vite移行.md)の2026-08-23セクション参照):
+
 - Signing & Capabilitiesタブで「In-App Purchase」Capabilityを追加する
+  (`com.apple.developer.storekit`エンタイトルメントが必要になるケースがあり、
+  有料メンバーシップでの正式なDEVELOPMENT_TEAM確定後に行う)
 - App Store Connect側で非消耗型IAP商品を登録し、`src/domain/iap.js`の`IAP_PRODUCT_ID`を実際の
   商品IDに差し替える
-- シミュレータでの動作確認にはXcodeのStoreKit Testing機能(`.storekit`設定ファイルをSchemeの
-  Run Optionsに指定)を使う。App Store Connect登録前でもローカルで購入フローをテストできる
+
+シミュレータでの動作確認にはXcodeのStoreKit Testing機能(`.storekit`設定ファイルをSchemeの
+Run Optionsに指定)を使う。App Store Connect登録前でもローカルで購入フローをテストできる
+(未実施。現状は商品ID未登録のため`getProducts`が失敗し、「価格を取得できませんでした」の
+エラー文言が出ることをシミュレータで確認済み — これは想定どおりの異常系表示)。
+
+### ハマった点: `CAPBridgedPlugin`準拠だけでは自動登録されなかった
+
+`IapPlugin.swift`のコメント(旧版)は「CAPBridgedPluginプロトコルを実装すればCapacitorが
+自動でJS側に登録する」としていたが、**実際にはXcode統合直後、`window.Capacitor.Plugins`に
+`Iap`が出現しなかった**(他のnpm経由プラグインは出るのに、ソースファイルを直接ターゲットに
+追加したこのプラグインだけ抜けていた)。一時的にJS側へ`window.Capacitor.Plugins`の中身を
+出力するデバッグ表示を仕込んでシミュレータで実測して発覚し、確認後に元へ戻した。
+
+原因はCapacitorのobjcランタイム自動検出が、npm/CocoaPods経由のプラグイン(別ターゲット/
+フレームワークとしてビルド)とアプリターゲットに直接ソース追加したプラグインとで登録経路が
+異なること(既知の制約、Swift Package Manager構成でも同様の報告がある)。
+
+対応: `ios/App/App/BridgeViewController.swift`(新規)で`CAPBridgeViewController`をサブクラス化し、
+`capacitorDidLoad()`をオーバーライドして`bridge?.registerPluginInstance(IapPlugin())`を明示的に
+呼ぶようにした。`Main.storyboard`の`customClass`もこれに合わせて変更した。
+
+### ハマった点: `IPHONEOS_DEPLOYMENT_TARGET`が13.0のままだった
+
+`StoreManager.swift`はStoreKit 2の`Product`型を使うため**iOS 15.0以降が必須**だが、
+プロジェクトのデプロイターゲットはCapacitorの初期値である13.0のままで、ビルドエラーになった
+(`'Product' is only available in iOS 15.0 or newer`)。`Podfile`の`platform :ios`とApp
+ターゲットのDebug/Release両方を15.0に引き上げ、`pod install`を再実行して解決した。
+iOS 13/14のシェアは2026年時点で実用上ゼロに近く、`@available`でガードして機能を制限するより
+デプロイターゲットを上げる方が妥当と判断した。
 
 ## 検証内容
 

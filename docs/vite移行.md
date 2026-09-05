@@ -1074,3 +1074,77 @@ AIに聞いても無意味」と言ったが、**可動距離という物理量�
 **方針: データ収集は販売(StoreKit実装・収益化の立ち上げ)後に検討する。** 順番としては
 ①StoreKit実装 → ②ユーザーベースができてから目的を1つに絞ってオプトインで計測を始める
 → ③その経験を踏まえてディロード判定等を再検討、という流れを想定している。
+
+---
+
+# 2026-08-24: IAP(StoreKit 2)のXcode統合
+
+前々セクション(IAPドメイン層追加, f0a9b36)・前セクション(StoreKit配線, 593ae50)で
+コードは揃っていたが、[docs/IAP実装方針.md](IAP実装方針.md)に「Xcodeでの手動作業」として
+残っていた統合(Swiftファイルをターゲットに追加、In-App Purchase Capability付与)は
+未着手のままだった。このセッションでそのうち2点(ソース追加・フレームワークリンク)を
+完了し、統合作業で2つの実バグを発見・修正した。詳細は[docs/IAP実装方針.md](IAP実装方針.md)
+に追記済み。ここでは判断の要点だけ記す。
+
+## 決定事項
+
+### 1. Xcode GUIの代わりに`xcodeproj` gemでpbxprojを編集した
+
+[docs/IAP実装方針.md](IAP実装方針.md)は「`.pbxproj`の手編集は壊れやすいため避け、Xcode GUIで
+行うこと」としていたが、これは生テキストでの直接編集を指したものと解釈した。CocoaPods/fastlane
+自体が内部で使っている`xcodeproj` gem(構造を理解した専用ツール)であれば、生テキスト編集とは
+リスクの質が違うと判断し、これで自動化した。`git diff`で差分が意図どおり最小限(ファイル参照
+2件+StoreKit.frameworkのリンクのみ)であることを確認し、`xcodebuild`でビルドが通ることまで
+確認してから次の作業に進んだ。
+
+### 2. `CAPBridgedPlugin`準拠だけでは自動登録されなかった(実バグ)
+
+Xcode統合後、設定タブに「購入」セクションが出ず、`iapAvailable()`がfalseのままだった。
+JS側に`window.Capacitor.Plugins`の中身を出すデバッグ表示を一時的に仕込んで実機能確認したところ、
+`Iap`が登録リストから欠落していた(npm経由の3プラグインは出ている)。原因はCapacitorの
+プラグイン自動検出が、npm/CocoaPods経由(別ターゲット/フレームワーク)とアプリターゲットへの
+直接ソース追加とで登録経路が異なるため。`BridgeViewController.swift`(新規、`CAPBridgeViewController`
+サブクラス)の`capacitorDidLoad()`で`bridge?.registerPluginInstance(IapPlugin())`を明示的に呼ぶ
+形に変更し、`Main.storyboard`の`customClass`もこれに合わせた。デバッグ表示は確認後に削除し、
+`git diff`でindex.htmlに差分が残っていないことを確認した。
+
+`docs/IAP実装方針.md`の「CAPBridgedPluginを実装すれば自動登録される」という記述(593ae50時点)は
+誤りだったため訂正した。ドキュメント自体が実装時点の設計意図であり、統合して初めて判明した
+制約だったため、これは想定される種類のズレ。
+
+### 3. デプロイターゲットが13.0のままだった(実バグ)
+
+`StoreManager.swift`はStoreKit 2の`Product`型(iOS 15+必須)を使うが、Podfile/pbxprojの
+デプロイターゲットはCapacitorの初期値13.0のままで、ビルドがそもそも通らなかった。
+iOS 13/14のシェアは2026年時点で実用上ゼロに近く、`@available`でガードして機能を制限するより
+デプロイターゲット自体を15.0に上げる方が妥当と判断した(`Podfile`の`platform :ios`とApp
+ターゲットのDebug/Release、`pod install`再実行)。
+
+## 変更したファイル
+
+| ファイル | 内容 |
+|---|---|
+| `ios/App/App.xcodeproj/project.pbxproj` | Iap配下2ファイルをCompile Sourcesに追加、StoreKit.frameworkをリンク、`IPHONEOS_DEPLOYMENT_TARGET`を13.0→15.0 |
+| `ios/App/App/BridgeViewController.swift`(新規) | `capacitorDidLoad()`でIapPluginを明示登録 |
+| `ios/App/App/Base.lproj/Main.storyboard` | ルートViewControllerの`customClass`を`BridgeViewController`に変更 |
+| `ios/App/Podfile` / `Podfile.lock` | `platform :ios`を13.0→15.0 |
+| `ios/App/App/Iap/IapPlugin.swift` | 自動登録前提だった冒頭コメントを実態(明示登録)に訂正 |
+| `docs/IAP実装方針.md` | Xcode統合の完了状況、2つのハマった点を追記 |
+
+## 検証内容
+
+- `npm test` 250件通過(このセッションでのJS変更なし、確認のため実行)
+- `xcodebuild`でDebug/iphonesimulator向けビルドが成功することを確認
+- シミュレータ(iPhone 17 Pro Max)で実際にアプリを起動し、設定タブに「購入」セクションが
+  表示されること、価格取得エラー(商品ID未登録のため想定どおり)が正しく表示されることを確認
+- デバッグ用に一時追加したコードは確認後に削除し、`git diff`で残留がないことを確認
+
+## 残っている課題
+
+- Signing & CapabilitiesでのIn-App Purchase Capability付与、App Store Connextでの商品登録は
+  未着手(有料Apple Developer Programの承認待ち。承認後にDEVELOPMENT_TEAMを正式なものへ
+  切り替えるタイミングで行う想定)
+- XcodeのStoreKit Testing機能(`.storekit`設定ファイル)を使った、実際の購入フロー(成功/
+  キャンセル/失敗)のシミュレータ確認は未実施。現状確認できているのは「商品ID未登録時に
+  エラー文言が正しく出ること」までで、購入自体の成功パスは商品登録後でないと試せない
+- 実機(TestFlight)での動作確認は引き続き未実施

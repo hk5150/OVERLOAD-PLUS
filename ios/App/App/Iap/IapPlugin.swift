@@ -3,13 +3,14 @@ import StoreKit
 
 // StoreManager(StoreKit 2ロジック本体)をJS側(window.Capacitor.Plugins.Iap)に
 // 橋渡しするだけの薄い層。CAPBridgedPluginプロトコル(identifier/jsName/pluginMethods)
-// を実装すればCapacitorが自動でJS側に登録する(.mファイルやInfo.plist追記は不要、
-// Capacitor 4以降のSwiftネイティブ登録)。
+// を実装するだけでは、このファイルのようにアプリターゲットへ直接ソース追加した
+// プラグインは自動登録されなかった(npm/CocoaPods経由のプラグインとは登録経路が異なる)。
+// BridgeViewController.swiftのcapacitorDidLoad()でregisterPluginInstance()を
+// 明示的に呼んで登録している。詳細はdocs/IAP実装方針.mdを参照。
 //
-// Xcodeプロジェクトへの追加はnpm run ios:sync / cap syncでは行われない。
-// このファイルとStoreManager.swiftをXcodeで「Add Files to "App"」してターゲットApp
-// に追加し、Signing & CapabilitiesでIn-App Purchase Capabilityを付与すること。
-// 詳細はdocs/IAP実装方針.mdを参照。
+// Xcodeプロジェクトへの追加(Compile Sources / StoreKit.frameworkのリンク)は
+// npm run ios:sync / cap syncでは行われない。xcodeproj gem経由で完了済み
+// (詳細はdocs/IAP実装方針.md)。
 @objc(IapPlugin)
 public class IapPlugin: CAPPlugin, CAPBridgedPlugin {
     public let identifier = "IapPlugin"
