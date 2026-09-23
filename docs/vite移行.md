@@ -1680,3 +1680,82 @@ reviewerの指摘で、文言のうち「バイブや通知バナーだけにな
   ではなく経験的に知られた挙動(プラグインのd.tsもそれを書き写している)。将来のiOSで無音に
   変わっても純粋関数テストでは検知できない。鳴らなかったときのプランBは、短い`.wav`を
   `ios/App/App/`に同梱して名前で指定する(pbxprojへのリソース追加が要る)
+
+---
+
+# 2026-09-23: StoreKit Testingでの購入フロー検証
+
+IAPで唯一まるごと未検証だった「実際の購入・復元」を、App Store Connect登録前にシミュレータで
+通した。v109の残課題はどれも実機・Apple Developer承認待ちだったため、その中で唯一手元で
+進められる項目として選んだ。アプリのコード(`#appsrc`・Swift)は変更していない。
+
+## 決定事項
+
+### 1. Xcodeの「Run」をAppleScriptで叩く
+
+StoreKit設定はXcodeがRun時に`com.apple.storekit.configuration.xpc`経由でデバイスへ同期する
+仕組みで、`xcodebuild`や`simctl`からは効かせられない(`simctl`にstorekitサブコマンドは無い)。
+テストターゲット新設(`SKTestSession`)も検討したが、リポジトリにXCTestターゲットが無く、
+実際のUIを通した確認にならないので見送った。Xcodeは`osascript`で`run workspace document`
+できるので、GUIでRunするのと同一経路になる。
+
+### 2. 共有スキームを新規作成してリポジトリに含める
+
+これまで`App`スキームはXcodeの自動生成(ファイルとして存在しない)だった。`xcodeproj` gemで
+生成し、Runアクションに`StoreKitConfigurationFileReference`を追記した(gemはこの要素を扱えない)。
+Runにだけ効き、Archive(提出ビルド)には影響しない。
+
+## ハマった点
+
+- **スキーム内のパスはワークスペース基準で解決される。** 最初に書いた`../../KurabellPlus.storekit`
+  では、Xcodeがエラーも出さず`deleteConfiguration`を呼び(=設定なし扱い)、storekitdが本物の
+  sandbox(`amp-api.sandbox.apple.com`)に問い合わせていた。`App.xcworkspace`基準の
+  `../KurabellPlus.storekit`で`Initialized with server XcodeTest(...)`に切り替わった。
+  `tests/iap.test.js`で解決先を縛ってある
+- **Xcodeは開いたままだと新しい共有スキームを読み直さない。** 1回目のRunは自動生成スキームの
+  まま走った。ワークスペースを閉じて開き直す必要がある
+- 切り分けにはシミュレータの`log show --predicate 'process == "storekitd"'`が決め手だった
+  (`Initialized with server Sandbox`か`XcodeTest`かで一目で分かる)
+
+## 検証内容(iPhone 17 Pro Max / iOS 26.5、失敗パスのみ未購入のiPhone 17 Pro)
+
+| パス | 結果 |
+|---|---|
+| 価格取得 | 設定タブ・ペイウォールとも「¥600」 |
+| 復元(未購入)→ サインインをキャンセル | 「復元できませんでした」の赤字(下記の指摘) |
+| 復元(未購入)→ OK | 「購入履歴が見つかりませんでした」 |
+| 購入 → シートを✕で閉じる | 何も出ず未解除のまま |
+| 記録10件の状態で11回目を保存 | ペイウォール表示 |
+| ペイウォールから購入 → 成功 | ペイウォールが閉じ、入力中の記録は残る。再度保存で通り履歴11回 |
+| 再起動(`simctl launch`) | 起動のたびに`currentEntitlements`が1件を返す。キャッシュを`"0"`に書き換えて起動しても`"1"`に戻る |
+| 購入後の`finish()` | `unfinished`クエリが0件(未完了トランザクションの再配信なし) |
+| 復元(購入済み)→ OK | エラーなし、解除状態を維持 |
+| 購入失敗(`_storeKitErrors`でPurchaseにgenericエラー注入) | 「購入を完了できませんでした」、未解除、ボタンが再び押せる |
+
+- `AppStore.sync()`が実際にApple Accountのサインインを要求することを確認。「起動時にsyncを
+  呼ばず復元ボタン専用にする」判断(docs/IAP実装方針.md)の根拠が実測で裏付けられた
+- `npm test` 325件(新規3件: 商品IDの一致・エラー注入が残っていない・スキームのパス解決)。
+  商品IDとパスをわざと壊すと2件落ちることを確認
+- 検証用に入れた記録10件+保存した1件は削除し、Pro Maxは元の0件に戻した。テスト用ストアの
+  購入履歴は残してある(消すならXcode → Debug → StoreKit → Manage Transactions)
+
+## 変更したファイル
+
+| ファイル | 内容 |
+|---|---|
+| `ios/App/KurabellPlus.storekit`(新規) | 非消耗型1商品。価格¥600は仮 |
+| `ios/App/App.xcodeproj/xcshareddata/xcschemes/App.xcscheme`(新規) | 共有スキーム。RunアクションがStoreKit設定を参照 |
+| `tests/iap.test.js` | StoreKit設定の整合テスト3件 |
+| `src/domain/iap.js` | 「商品IDの変更箇所は1行のみ」のコメントを実態に合わせた |
+| `docs/IAP実装方針.md` | StoreKit Testingの設定と、sandboxへ切り替えるときの手順 |
+
+## 残っている課題
+
+- **復元のサインインをキャンセルすると赤字のエラーが出る。** 購入シートのキャンセルは無言で
+  戻るので挙動が揃っていない。`AppStore.sync()`のキャンセルは`StoreKitError.userCancelled`で
+  区別できる。仕様判断が要るので未対応
+- **保護者の承認待ち(Ask to Buy / `.pending`)で画面に何も出ない。** 後で承認されてもSwift側の
+  `Transaction.updates`が拾うだけでJSへ通知しないため、次回起動まで解除されない。未検証
+  (承認操作がXcodeのTransaction Manager依存)
+- 返金・取り消し(`currentEntitlements`から外れる)経路は未検証。同じくTransaction Manager依存
+- App Store Connectで商品登録後は、スキームの参照を外してsandbox(実機/TestFlight)で再確認する

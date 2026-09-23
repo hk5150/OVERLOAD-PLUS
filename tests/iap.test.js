@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import { describe, it, expect } from "vitest";
 import { loadDomainModule } from "./helpers/loadDomain.js";
 
@@ -236,5 +238,37 @@ describe("定数の公開", () => {
     expect(m.TRIAL_WORKOUT_LIMIT).toBe(10);
     expect(typeof m.IAP_PRODUCT_ID).toBe("string");
     expect(m.IAP_PRODUCT_ID.length).toBeGreaterThan(0);
+  });
+});
+
+// シミュレータで購入フローを試すためのローカルStoreKit設定(docs/IAP実装方針.md参照)。
+// 商品IDがIAP_PRODUCT_IDとずれると、XcodeからRunしても「価格を取得できませんでした」に
+// なるだけで原因が見えないので、機械的に一致させる。
+describe("StoreKit Testing設定", () => {
+  const repoRoot = process.cwd();
+  const storekitPath = path.join(repoRoot, "ios/App/KurabellPlus.storekit");
+  const schemePath = path.join(repoRoot, "ios/App/App.xcodeproj/xcshareddata/xcschemes/App.xcscheme");
+
+  it(".storekitの非消耗型商品がIAP_PRODUCT_IDと一致する", () => {
+    const { IAP_PRODUCT_ID } = load();
+    const config = JSON.parse(fs.readFileSync(storekitPath, "utf-8"));
+    expect(config.products.map(p => [p.productID, p.type])).toEqual([[IAP_PRODUCT_ID, "NonConsumable"]]);
+  });
+
+  it(".storekitでエラー注入が有効になっていない", () => {
+    const config = JSON.parse(fs.readFileSync(storekitPath, "utf-8"));
+    expect(config.settings._failTransactionsEnabled).toBe(false);
+    expect((config.settings._storeKitErrors || []).filter(e => e.enabled)).toEqual([]);
+  });
+
+  // スキーム内のパスはスキームファイル基準でもxcodeproj基準でもなく、開いている
+  // ワークスペース(ios/App/App.xcworkspace)基準で解決される。"../../"と書いたときは
+  // Xcodeが黙って「設定なし」扱いにし、本物のsandboxに問い合わせていた。
+  it("スキームの参照がApp.xcworkspace基準で.storekitの実ファイルを指す", () => {
+    const scheme = fs.readFileSync(schemePath, "utf-8");
+    const m = scheme.match(/<StoreKitConfigurationFileReference\s+identifier\s*=\s*"([^"]+)"/);
+    expect(m).not.toBeNull();
+    const workspace = path.join(repoRoot, "ios/App/App.xcworkspace");
+    expect(path.resolve(workspace, m[1])).toBe(storekitPath);
   });
 });

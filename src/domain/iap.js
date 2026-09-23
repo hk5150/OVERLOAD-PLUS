@@ -11,8 +11,9 @@
 // (0件目〜9件目は保存できる=10回まで無料、10件目の保存済み=11回目でブロック)。
 const TRIAL_WORKOUT_LIMIT = 10;
 
-// App Store Connect側で登録する商品ID。ASC登録後にここだけ差し替える
-// (Swift側にはハードコードしない設計なので、変更箇所はこの1行のみ)。
+// App Store Connect側で登録する商品ID。ASC登録後にここを差し替える
+// (Swift側にはハードコードしない)。シミュレータ検証用の ios/App/KurabellPlus.storekit
+// にも同じIDがあり、ずれると tests/iap.test.js が落ちる。
 const IAP_PRODUCT_ID = "com.hajime5150.kurabellplus.unlock";
 
 // 購入フラグの保存キー。store.get/set/del経由でPreferences止まり(SQLiteは通らない)。

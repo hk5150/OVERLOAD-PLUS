@@ -77,10 +77,19 @@ CocoaPods/fastlaneが内部で使う`xcodeproj` gem(Rubyの専用ツール、手
 - App Store Connect側で非消耗型IAP商品を登録し、`src/domain/iap.js`の`IAP_PRODUCT_ID`を実際の
   商品IDに差し替える
 
-シミュレータでの動作確認にはXcodeのStoreKit Testing機能(`.storekit`設定ファイルをSchemeの
-Run Optionsに指定)を使う。App Store Connect登録前でもローカルで購入フローをテストできる
-(未実施。現状は商品ID未登録のため`getProducts`が失敗し、「価格を取得できませんでした」の
-エラー文言が出ることをシミュレータで確認済み — これは想定どおりの異常系表示)。
+シミュレータでの動作確認にはXcodeのStoreKit Testing機能を使う(2026-09-23に設定・検証済み。
+経緯と結果は[docs/vite移行.md](vite移行.md)の同日セクション)。
+
+- 設定ファイル: `ios/App/KurabellPlus.storekit`(非消耗型1商品、価格¥600は**仮の値**で
+  App Store Connectの実価格とは無関係)
+- 共有スキーム`ios/App/App.xcodeproj/xcshareddata/xcschemes/App.xcscheme`のRunアクションが
+  これを参照している。**XcodeからRunしたときだけ**ローカルのテスト用ストアに切り替わる
+  (`xcodebuild build` + `simctl launch`では同期されない)
+- スキーム内のパスは**開いているワークスペース(`App.xcworkspace`)基準**。`tests/iap.test.js`で
+  商品IDの一致とパスの解決先を縛っている
+- **App Store Connectに商品を登録してsandboxで試すときは、スキームの参照を外して一度Runする**
+  (外した状態のRunでXcodeがデバイス側の設定を消す。同期した設定はデバイスに残り続け、
+  `simctl launch`で起動してもテスト用ストアのままになるため)
 
 ### ハマった点: `CAPBridgedPlugin`準拠だけでは自動登録されなかった
 
