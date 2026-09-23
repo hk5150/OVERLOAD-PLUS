@@ -230,6 +230,17 @@ describe("restorePurchase", () => {
     const m = load({ store, ...globals });
     expect(await m.restorePurchase()).toBe(false);
   });
+
+  // サインインのキャンセルは「履歴なし」でも「失敗」でもない。falseを返すと
+  // 「購入履歴が見つかりません」が出て、購入済みユーザーの解除状態まで落ちる。
+  it("サインインをキャンセルしたらnullを返し、キャッシュを触らない", async () => {
+    const store = fakeStore();
+    await store.set("iap-unlocked-v1", "1");
+    const { globals } = fakeIapPlugin({ restoreResult: { cancelled: true } });
+    const m = load({ store, ...globals });
+    expect(await m.restorePurchase()).toBeNull();
+    expect(store._data.get("iap-unlocked-v1")).toBe("1");
+  });
 });
 
 describe("定数の公開", () => {

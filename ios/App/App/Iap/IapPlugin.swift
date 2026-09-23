@@ -70,11 +70,19 @@ public class IapPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     // AppStore.sync()を呼ぶのはこの経路(ユーザーがボタンを押したとき)のみ。
+    // sync()はApple Accountのサインインを求めるので、そこでのキャンセルは失敗ではなく
+    // ユーザーの意思表示。rejectせずcancelledとして返し、JS側で何も表示しないようにする
+    // (購入シートのキャンセルがpurchase()でfalseになるのと揃える)。
     @objc func restorePurchases(_ call: CAPPluginCall) {
         Task { @MainActor in
             do {
                 try await StoreManager.shared.restore()
                 call.resolve(["purchasedProductIds": Array(StoreManager.shared.purchasedProductIDs)])
+            } catch StoreKitError.userCancelled {
+                call.resolve(["cancelled": true])
+            } catch let error as SKError where error.code == .paymentCancelled {
+                // iOS 15初期のStoreKit 2は旧来のSKErrorでキャンセルを返すことがある
+                call.resolve(["cancelled": true])
             } catch {
                 call.reject(error.localizedDescription)
             }

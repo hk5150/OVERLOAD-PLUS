@@ -33,6 +33,10 @@
 
 - 起動時(`src/domain/iap.js`の`refreshPurchaseState()`): `Transaction.currentEntitlements`のみ
 - 「購入を復元」ボタン(`restorePurchase()`): `AppStore.sync()` → `Transaction.currentEntitlements`再読込
+  - `sync()`はApple Accountのサインインを求める。そこでのキャンセルは失敗ではないので、Swift側で
+    `StoreKitError.userCancelled`(と旧来の`SKError.paymentCancelled`)を`{cancelled: true}`として返し、
+    `restorePurchase()`は`null`を返す(キャッシュも画面も変えない)。購入シートのキャンセルが無言で
+    戻るのと揃えるため(v110)
 
 ## 試用制限の判定は「保存の直前」だけ
 
@@ -56,8 +60,9 @@ if (isTrialLimitReached(workouts.length, purchased, iapAvailable())) {
 ## 商品ID
 
 `src/domain/iap.js`の`IAP_PRODUCT_ID`定数1箇所にプレースホルダーを置いている
-(`com.hajime5150.kurabellplus.unlock`)。App Store Connect側で商品登録した後、この1行だけ
-差し替えれば反映される(Swift側にはハードコードしていない)。
+(`com.hajime5150.kurabellplus.unlock`)。App Store Connect側で商品登録した後はここを差し替える
+(Swift側にはハードコードしていない)。シミュレータ検証用の`ios/App/KurabellPlus.storekit`にも
+同じIDがあり、ずれると`tests/iap.test.js`が落ちる。
 
 ## Xcodeでの手動作業(このリポジトリのコード変更だけでは完結しない)
 

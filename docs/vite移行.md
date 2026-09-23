@@ -1759,3 +1759,54 @@ Runにだけ効き、Archive(提出ビルド)には影響しない。
   (承認操作がXcodeのTransaction Manager依存)
 - 返金・取り消し(`currentEntitlements`から外れる)経路は未検証。同じくTransaction Manager依存
 - App Store Connectで商品登録後は、スキームの参照を外してsandbox(実機/TestFlight)で再確認する
+
+---
+
+# 2026-09-23(続き): 復元のサインインをキャンセルすると赤字が出る(v110)
+
+前セクションのStoreKit Testingで見つけた指摘を、ユーザーの指示で修正した。
+
+## 症状
+
+設定タブの「購入を復元」で、Apple Accountのサインインダイアログをキャンセルすると
+「復元できませんでした。もう一度お試しください。」の赤字が出た。購入シートのキャンセルは
+無言で戻るので、自分でやめた操作なのに片方だけ失敗扱いになっていた。
+
+## 対応
+
+`AppStore.sync()`のキャンセルは`StoreKitError.userCancelled`で投げられる。これをSwift側で
+rejectせず`{cancelled: true}`として返し、`restorePurchase()`は`null`を返す(true=復元 /
+false=履歴なし / null=キャンセルの3値)。`null`のときはキャッシュの購入フラグも画面も触らない。
+`false`扱いにすると「購入履歴が見つかりません」が出るうえ、購入済みユーザーの解除状態まで
+落ちるため。
+
+reviewerの指摘で、iOS 15初期のStoreKit 2が旧来の`SKError.paymentCancelled`でキャンセルを返す
+報告があるため、そちらも同じ扱いにした(デプロイターゲットが15.0なので範囲に入る)。
+
+## 変更したファイル
+
+| ファイル | 内容 |
+|---|---|
+| `ios/App/App/Iap/IapPlugin.swift` | `restorePurchases`でキャンセル2種を`{cancelled: true}`としてresolve |
+| `src/domain/iap.js` | `restorePurchase()`が`cancelled`のとき`null`を返す |
+| `index.html` | 復元ボタンのハンドラで`null`のときは何もしない |
+| `tests/iap.test.js` | キャンセル時に`null`を返しキャッシュを保つテスト |
+| `docs/IAP実装方針.md` | キャンセル時の扱いを追記 |
+| `index.html` / `sw.js` | `APP_VERSION` / `CACHE` をv110に |
+
+## 検証内容
+
+- `npm test` 326件。修正を外すと新テストが落ちることを確認
+- StoreKit Testing(iPhone 17 Pro Max)で、キャンセル → 赤字なし・解除状態のまま。
+  OK → 復元後の`currentEntitlements`照会まで通り、エラーなし
+- Web版(8765)がv110で起動し、コンソールエラーなし(Web版は`iapAvailable()`がfalseで
+  復元ボタン自体が出ないので影響なし)
+- `SKError`側の分岐はテスト環境では到達しない(`StoreKitError`で届くため)。ビルドが通ることのみ確認
+
+バージョン: v109 → v110。
+
+## 残っている課題
+
+- 実機(TestFlightのsandbox)でキャンセルがどちらの型で届くかは未確認。取りこぼしても
+  修正前と同じ赤字表示に戻るだけで、悪化はしない
+- Ask to Buy(`.pending`)で画面に何も出ない件は前セクションのまま未対応

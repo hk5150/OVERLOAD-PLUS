@@ -3,3 +3,4 @@
 - [ゲージ幅の片側クランプ](kurabell-gauge-width-clamp.md) — `${x*100}%` を片側しかクランプしないと負値/NaNで幅autoになり満杯に見える
 - [固定px paddingとsafe-area](kurabell-fixed-padding-vs-safe-area.md) — fixed要素避けの実測px paddingBottomはenv()の分だけiOS実機で不足する
 - [1RMのフィルタ不一致](kurabell-1rm-filter-divergence.md) — 推定1RMの算出が4箇所、除外条件が3種類。workingSetsはassistedを除かない
+- [版上げ時のvite移行.md節](kurabell-version-entry-in-vite-doc.md) — CACHE版上げ差分ではdocs/vite移行.mdに同版の節があるか確認(v109で抜けた実績)

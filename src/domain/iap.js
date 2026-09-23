@@ -88,10 +88,13 @@ async function purchaseUnlock() {
 }
 
 // 「購入を復元」ボタン専用。AppStore.syncを呼んでよいのはここだけ。
+// 戻り値: true=復元できた / false=購入履歴なし / null=サインインをキャンセルした
+// (nullのときはキャッシュも触らない。何も起きなかったのと同じ扱い)。
 async function restorePurchase() {
   const plugin = capIapPlugin();
   if (!plugin) throw new Error("iap.unavailable");
   const r = await plugin.restorePurchases();
+  if (r?.cancelled) return null;
   const purchased = Array.isArray(r?.purchasedProductIds) && r.purchasedProductIds.includes(IAP_PRODUCT_ID);
   await store.set(PURCHASE_FLAG_KEY, purchased ? "1" : "0");
   return purchased;
