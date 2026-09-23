@@ -361,6 +361,7 @@ const STRINGS = {
   "paywall.later":     { ja: "あとで",                 en: "Not now" },
   "paywall.priceLoadFailed": { ja: "価格を取得できませんでした。電波の良い場所でもう一度お試しください。", en: "Couldn't load the price. Please try again with a better connection." },
   "paywall.purchaseFailed": { ja: "購入を完了できませんでした。もう一度お試しください。", en: "Couldn't complete the purchase. Please try again." },
+  "paywall.pending":   { ja: "購入の承認待ちです。承認されると自動でフル解除されます。", en: "Waiting for approval. The full version unlocks automatically once it's approved." },
 
   // ---- 設定タブ ----
   "settings.title":    { ja: "設定",                   en: "Settings" },

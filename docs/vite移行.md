@@ -1810,3 +1810,91 @@ reviewerの指摘で、iOS 15初期のStoreKit 2が旧来の`SKError.paymentCanc
 - 実機(TestFlightのsandbox)でキャンセルがどちらの型で届くかは未確認。取りこぼしても
   修正前と同じ赤字表示に戻るだけで、悪化はしない
 - Ask to Buy(`.pending`)で画面に何も出ない件は前セクションのまま未対応
+
+---
+
+# 2026-09-23(3回目): 保護者の承認待ち(Ask to Buy)に対応(v111)
+
+StoreKit Testingの検証で見つかった残課題。ユーザーの指示で、プランモードで設計を合意してから実装した。
+
+## 症状
+
+ファミリー共有の子どものアカウントで購入すると、`product.purchase()`は`.pending`(承認待ち)を返す。
+
+1. Swiftが`.pending`を`purchased: false`にまとめていたため、JSはキャンセルと区別できず、
+   **押しても何も起きないように見えた**
+2. 保護者が承認すると`Transaction.updates`に届くが、JSへ知らせる経路がなく、
+   **アプリを再起動するまで解除されなかった**
+
+あわせて、同じリスナーが`revocationDate`を見ておらず、**返金されたトランザクションでも
+購入済みに加えていた**。JSへ通知する経路を作るとこの誤りがそのまま画面に出るので、一緒に直した。
+
+## 対応
+
+- Swift: `purchase()`の結果を`purchased` / `cancelled` / `pending`の3種類で返す。
+  `Transaction.updates`で何か届くたびに、`currentEntitlements`から権利全体を作り直して
+  `entitlementsChanged`イベントをJSへ送る(`retainUntilConsumed: true`で、JSのリスナー登録前に
+  届いた通知も落とさない)
+- JS: `purchaseUnlock()`は文字列の結果を返す(`"pending"`をtruthyな値で返すと`if (ok)`で
+  購入済み扱いされるため)。`onEntitlementsChanged()`を新設し、起動時の`useEffect`で登録する
+- UI: 承認待ちのとき、ペイウォールと設定タブに「購入の承認待ちです。承認されると自動で
+  フル解除されます。」を黄色で出す(エラーではないので赤にしない)。承認の通知が来たら
+  解除し、ペイウォールが開いていれば閉じる
+
+## reviewerの指摘で直したもの
+
+- **返金通知が別の有効な権利まで打ち消す。** 最初の実装は届いたトランザクション1件の
+  `revocationDate`で商品IDを出し入れしていた。自分の購入とファミリー共有の両方がある状態で
+  共有側が取り消されると、自分の購入が有効でも外れる。`currentEntitlements`から作り直す形に変更
+  (現状の商品は`familyShareable: false`なので未発生)
+- **文言を保護者に限定しない。** `.pending`は決済の追加認証待ち(EUのSCAなど)でも返る。
+  当初の「保護者の承認待ちです」を「購入の承認待ちです」に変更(英語はもともと中立だった)
+- 復元ボタンでも承認待ちの表示を消す(プランどおり。実装時に購入ハンドラだけにしていた)
+
+## 検証内容
+
+- `npm test` 332件(新規6件: 承認待ちでフラグを書かない、旧ネイティブ応答との互換、通知での
+  フラグ更新と解除、`remove()`後は呼ばれない、など)。承認待ちでフラグを書くように壊すと落ちる
+- StoreKit Testing(iPhone 17 Pro、`.storekit`の`_askToBuyEnabled`を一時的に有効化)で、
+  購入 → 「Ask Permission」→ Ask で、設定タブ・ペイウォールの両方に承認待ちの文言が出ることを確認
+- **承認そのものはシミュレータに届かなかった。** XcodeのTransaction Managerで2回承認してもらったが、
+  storekitdに何も記録されず、再起動後の`currentEntitlements`も0件だった(原因は外からは不明)
+- そこで、通知の経路だけを一時的なデバッグコード(価格取得の数秒後に`onEntitlementsChanged`を
+  1回だけ呼ぶ)で検証した。**開いたままの設定タブが「購入ボタン」→「フル解除済みです」に切り替わる**、
+  **開いたままのペイウォールが通知と同時に閉じる**(価格取得の8秒後に閉じ、遅延と一致)ことを確認。
+  デバッグコードは削除し、追加前のファイルと一致することを確認した
+- Web版(8765)がv111で起動し、コンソールエラーなし
+- reviewerの指摘を直した後、Ask to Buyを戻した設定で通常の購入が成功し「フル解除済みです」に
+  切り替わることを確認(`status: "purchased"`の経路)
+
+## ハマった点
+
+- シミュレータのアプリのPreferences(plist)を`PlistBuddy`でファイルごと書き換えると、cfprefsdが
+  メモリ上の値で書き戻して効かないことがある。`xcrun simctl spawn <UDID> defaults write <plistのパス(拡張子なし)> ...`
+  ならcfprefsd経由なので確実
+- XcodeのRunでアプリを入れ直すと、アプリのデータコンテナのパスが変わることがある(中身は引き継がれる)
+
+## 変更したファイル
+
+| ファイル | 内容 |
+|---|---|
+| `ios/App/App/Iap/StoreManager.swift` | 購入結果を3種類に。`Transaction.updates`で返金を外し、権利変化をコールバック |
+| `ios/App/App/Iap/IapPlugin.swift` | `purchase`が`status`を返す。`entitlementsChanged`イベントを送る |
+| `src/domain/iap.js` | `purchaseUnlock()`が文字列を返す。`onEntitlementsChanged()`を新設 |
+| `src/domain/i18n.js` | `paywall.pending` |
+| `index.html` | `iapPending`状態、購入ハンドラ2箇所、承認待ちの文言、通知の登録 |
+| `tests/iap.test.js` | 承認待ち・通知・`_askToBuyEnabled`が残っていないことのテスト |
+| `docs/IAP実装方針.md` | 「承認待ちと、開いたままの権利変化」節 |
+| `index.html` / `sw.js` | `APP_VERSION` / `CACHE` をv111に |
+
+バージョン: v110 → v111。
+
+## 残っている課題
+
+- **本物の承認(`Transaction.updates`に承認済みトランザクションが流れてくる部分)は未検証。**
+  Appleの仕様どおりの挙動だが、シミュレータで承認が届かなかった。TestFlightのsandboxで
+  ファミリー共有の子どものテストアカウントを使うのが確実
+- 返金の即時反映も同じ理由で未検証(コードでは`currentEntitlements`から作り直す)
+- 保護者が承認を**拒否**した場合、StoreKitから通知は来ないので、承認待ちの表示はアプリを
+  再起動するまで残る(状態は保存していないので再起動で消える。文言は「承認されると〜」なので
+  嘘にはならない)

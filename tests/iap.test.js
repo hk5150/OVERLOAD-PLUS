@@ -97,6 +97,9 @@ describe("readCachedPurchaseFlag", () => {
 
 function fakeIapPlugin(overrides = {}) {
   const calls = { purchase: [], restorePurchases: 0, refreshEntitlements: 0, getProducts: [] };
+  // ネイティブ側のnotifyListenersの代わり。emit(eventName, data)で登録済みリスナーを呼ぶ。
+  const listeners = {};
+  const emit = async (eventName, data) => { for (const cb of listeners[eventName] ?? []) await cb(data); };
   const plugin = {
     async getProducts(arg) {
       calls.getProducts.push(arg);
@@ -104,7 +107,7 @@ function fakeIapPlugin(overrides = {}) {
     },
     async purchase(arg) {
       calls.purchase.push(arg);
-      return overrides.purchaseResult ?? { purchased: true };
+      return overrides.purchaseResult ?? { status: "purchased", purchased: true };
     },
     async restorePurchases() {
       calls.restorePurchases++;
@@ -114,11 +117,15 @@ function fakeIapPlugin(overrides = {}) {
       calls.refreshEntitlements++;
       return overrides.refreshResult ?? { purchasedProductIds: [] };
     },
+    addListener(eventName, cb) {
+      (listeners[eventName] ??= []).push(cb);
+      return { remove() { listeners[eventName] = listeners[eventName].filter(f => f !== cb); } };
+    },
   };
   const globals = {
     window: { Capacitor: { isNativePlatform: () => true, Plugins: { Iap: plugin } } },
   };
-  return { globals, calls };
+  return { globals, calls, emit };
 }
 
 describe("refreshPurchaseState", () => {
@@ -188,21 +195,77 @@ describe("purchaseUnlock", () => {
     await expect(m.purchaseUnlock()).rejects.toThrow("iap.unavailable");
   });
 
-  it("購入成功でtrueを返し、キャッシュに\"1\"を書く", async () => {
+  it("購入成功で\"purchased\"を返し、キャッシュに\"1\"を書く", async () => {
     const store = fakeStore();
-    const { globals, calls } = fakeIapPlugin({ purchaseResult: { purchased: true } });
+    const { globals, calls } = fakeIapPlugin({ purchaseResult: { status: "purchased", purchased: true } });
     const m = load({ store, ...globals });
-    expect(await m.purchaseUnlock()).toBe(true);
+    expect(await m.purchaseUnlock()).toBe("purchased");
     expect(store._data.get("iap-unlocked-v1")).toBe("1");
     expect(calls.purchase[0]).toEqual({ productId: "com.hajime5150.kurabellplus.unlock" });
   });
 
-  it("ユーザーキャンセル等ではfalseを返し、キャッシュは書き換えない", async () => {
+  it("ユーザーキャンセルでは\"cancelled\"を返し、キャッシュは書き換えない", async () => {
     const store = fakeStore();
-    const { globals } = fakeIapPlugin({ purchaseResult: { purchased: false } });
+    const { globals } = fakeIapPlugin({ purchaseResult: { status: "cancelled", purchased: false } });
     const m = load({ store, ...globals });
-    expect(await m.purchaseUnlock()).toBe(false);
+    expect(await m.purchaseUnlock()).toBe("cancelled");
     expect(store._data.has("iap-unlocked-v1")).toBe(false);
+  });
+
+  // 承認待ちはまだ買えていない。ここで"1"を書くと、承認されないまま解除される。
+  it("保護者の承認待ちでは\"pending\"を返し、キャッシュは書き換えない", async () => {
+    const store = fakeStore();
+    const { globals } = fakeIapPlugin({ purchaseResult: { status: "pending", purchased: false } });
+    const m = load({ store, ...globals });
+    expect(await m.purchaseUnlock()).toBe("pending");
+    expect(store._data.has("iap-unlocked-v1")).toBe(false);
+  });
+
+  // JSだけ新しくネイティブが古いビルド(statusを返さない)でも従来どおり動くこと。
+  it("statusの無い旧ネイティブの応答はpurchasedの真偽で読む", async () => {
+    const store = fakeStore();
+    const { globals } = fakeIapPlugin({ purchaseResult: { purchased: true } });
+    const m = load({ store, ...globals });
+    expect(await m.purchaseUnlock()).toBe("purchased");
+  });
+});
+
+describe("onEntitlementsChanged", () => {
+  it("プラグインが無い環境では何もせず、解除ハンドルだけ返す", () => {
+    const m = load({ store: fakeStore() });
+    const sub = m.onEntitlementsChanged(() => { throw new Error("呼ばれてはいけない"); });
+    expect(() => sub.remove()).not.toThrow();
+  });
+
+  it("承認の通知でキャッシュを\"1\"にしてからcallback(true)を呼ぶ", async () => {
+    const store = fakeStore();
+    const { globals, emit } = fakeIapPlugin();
+    const m = load({ store, ...globals });
+    const seen = [];
+    m.onEntitlementsChanged(p => seen.push([p, store._data.get("iap-unlocked-v1")]));
+    await emit("entitlementsChanged", { purchasedProductIds: ["com.hajime5150.kurabellplus.unlock"] });
+    expect(seen).toEqual([[true, "1"]]);
+  });
+
+  it("返金などで商品IDが外れた通知ではキャッシュを\"0\"にしてcallback(false)を呼ぶ", async () => {
+    const store = fakeStore();
+    await store.set("iap-unlocked-v1", "1");
+    const { globals, emit } = fakeIapPlugin();
+    const m = load({ store, ...globals });
+    const seen = [];
+    m.onEntitlementsChanged(p => seen.push(p));
+    await emit("entitlementsChanged", { purchasedProductIds: [] });
+    expect(seen).toEqual([false]);
+    expect(store._data.get("iap-unlocked-v1")).toBe("0");
+  });
+
+  it("remove()した後の通知ではcallbackを呼ばない", async () => {
+    const { globals, emit } = fakeIapPlugin();
+    const m = load({ store: fakeStore(), ...globals });
+    const seen = [];
+    m.onEntitlementsChanged(p => seen.push(p)).remove();
+    await emit("entitlementsChanged", { purchasedProductIds: ["com.hajime5150.kurabellplus.unlock"] });
+    expect(seen).toEqual([]);
   });
 });
 
@@ -269,6 +332,7 @@ describe("StoreKit Testing設定", () => {
   it(".storekitでエラー注入が有効になっていない", () => {
     const config = JSON.parse(fs.readFileSync(storekitPath, "utf-8"));
     expect(config.settings._failTransactionsEnabled).toBe(false);
+    expect(config.settings._askToBuyEnabled ?? false).toBe(false);
     expect((config.settings._storeKitErrors || []).filter(e => e.enabled)).toEqual([]);
   });
 

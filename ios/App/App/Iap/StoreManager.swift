@@ -16,6 +16,10 @@ final class StoreManager {
     private(set) var purchasedProductIDs: Set<String> = []
     private var updatesTask: Task<Void, Never>?
 
+    // Transaction.updatesで権利が変わったときに呼ぶ(IapPluginがJSへの通知に使う)。
+    // 保護者の承認(Ask to Buy)や返金は、アプリを開いたままこの経路で届く。
+    var onEntitlementsChanged: ((Set<String>) -> Void)?
+
     private init() {}
 
     // アプリ起動時、プラグインのload()から一度だけ呼ぶ。Transaction.updatesは
@@ -26,14 +30,19 @@ final class StoreManager {
         updatesTask = Task.detached { [weak self] in
             for await result in Transaction.updates {
                 guard case .verified(let transaction) = result else { continue }
-                await self?.addPurchased(transaction.productID)
                 await transaction.finish()
+                await self?.entitlementsDidChange()
             }
         }
     }
 
-    private func addPurchased(_ productID: String) {
-        purchasedProductIDs.insert(productID)
+    // updatesのトランザクション1件から商品IDを出し入れせず、currentEntitlementsから
+    // 全体を作り直す。返金・取り消しもupdatesに流れてくるが、1件だけ見て外すと、
+    // 同じ商品の別の有効な権利(自分の購入とファミリー共有の両方がある場合など)まで
+    // 打ち消してしまう。currentEntitlementsは取り消し済みを含まない。
+    private func entitlementsDidChange() async {
+        await refreshEntitlements()
+        onEntitlementsChanged?(purchasedProductIDs)
     }
 
     // 起動時の権利再確認。AppStore.sync()は呼ばない。
@@ -51,7 +60,11 @@ final class StoreManager {
         try await Product.products(for: ids)
     }
 
-    func purchase(_ product: Product) async throws -> Bool {
+    enum PurchaseOutcome: String {
+        case purchased, cancelled, pending
+    }
+
+    func purchase(_ product: Product) async throws -> PurchaseOutcome {
         let result = try await product.purchase()
         switch result {
         case .success(let verification):
@@ -60,15 +73,15 @@ final class StoreManager {
             }
             purchasedProductIDs.insert(transaction.productID)
             await transaction.finish()
-            return true
+            return .purchased
         case .userCancelled:
-            return false
+            return .cancelled
         case .pending:
-            // 保護者の承認待ち等。Transaction.updatesが後から拾うので、
-            // ここでは「まだ完了していない」as falseを返すだけでよい。
-            return false
+            // 保護者の承認待ち(Ask to Buy)や決済の追加認証待ち。完了するとTransaction.updatesに届き、
+            // entitlementsDidChange → onEntitlementsChanged でJSへ通知される。
+            return .pending
         @unknown default:
-            return false
+            return .cancelled
         }
     }
 

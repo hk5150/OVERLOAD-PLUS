@@ -38,6 +38,28 @@
     `restorePurchase()`は`null`を返す(キャッシュも画面も変えない)。購入シートのキャンセルが無言で
     戻るのと揃えるため(v110)
 
+## 承認待ち(Ask to Buy)と、開いたままの権利変化(v111)
+
+ファミリー共有の子どものアカウントでは`product.purchase()`が`.pending`を返す。保護者が承認すると、
+その結果は`purchase()`の戻り値ではなく`Transaction.updates`に後から届く。
+
+- `purchaseUnlock()`は`"purchased"` / `"cancelled"` / `"pending"`を返す。真偽値にしないのは、
+  `"pending"`がtruthyだと呼び出し側の`if (ok)`で購入済み扱いされるため。承認待ちのときは
+  フラグを保存せず、画面に「購入の承認待ちです」(`paywall.pending`、エラーではないので黄色)を出す。
+  `.pending`は保護者の承認だけでなく決済の追加認証待ち(EUのSCAなど)でも返るので、文言は保護者に限定しない
+- Swiftの`Transaction.updates`リスナーは権利が変わるたびに`entitlementsChanged`イベントを
+  `notifyListeners(..., retainUntilConsumed: true)`で送る。JSは`onEntitlementsChanged()`で受け、
+  キャッシュを更新してから画面を解除する(ペイウォールが開いていれば閉じる)
+- 通知のたびに、届いたトランザクション1件から商品IDを出し入れせず、`currentEntitlements`から
+  権利全体を作り直す。以前は`revocationDate`を見ずに加えていたため返金でも購入済みになり、
+  かといって1件だけ見て外すと、同じ商品の別の有効な権利(自分の購入とファミリー共有の両方がある
+  場合など)まで打ち消す。`currentEntitlements`は取り消し済みを含まないので両方を避けられる
+- 承認後も自動保存はしない(下の「購入成功後は自動保存しない」と同じ理由)
+
+`window.Capacitor.Plugins.Iap.addListener`は、Capacitorが`registerPluginInstance`時に注入する
+JS(`node_modules/@capacitor/ios/Capacitor/Capacitor/JSExport.swift`)が自動で生やすので、
+npmのJSラッパーなしで使える。
+
 ## 試用制限の判定は「保存の直前」だけ
 
 11回目の**保存**をブロックする。記録・比較・グラフ・バックアップの閲覧は無制限。

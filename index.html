@@ -230,7 +230,7 @@ const DRAFT_KEY = "workout-draft-v1"; // 入力途中の記録(アプリが落�
 const PRE_IMPORT_BACKUP_KEY = "workout-log-v1-pre-import"; // バックアップ復元前のデータ退避(復元に失敗した場合の保険)
 // ヘッダーのバージョンバッジとバックアップのappVersionで共有する単一の定数。
 // sw.js の CACHE 定数とは tests/version.test.js が数字の一致を機械的に縛っている(CLAUDE.md参照)。
-const APP_VERSION = "v110";
+const APP_VERSION = "v111";
 // store(保存レイヤ)は src/domain/storage.js へ移設(テストのため)。
 // LIBSで<script src>読み込み済みなのでグローバルの store をそのまま参照できる。
 const uid = () => Math.random().toString(36).slice(2, 8);
@@ -786,6 +786,7 @@ function App() {
   const [iapProduct, setIapProduct] = useState(null); // ペイウォール表示用の価格情報(getProductsの結果)
   const [iapBusy, setIapBusy] = useState(false); // 購入/復元の通信中(二重タップ防止)
   const [iapError, setIapError] = useState(""); // 設定タブでの購入/復元エラー(記録タブのerrorとは独立)
+  const [iapPending, setIapPending] = useState(false); // 保護者の承認待ち(Ask to Buy)。承認の通知(entitlementsChanged)で解除される
   const paywallModalRef = useRef(null);
   const closePaywall = () => { setShowPaywall(false); setIapError(""); };
   useModalA11y(showPaywall, closePaywall, paywallModalRef);
@@ -970,13 +971,21 @@ function App() {
   // Transaction.currentEntitlementsで再検証する(AppStore.sync()は呼ばない。
   // 起動時に自動でsyncを呼ぶとApple IDパスワード確認が入りUXを損なうため)。
   useEffect(() => {
+    let sub = null;
     (async () => {
       if (!iapAvailable()) { setPurchased(true); return; }
+      // 承認待ち(Ask to Buy)の承認や返金は、アプリを開いたままここに届く。
+      // 起動直後に届いた通知もネイティブ側で保持されるので、awaitより先に登録する。
+      sub = onEntitlementsChanged(p => {
+        setPurchased(p);
+        if (p) { setIapPending(false); setShowPaywall(false); }
+      });
       setPurchased(await readCachedPurchaseFlag());
       try {
         setPurchased(await refreshPurchaseState());
       } catch { /* ネイティブ呼び出しに失敗してもキャッシュ値のまま運用を続ける */ }
     })();
+    return () => sub?.remove();
   }, []);
 
   const persist = async (patch) => {
@@ -2629,11 +2638,13 @@ function App() {
             <h2 style={{ fontSize: 18, fontWeight: 900, margin: "0 0 10px" }}>{t("paywall.title")}</h2>
             <p style={{ fontSize: 14, color: C.muted, lineHeight: 1.7, margin: "0 0 18px" }}>{t("paywall.body")}</p>
             {iapError && <div role="alert" style={{ fontSize: 13, color: C.red, marginBottom: 10 }}>{iapError}</div>}
+            {iapPending && <div role="status" style={{ fontSize: 13, color: C.yellow, lineHeight: 1.6, marginBottom: 10 }}>{t("paywall.pending")}</div>}
             <button disabled={iapBusy} onClick={async () => {
-              setIapBusy(true); setIapError("");
+              setIapBusy(true); setIapError(""); setIapPending(false);
               try {
-                const ok = await purchaseUnlock();
-                if (ok) { setPurchased(true); setShowPaywall(false); }
+                const status = await purchaseUnlock();
+                if (status === "purchased") { setPurchased(true); setShowPaywall(false); }
+                else if (status === "pending") setIapPending(true);
               } catch { setIapError(t("paywall.purchaseFailed")); }
               setIapBusy(false);
             }} style={{ ...btn(C.red), width: "100%", padding: 16, fontSize: 16, opacity: iapBusy ? 0.6 : 1 }}>
@@ -4173,6 +4184,7 @@ function App() {
             <div style={{ background: C.surface, borderRadius: 14, padding: 16, border: `1px solid ${C.border}`, marginBottom: 12 }}>
               <div style={{ fontSize: 14, fontWeight: 900, marginBottom: 10 }}>{t("settings.iap.title")}</div>
               {iapError && <div role="alert" style={{ fontSize: 13, color: C.red, marginBottom: 10 }}>{iapError}</div>}
+              {iapPending && !purchased && <div role="status" style={{ fontSize: 13, color: C.yellow, lineHeight: 1.6, marginBottom: 10 }}>{t("paywall.pending")}</div>}
               {purchased ? (
                 <p style={{ color: C.muted, fontSize: 13, lineHeight: 1.7, margin: "0 0 10px" }}>{t("settings.iap.unlocked")}</p>
               ) : (
@@ -4181,10 +4193,11 @@ function App() {
                 // 以前はここでfetchUnlockProduct()を取り直していたが、Swift側の
                 // purchase()も内部でfetchProducts()をもう一度呼ぶため二重フェッチだった。
                 <button disabled={iapBusy} onClick={async () => {
-                  setIapBusy(true); setIapError("");
+                  setIapBusy(true); setIapError(""); setIapPending(false);
                   try {
-                    const ok = await purchaseUnlock();
-                    if (ok) setPurchased(true);
+                    const status = await purchaseUnlock();
+                    if (status === "purchased") setPurchased(true);
+                    else if (status === "pending") setIapPending(true);
                   } catch { setIapError(t("paywall.purchaseFailed")); }
                   setIapBusy(false);
                 }} style={{ ...btn(C.red), width: "100%", padding: 14, fontSize: 14, marginBottom: 8, opacity: iapBusy ? 0.6 : 1 }}>
@@ -4192,7 +4205,7 @@ function App() {
                 </button>
               )}
               <button disabled={iapBusy} onClick={async () => {
-                setIapBusy(true); setIapError("");
+                setIapBusy(true); setIapError(""); setIapPending(false);
                 try {
                   const ok = await restorePurchase();
                   if (ok !== null) { // null=サインインをキャンセル。何も表示しない

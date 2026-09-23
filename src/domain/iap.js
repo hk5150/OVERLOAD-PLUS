@@ -76,15 +76,16 @@ async function fetchUnlockProduct() {
   return r?.products?.[0] ?? null;
 }
 
+// 戻り値: "purchased" / "cancelled" / "pending"(保護者の承認待ち=Ask to Buy)。
+// 真偽値にしないのは、"pending"をtruthyな値で返すと呼び出し側の if (ok) で
+// 購入済み扱いされるため。承認されたらonEntitlementsChangedの通知で解除される。
 async function purchaseUnlock() {
   const plugin = capIapPlugin();
   if (!plugin) throw new Error("iap.unavailable");
   const r = await plugin.purchase({ productId: IAP_PRODUCT_ID });
-  if (r?.purchased) {
-    await store.set(PURCHASE_FLAG_KEY, "1");
-    return true;
-  }
-  return false; // ユーザーキャンセル、またはFamily承認待ち等のpending
+  const status = r?.status ?? (r?.purchased ? "purchased" : "cancelled");
+  if (status === "purchased") await store.set(PURCHASE_FLAG_KEY, "1");
+  return status;
 }
 
 // 「購入を復元」ボタン専用。AppStore.syncを呼んでよいのはここだけ。
@@ -100,6 +101,19 @@ async function restorePurchase() {
   return purchased;
 }
 
+// アプリを開いたまま権利が変わったとき(承認待ちの承認・返金)の通知を受ける。
+// キャッシュを更新してからcallback(purchased)を呼ぶ。戻り値は解除用({ remove })。
+// Web版(プラグインなし)では何もしない。
+function onEntitlementsChanged(callback) {
+  const plugin = capIapPlugin();
+  if (!plugin || typeof plugin.addListener !== "function") return { remove() {} };
+  return plugin.addListener("entitlementsChanged", async (data) => {
+    const purchased = Array.isArray(data?.purchasedProductIds) && data.purchasedProductIds.includes(IAP_PRODUCT_ID);
+    await store.set(PURCHASE_FLAG_KEY, purchased ? "1" : "0");
+    callback(purchased);
+  });
+}
+
 globalThis.TRIAL_WORKOUT_LIMIT = TRIAL_WORKOUT_LIMIT;
 globalThis.IAP_PRODUCT_ID = IAP_PRODUCT_ID;
 globalThis.iapAvailable = iapAvailable;
@@ -109,3 +123,4 @@ globalThis.readCachedPurchaseFlag = readCachedPurchaseFlag;
 globalThis.fetchUnlockProduct = fetchUnlockProduct;
 globalThis.purchaseUnlock = purchaseUnlock;
 globalThis.restorePurchase = restorePurchase;
+globalThis.onEntitlementsChanged = onEntitlementsChanged;

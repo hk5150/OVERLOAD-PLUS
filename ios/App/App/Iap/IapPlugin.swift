@@ -25,8 +25,15 @@ public class IapPlugin: CAPPlugin, CAPBridgedPlugin {
 
     // Transaction.updatesリスナーはアプリ生存中ずっと稼働させておく必要があるため、
     // プラグインのロード時に一度だけ起動する。
+    // 権利の変化(承認待ちの承認・返金)はentitlementsChangedイベントでJSへ知らせる。
+    // retainUntilConsumed: JSのaddListenerより先に届いた通知(起動直後など)を落とさないため。
     public override func load() {
         Task { @MainActor in
+            StoreManager.shared.onEntitlementsChanged = { [weak self] ids in
+                self?.notifyListeners("entitlementsChanged",
+                                      data: ["purchasedProductIds": Array(ids)],
+                                      retainUntilConsumed: true)
+            }
             StoreManager.shared.startTransactionListener()
         }
     }
@@ -61,8 +68,8 @@ public class IapPlugin: CAPPlugin, CAPBridgedPlugin {
                     call.reject("product not found")
                     return
                 }
-                let purchased = try await StoreManager.shared.purchase(product)
-                call.resolve(["purchased": purchased])
+                let outcome = try await StoreManager.shared.purchase(product)
+                call.resolve(["status": outcome.rawValue, "purchased": outcome == .purchased])
             } catch {
                 call.reject(error.localizedDescription)
             }
@@ -72,7 +79,7 @@ public class IapPlugin: CAPPlugin, CAPBridgedPlugin {
     // AppStore.sync()を呼ぶのはこの経路(ユーザーがボタンを押したとき)のみ。
     // sync()はApple Accountのサインインを求めるので、そこでのキャンセルは失敗ではなく
     // ユーザーの意思表示。rejectせずcancelledとして返し、JS側で何も表示しないようにする
-    // (購入シートのキャンセルがpurchase()でfalseになるのと揃える)。
+    // (購入シートのキャンセルがpurchase()でstatus: "cancelled"になるのと揃える)。
     @objc func restorePurchases(_ call: CAPPluginCall) {
         Task { @MainActor in
             do {
