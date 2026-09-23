@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import { describe, it, expect } from "vitest";
 import { loadDomainModule } from "./helpers/loadDomain.js";
 
@@ -155,8 +157,25 @@ function fakePlugin(overrides = {}) {
     async getDeliveredNotifications() { return { notifications: overrides.delivered ?? [] }; },
     async removeDeliveredNotifications(arg) { calls.removeDelivered.push(arg); },
   };
+  const Plugins = { LocalNotifications: plugin };
+  // overrides.restTimer: true で自前プラグイン(RestTimer)の偽物も差す。
+  // restTimerFails: true で scheduleNotifications / syncActivity が例外を投げる。
+  calls.native = [];
+  calls.sync = [];
+  if (overrides.restTimer) {
+    Plugins.RestTimer = {
+      async scheduleNotifications(arg) {
+        if (overrides.restTimerFails) throw new Error("native failed");
+        calls.native.push(arg);
+      },
+      async syncActivity(arg) {
+        if (overrides.restTimerFails) throw new Error("native failed");
+        calls.sync.push(arg);
+      },
+    };
+  }
   const globals = {
-    window: { Capacitor: { isNativePlatform: () => true, Plugins: { LocalNotifications: plugin } } },
+    window: { Capacitor: { isNativePlatform: () => true, Plugins } },
   };
   return { globals, calls };
 }
@@ -232,5 +251,161 @@ describe("予約とキャンセル", () => {
     await clearDeliveredRestNotifications();
 
     expect(calls.removeDelivered).toHaveLength(0);
+  });
+});
+
+describe("RestTimerプラグイン経由の予約(Time Sensitive)", () => {
+  it("RestTimerがあれば予約はRestTimerに1回、LocalNotifications.scheduleは呼ばない(キャンセルは従来どおり)", async () => {
+    const { globals, calls } = fakePlugin({ display: "granted", restTimer: true });
+    const { scheduleRestNotifications } = load(globals);
+    const start = 1_000_000;
+
+    await scheduleRestNotifications(start, start, TEXTS);
+
+    expect(calls.cancel).toHaveLength(1);
+    expect(calls.schedule).toHaveLength(0);
+    expect(calls.native).toHaveLength(1);
+  });
+
+  // キャンセル(LocalNotifications)と同じIDを指すことの保証。ずれると予約が消えず二重に鳴る。
+  it("IDはキャンセルと同じ文字列、atは開始+1/2/3分のミリ秒", async () => {
+    const { globals, calls } = fakePlugin({ display: "granted", restTimer: true });
+    const { scheduleRestNotifications } = load(globals);
+    const start = 1_000_000;
+
+    await scheduleRestNotifications(start, start, TEXTS);
+
+    const sent = calls.native[0].notifications;
+    expect(sent.map((n) => n.id)).toEqual(["4201", "4202", "4203"]);
+    expect(sent.map((n) => n.at)).toEqual([start + MIN, start + 2 * MIN, start + 3 * MIN]);
+    expect(new Set(sent.map((n) => n.threadIdentifier)).size).toBe(1);
+    expect(sent[0].title).toBe("インターバル");
+  });
+
+  it("RestTimerの予約が失敗したらLocalNotificationsへ切り戻す", async () => {
+    const { globals, calls } = fakePlugin({ display: "granted", restTimer: true, restTimerFails: true });
+    const { scheduleRestNotifications } = load(globals);
+    const start = 1_000_000;
+
+    await scheduleRestNotifications(start, start, TEXTS);
+
+    expect(calls.schedule).toHaveLength(1);
+    expect(calls.schedule[0].notifications).toHaveLength(3);
+  });
+
+  it("予約するものが無ければRestTimerも呼ばない", async () => {
+    const { globals, calls } = fakePlugin({ display: "granted", restTimer: true });
+    const { scheduleRestNotifications } = load(globals);
+    const start = 1_000_000;
+
+    await scheduleRestNotifications(start, start + 5 * MIN, TEXTS);
+
+    expect(calls.native).toHaveLength(0);
+    expect(calls.schedule).toHaveLength(0);
+  });
+});
+
+describe("buildRestActivityState(Live Activityの表示状態)", () => {
+  const { buildRestActivityState, REST_ACTIVITY_STALE_MINUTES } = load();
+  const start = 1_000_000;
+
+  it("停止中(null)なら表示しない", () => {
+    expect(buildRestActivityState(null, start, "インターバル")).toBeNull();
+  });
+
+  it("開始直後は開始時刻・staleAt(開始+30分)・ラベルを返す", () => {
+    expect(REST_ACTIVITY_STALE_MINUTES).toBe(30);
+    expect(buildRestActivityState(start, start, "Rest")).toEqual({
+      startedAt: start, staleAt: start + 30 * MIN, title: "Rest",
+    });
+  });
+
+  it("30分の直前までは表示し、30分ちょうどで表示しない(放置対策)", () => {
+    expect(buildRestActivityState(start, start + 30 * MIN - 1000, "x")).not.toBeNull();
+    expect(buildRestActivityState(start, start + 30 * MIN, "x")).toBeNull();
+  });
+});
+
+describe("syncRestActivity", () => {
+  it("Web版(プラグインなし)では何もしない", async () => {
+    const { syncRestActivity } = load();
+    await expect(syncRestActivity(1_000_000, 1_000_000, "x")).resolves.toBeUndefined();
+  });
+
+  it("表示すべき状態をそのまま送る", async () => {
+    const { globals, calls } = fakePlugin({ restTimer: true });
+    const { syncRestActivity } = load(globals);
+    await syncRestActivity(1_000_000, 1_000_000, "インターバル");
+    expect(calls.sync).toEqual([{ startedAt: 1_000_000, staleAt: 1_000_000 + 30 * MIN, title: "インターバル" }]);
+  });
+
+  // 停止時・放置時はネイティブ側で残っているActivityを終了させる合図になる。
+  it("停止中や30分経過では {startedAt: null} を送る", async () => {
+    const { globals, calls } = fakePlugin({ restTimer: true });
+    const { syncRestActivity } = load(globals);
+    await syncRestActivity(null, 1_000_000, "x");
+    await syncRestActivity(1_000_000, 1_000_000 + 31 * MIN, "x");
+    expect(calls.sync).toEqual([{ startedAt: null }, { startedAt: null }]);
+  });
+
+  it("ネイティブが例外を投げても握りつぶす", async () => {
+    const { globals } = fakePlugin({ restTimer: true, restTimerFails: true });
+    const { syncRestActivity } = load(globals);
+    await expect(syncRestActivity(1_000_000, 1_000_000, "x")).resolves.toBeUndefined();
+  });
+});
+
+// ネイティブ側の設定は npm test からは実行できないので、ファイルの中身で縛る
+// (tests/iap.test.js がStoreKitのスキーム設定を縛っているのと同じ考え方)。
+// どれも「抜けてもビルドは通るが、機能が黙って動かない」種類の設定。
+describe("休憩タイマーのネイティブ設定", () => {
+  const read = (rel) => fs.readFileSync(path.join(process.cwd(), rel), "utf-8");
+
+  it("RestTimerプラグインを明示的に登録している(アプリターゲット直下のプラグインは自動登録されない)", () => {
+    expect(read("ios/App/App/BridgeViewController.swift")).toContain("registerPluginInstance(RestTimerPlugin())");
+  });
+
+  it("プラグインのjsNameとメソッド名がJSの呼び出しと一致する", () => {
+    const src = read("ios/App/App/RestTimer/RestTimerPlugin.swift");
+    expect(src).toContain('jsName = "RestTimer"');
+    expect(src).toContain('name: "scheduleNotifications"');
+    expect(src).toContain('name: "syncActivity"');
+  });
+
+  it("休憩通知はTime Sensitiveで、エンタイトルメントも付いている", () => {
+    expect(read("ios/App/App/RestTimer/RestTimerManager.swift")).toContain("interruptionLevel = .timeSensitive");
+    expect(read("ios/App/App/App.entitlements")).toContain("com.apple.developer.usernotifications.time-sensitive");
+  });
+
+  it("Live Activityが有効で、拡張がビルド・埋め込みされる", () => {
+    const plist = read("ios/App/App/Info.plist");
+    expect(plist).toMatch(/<key>NSSupportsLiveActivities<\/key>\s*<true\/>/);
+    const pbx = read("ios/App/App.xcodeproj/project.pbxproj");
+    expect(pbx).toContain("CODE_SIGN_ENTITLEMENTS = App/App.entitlements;");
+    expect(pbx).toContain("PRODUCT_BUNDLE_IDENTIFIER = com.hajime5150.kurabellplus.RestActivity;");
+    expect(pbx).toContain("RestActivity.appex in Embed Foundation Extensions");
+    // ActivityKitの型は型名で照合されるので、共有ファイルはAppと拡張の両方でコンパイルする
+    expect(pbx.match(/RestTimerAttributes\.swift in Sources \*\/ = \{/g)).toHaveLength(2);
+    // iOS 15の端末で起動時に落ちないよう、ActivityKitは弱リンク(Optional)
+    expect(pbx).toMatch(/ActivityKit\.framework in Frameworks \*\/ = \{[^}]*ATTRIBUTES = \(Weak, \)/);
+  });
+
+  // Archiveとアップロードで初めて表面化する設定。Xcodeの一般タブでAppの版だけ上げると拡張が
+  // 取り残され、アップロード時に弾かれる(ITMS-90473)。SKIP_INSTALLが無いと汎用アーカイブになる。
+  it("拡張の版番号がAppと一致し、Archiveに必要な設定がある", () => {
+    const pbx = read("ios/App/App.xcodeproj/project.pbxproj");
+    for (const key of ["MARKETING_VERSION", "CURRENT_PROJECT_VERSION"]) {
+      const values = new Set([...pbx.matchAll(new RegExp(`${key} = ([^;]+);`, "g"))].map((m) => m[1]));
+      expect(values.size, key).toBe(1);
+    }
+    expect((pbx.match(/SKIP_INSTALL = YES;/g) || []).length).toBe(2);
+    // 埋め込みフェーズは [CP] Embed Pods Frameworks より前(後ろだと「Cycle inside App」)
+    const phases = pbx.match(/buildPhases = \(([^)]*Embed Foundation Extensions[^)]*)\)/)[1];
+    expect(phases.indexOf("Embed Foundation Extensions")).toBeLessThan(phases.indexOf("[CP] Embed Pods Frameworks"));
+  });
+
+  it("App と拡張の両方に正式なチームIDが入っている", () => {
+    const pbx = read("ios/App/App.xcodeproj/project.pbxproj");
+    expect((pbx.match(/DEVELOPMENT_TEAM = LJR5Q5TU54;/g) || []).length).toBe(4);
   });
 });

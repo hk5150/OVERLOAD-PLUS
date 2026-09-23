@@ -8,7 +8,12 @@
 
 /* Begin PBXBuildFile section */
 		1459699397BA435769AD9412 /* StoreManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D9B002FB6F5FB812D98229F /* StoreManager.swift */; };
+		298AF55A7C0A153BF3A885BC /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8770DE6CE1F21E972543BA20 /* SwiftUI.framework */; };
 		2FAD9763203C412B000D30F8 /* config.xml in Resources */ = {isa = PBXBuildFile; fileRef = 2FAD9762203C412B000D30F8 /* config.xml */; };
+		41ED8E19A1465DD2D4223448 /* RestActivityBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0CAF3FA0EB0D91FD57B7661 /* RestActivityBundle.swift */; };
+		426BC6942F84D982D9F70207 /* RestActivity.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 30BD14DAAAE86D5CC41D0A7A /* RestActivity.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		45ECA843F55BE8A7CDEC36D2 /* ActivityKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8A8673594951CFDD7AC3688F /* ActivityKit.framework */; settings = {ATTRIBUTES = (Weak, ); }; };
+		46D31B09A669F7A63EDE3939 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A518090B3BA1447F59E331AD /* WidgetKit.framework */; };
 		50379B232058CBB4000EE86E /* capacitor.config.json in Resources */ = {isa = PBXBuildFile; fileRef = 50379B222058CBB4000EE86E /* capacitor.config.json */; };
 		504EC3081FED79650016851F /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 504EC3071FED79650016851F /* AppDelegate.swift */; };
 		504EC30D1FED79650016851F /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 504EC30B1FED79650016851F /* Main.storyboard */; };
@@ -17,13 +22,46 @@
 		50B271D11FEDC1A000F3C39B /* public in Resources */ = {isa = PBXBuildFile; fileRef = 50B271D01FEDC1A000F3C39B /* public */; };
 		59B23E7B675DD7F7E0882F65 /* IapPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDD8743137EA64209737AD3E /* IapPlugin.swift */; };
 		6A1D0C2E1A4B47D8B0E5F001 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 6A1D0C2D1A4B47D8B0E5F000 /* PrivacyInfo.xcprivacy */; };
+		905EFE9B01A85DAE37F9FF12 /* RestActivityLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80CFB1A042027EBA9941D491 /* RestActivityLiveActivity.swift */; };
+		90B2AFA841F38E689BBA405F /* RestTimerAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = D14AD22BEF97714C080BC66B /* RestTimerAttributes.swift */; };
+		92DD79B0AF33B524EDBD82DF /* RestTimerManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8D03ED677AFB8D417D4C04 /* RestTimerManager.swift */; };
 		A084ECDBA7D38E1E42DFC39D /* Pods_App.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AF277DCFFFF123FFC6DF26C7 /* Pods_App.framework */; };
+		A7BEFDF1DA9DFA458C845B50 /* RestTimerPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B4E3951E4E87DE894080880 /* RestTimerPlugin.swift */; };
+		ACFB888C57EFB2AD7468CE32 /* RestTimerAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = D14AD22BEF97714C080BC66B /* RestTimerAttributes.swift */; };
 		AD5E778047EE000709DCF73D /* BridgeViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3C2354788ED14DA304DD61B /* BridgeViewController.swift */; };
 		EA31416053B0D7A0A18C980E /* StoreKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 60223FC6406A946ECEB0619A /* StoreKit.framework */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		3BE093FBA213D4221E202157 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 504EC2FC1FED79650016851F /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 58BA5304F1A2071EC668DF62;
+			remoteInfo = RestActivity;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		56B54C0DD746C60C91CCF9C4 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				426BC6942F84D982D9F70207 /* RestActivity.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
 		2FAD9762203C412B000D30F8 /* config.xml */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = config.xml; sourceTree = "<group>"; };
+		30BD14DAAAE86D5CC41D0A7A /* RestActivity.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = RestActivity.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		34A0471B1932971EEE4ECFED /* App.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = App.entitlements; sourceTree = "<group>"; };
+		3B4E3951E4E87DE894080880 /* RestTimerPlugin.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RestTimerPlugin.swift; sourceTree = "<group>"; };
+		3D61DE85C919951FA06883D9 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		50379B222058CBB4000EE86E /* capacitor.config.json */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.json; path = capacitor.config.json; sourceTree = "<group>"; };
 		504EC3041FED79650016851F /* App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = App.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		504EC3071FED79650016851F /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
@@ -35,9 +73,16 @@
 		5D9B002FB6F5FB812D98229F /* StoreManager.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = StoreManager.swift; sourceTree = "<group>"; };
 		60223FC6406A946ECEB0619A /* StoreKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = StoreKit.framework; path = System/Library/Frameworks/StoreKit.framework; sourceTree = SDKROOT; };
 		6A1D0C2D1A4B47D8B0E5F000 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		80CFB1A042027EBA9941D491 /* RestActivityLiveActivity.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RestActivityLiveActivity.swift; sourceTree = "<group>"; };
+		8770DE6CE1F21E972543BA20 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
+		8A8673594951CFDD7AC3688F /* ActivityKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = ActivityKit.framework; path = System/Library/Frameworks/ActivityKit.framework; sourceTree = SDKROOT; };
 		A3C2354788ED14DA304DD61B /* BridgeViewController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BridgeViewController.swift; sourceTree = "<group>"; };
+		A518090B3BA1447F59E331AD /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
+		AA8D03ED677AFB8D417D4C04 /* RestTimerManager.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RestTimerManager.swift; sourceTree = "<group>"; };
 		AF277DCFFFF123FFC6DF26C7 /* Pods_App.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_App.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		AF51FD2D460BCFE21FA515B2 /* Pods-App.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-App.release.xcconfig"; path = "Pods/Target Support Files/Pods-App/Pods-App.release.xcconfig"; sourceTree = "<group>"; };
+		D14AD22BEF97714C080BC66B /* RestTimerAttributes.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RestTimerAttributes.swift; sourceTree = "<group>"; };
+		E0CAF3FA0EB0D91FD57B7661 /* RestActivityBundle.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RestActivityBundle.swift; sourceTree = "<group>"; };
 		FC68EB0AF532CFC21C3344DD /* Pods-App.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-App.debug.xcconfig"; path = "Pods/Target Support Files/Pods-App/Pods-App.debug.xcconfig"; sourceTree = "<group>"; };
 		FDD8743137EA64209737AD3E /* IapPlugin.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = IapPlugin.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -49,6 +94,16 @@
 			files = (
 				A084ECDBA7D38E1E42DFC39D /* Pods_App.framework in Frameworks */,
 				EA31416053B0D7A0A18C980E /* StoreKit.framework in Frameworks */,
+				45ECA843F55BE8A7CDEC36D2 /* ActivityKit.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		61B8FFF5C1B488B89ECCD548 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				46D31B09A669F7A63EDE3939 /* WidgetKit.framework in Frameworks */,
+				298AF55A7C0A153BF3A885BC /* SwiftUI.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -60,6 +115,8 @@
 			children = (
 				AF277DCFFFF123FFC6DF26C7 /* Pods_App.framework */,
 				60223FC6406A946ECEB0619A /* StoreKit.framework */,
+				8A8673594951CFDD7AC3688F /* ActivityKit.framework */,
+				73223B19509051D90C01F7B3 /* iOS */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -71,6 +128,7 @@
 				504EC3051FED79650016851F /* Products */,
 				7F8756D8B27F46E3366F6CEA /* Pods */,
 				27E2DDA53C4D2A4D1A88CE4A /* Frameworks */,
+				ACF2FA9E923440A0FEE5E93C /* RestActivity */,
 			);
 			sourceTree = "<group>";
 		};
@@ -78,6 +136,7 @@
 			isa = PBXGroup;
 			children = (
 				504EC3041FED79650016851F /* App.app */,
+				30BD14DAAAE86D5CC41D0A7A /* RestActivity.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -96,8 +155,19 @@
 				50B271D01FEDC1A000F3C39B /* public */,
 				9ABE470B716B9D52057A3795 /* Iap */,
 				A3C2354788ED14DA304DD61B /* BridgeViewController.swift */,
+				FE0810342031073768C4185C /* RestTimer */,
+				34A0471B1932971EEE4ECFED /* App.entitlements */,
 			);
 			path = App;
+			sourceTree = "<group>";
+		};
+		73223B19509051D90C01F7B3 /* iOS */ = {
+			isa = PBXGroup;
+			children = (
+				A518090B3BA1447F59E331AD /* WidgetKit.framework */,
+				8770DE6CE1F21E972543BA20 /* SwiftUI.framework */,
+			);
+			name = iOS;
 			sourceTree = "<group>";
 		};
 		7F8756D8B27F46E3366F6CEA /* Pods */ = {
@@ -119,6 +189,28 @@
 			path = Iap;
 			sourceTree = "<group>";
 		};
+		ACF2FA9E923440A0FEE5E93C /* RestActivity */ = {
+			isa = PBXGroup;
+			children = (
+				3D61DE85C919951FA06883D9 /* Info.plist */,
+				E0CAF3FA0EB0D91FD57B7661 /* RestActivityBundle.swift */,
+				80CFB1A042027EBA9941D491 /* RestActivityLiveActivity.swift */,
+			);
+			name = RestActivity;
+			path = RestActivity;
+			sourceTree = "<group>";
+		};
+		FE0810342031073768C4185C /* RestTimer */ = {
+			isa = PBXGroup;
+			children = (
+				3B4E3951E4E87DE894080880 /* RestTimerPlugin.swift */,
+				AA8D03ED677AFB8D417D4C04 /* RestTimerManager.swift */,
+				D14AD22BEF97714C080BC66B /* RestTimerAttributes.swift */,
+			);
+			name = RestTimer;
+			path = RestTimer;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -130,16 +222,35 @@
 				504EC3001FED79650016851F /* Sources */,
 				504EC3011FED79650016851F /* Frameworks */,
 				504EC3021FED79650016851F /* Resources */,
+				56B54C0DD746C60C91CCF9C4 /* Embed Foundation Extensions */,
 				9592DBEFFC6D2A0C8D5DEB22 /* [CP] Embed Pods Frameworks */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				B3AE2BAB09057FC625AB0FF5 /* PBXTargetDependency */,
 			);
 			name = App;
 			productName = App;
 			productReference = 504EC3041FED79650016851F /* App.app */;
 			productType = "com.apple.product-type.application";
+		};
+		58BA5304F1A2071EC668DF62 /* RestActivity */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 34B21763E8D8E2415F106DE9 /* Build configuration list for PBXNativeTarget "RestActivity" */;
+			buildPhases = (
+				B0DF008784B52CE4AFB24C49 /* Sources */,
+				61B8FFF5C1B488B89ECCD548 /* Frameworks */,
+				BE51615519B20A29568D2F2A /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = RestActivity;
+			productName = RestActivity;
+			productReference = 30BD14DAAAE86D5CC41D0A7A /* RestActivity.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -152,7 +263,13 @@
 				TargetAttributes = {
 					504EC3031FED79650016851F = {
 						CreatedOnToolsVersion = 9.2;
+						DevelopmentTeam = LJR5Q5TU54;
 						LastSwiftMigration = 1100;
+						ProvisioningStyle = Automatic;
+					};
+					58BA5304F1A2071EC668DF62 = {
+						CreatedOnToolsVersion = 26.6;
+						DevelopmentTeam = LJR5Q5TU54;
 						ProvisioningStyle = Automatic;
 					};
 				};
@@ -171,6 +288,7 @@
 			projectRoot = "";
 			targets = (
 				504EC3031FED79650016851F /* App */,
+				58BA5304F1A2071EC668DF62 /* RestActivity */,
 			);
 		};
 /* End PBXProject section */
@@ -187,6 +305,13 @@
 				50379B232058CBB4000EE86E /* capacitor.config.json in Resources */,
 				504EC30D1FED79650016851F /* Main.storyboard in Resources */,
 				2FAD9763203C412B000D30F8 /* config.xml in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		BE51615519B20A29568D2F2A /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -237,10 +362,32 @@
 				1459699397BA435769AD9412 /* StoreManager.swift in Sources */,
 				59B23E7B675DD7F7E0882F65 /* IapPlugin.swift in Sources */,
 				AD5E778047EE000709DCF73D /* BridgeViewController.swift in Sources */,
+				A7BEFDF1DA9DFA458C845B50 /* RestTimerPlugin.swift in Sources */,
+				92DD79B0AF33B524EDBD82DF /* RestTimerManager.swift in Sources */,
+				90B2AFA841F38E689BBA405F /* RestTimerAttributes.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B0DF008784B52CE4AFB24C49 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				41ED8E19A1465DD2D4223448 /* RestActivityBundle.swift in Sources */,
+				905EFE9B01A85DAE37F9FF12 /* RestActivityLiveActivity.swift in Sources */,
+				ACFB888C57EFB2AD7468CE32 /* RestTimerAttributes.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		B3AE2BAB09057FC625AB0FF5 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = RestActivity;
+			target = 58BA5304F1A2071EC668DF62 /* RestActivity */;
+			targetProxy = 3BE093FBA213D4221E202157 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin PBXVariantGroup section */
 		504EC30B1FED79650016851F /* Main.storyboard */ = {
@@ -262,6 +409,57 @@
 /* End PBXVariantGroup section */
 
 /* Begin XCBuildConfiguration section */
+		0DD5D84090532754822CF530 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = LJR5Q5TU54;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = RestActivity/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = RestActivity;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 16.2;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.hajime5150.kurabellplus.RestActivity;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		31B28CE4EDE7277754FB30A3 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = LJR5Q5TU54;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = RestActivity/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = RestActivity;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 16.2;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.hajime5150.kurabellplus.RestActivity;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
 		504EC3141FED79650016851F /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -374,8 +572,10 @@
 			baseConfigurationReference = FC68EB0AF532CFC21C3344DD /* Pods-App.debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = App/App.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = LJR5Q5TU54;
 				INFOPLIST_FILE = App/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
@@ -394,8 +594,10 @@
 			baseConfigurationReference = AF51FD2D460BCFE21FA515B2 /* Pods-App.release.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = App/App.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = LJR5Q5TU54;
 				INFOPLIST_FILE = App/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
@@ -411,6 +613,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		34B21763E8D8E2415F106DE9 /* Build configuration list for PBXNativeTarget "RestActivity" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				0DD5D84090532754822CF530 /* Release */,
+				31B28CE4EDE7277754FB30A3 /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		504EC2FF1FED79650016851F /* Build configuration list for PBXProject "App" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

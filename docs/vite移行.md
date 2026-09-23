@@ -1898,3 +1898,94 @@ StoreKit Testingの検証で見つかった残課題。ユーザーの指示で�
 - 保護者が承認を**拒否**した場合、StoreKitから通知は来ないので、承認待ちの表示はアプリを
   再起動するまで残る(状態は保存していないので再起動で消える。文言は「承認されると〜」なので
   嘘にはならない)
+
+---
+
+# 2026-09-23(4回目): 休憩タイマーの Time Sensitive 通知と Live Activity(v112)
+
+ユーザーの要望。プランモードで設計を合意してから実装した。設計判断と、Xcode プロジェクトを触るときの
+注意は [docs/休憩タイマー通知.md](休憩タイマー通知.md) にまとめた。ここでは経緯と検証の記録だけ。
+
+## 何を解決したか
+
+v109 の残課題にあった2点。
+
+- **集中モードで休憩の通知が止まる**(Apple Watch のワークアウトで自動で入る「フィットネス」など)。
+  `@capacitor/local-notifications` 6.x は `interruptionLevel` を扱えなかった
+- **ロック中の iPhone に経過時間の表示が無い**
+
+## 対応
+
+- 通知の**予約だけ**を自前プラグイン `RestTimer` に移し、`interruptionLevel = .timeSensitive`・
+  `sound = .default` で積む。ID は同じ文字列なので、キャンセル等は LocalNotifications のまま
+- Widget Extension ターゲット `RestActivity`(iOS 16.2+)を追加し、ロック画面と Dynamic Island に
+  カウントアップと1分ごとの3分割ゲージを出す。アプリ内に設定は増やさない(常にオン、ユーザーの決定)
+- `DEVELOPMENT_TEAM` を正式なチームID `LJR5Q5TU54` に設定(ユーザーの決定)
+
+## 検証内容(iPhone 17 Pro Max / iOS 26.5 シミュレータ)
+
+- `npm test` 349件(新規: RestTimer 経由の予約・切り戻し・ID の一致、Live Activity の状態、
+  ネイティブ設定の静的チェック)。修正を外すと落ちることを確認
+- ビルド成果物: `PlugIns/RestActivity.appex`、ActivityKit が `LC_LOAD_WEAK_DYLIB`(弱リンク)、
+  エンタイトルメントに time-sensitive
+- **Time Sensitive**: 1分後の通知がロック画面に「即時通知」のラベル付きで届いた
+- **Live Activity**
+  - Dynamic Island の compact(アイコン+経過)と expanded(ラベル+数字+3分割ゲージ)
+  - ロック画面(ゲージは1分ごとに緑→黄→赤の順に伸びる)
+  - 「リセット」で0から数え直し、「終了」で即座に消える
+  - アプリのプロセスを終了させても数え続け、再起動時(下書きなし)に片付く
+  - stale 表示(定数を一時的に1分にして「1:00+」を確認し、30分に戻した)
+- Web 版(8765)が v112 で起動し、コンソールエラーなし。Live Activity 関連の関数は何もしない
+
+## 見た目の自己レビューで直したもの
+
+スクリーンショットを見て、テンプレ的・未調整に見えた3点を直した。
+
+1. ロック画面・expanded で数字が右端に寄っていなかった(`Text(timerInterval:)` は最大桁ぶんの幅を取るため、
+   Spacer では寄らない)→ 枠を決めて右寄せ
+2. 数字が丸ゴシック(`.rounded`)でアプリ本体の数字(Barlow Condensed)と印象が違った → `.condensed` の字幅に
+3. ラベル「インターバル」まで緑で、緑が「進行」の意味と混ざっていた → ラベルは灰色、緑はアイコンとゲージだけ
+
+## reviewerの指摘で直したもの
+
+- ネイティブの予約で、読めない通知を `compactMap` で黙って捨てて成功を返していた。ブリッジの型が変わると
+  「1件も届かないのにエラーも出ず、切り戻しも起きない」ので、件数が合わなければ reject する
+- 拡張の版番号・`SKIP_INSTALL`・埋め込みフェーズの順序をテストで縛った(Archive・アップロードで初めて壊れる種類)
+- システムが終了させた(8時間上限の)Activity が残っていると新しい表示と並ぶので、同期時に消す
+- `Activity.request` の失敗をログに残す(実機で出ないときに追えるように)
+- compact の幅を「30:00+」が収まる幅に
+
+## 検証中に踏んだもの
+
+- **Web 版で、新しい Service Worker が HTTP キャッシュから古い `restNotifications.js` を拾った**
+  (`ReferenceError: syncRestActivity is not defined`)。CLAUDE.md に書いてある開発時の罠そのものだが、
+  GitHub Pages の本番でも起こりうるので、SW の install を `cache: 'reload'` にする修正を別タスクとして切り出した
+- シミュレータの文字入力は ASCII だけで、設定アプリを日本語で検索できない。集中モードの項目も見つからず、
+  集中モード中の配信は確認できなかった
+
+## 変更したファイル
+
+| ファイル | 内容 |
+|---|---|
+| `src/domain/restNotifications.js` | RestTimer 経由の予約と切り戻し、Live Activity の状態・同期 |
+| `index.html` | Live Activity を同期する effect、`APP_VERSION` v112 |
+| `sw.js` | `CACHE` v112 |
+| `tests/restNotifications.test.js` | JS のテストとネイティブ設定の静的チェック |
+| `ios/App/App/RestTimer/`(新規) | `RestTimerPlugin.swift` / `RestTimerManager.swift` / `RestTimerAttributes.swift` |
+| `ios/App/RestActivity/`(新規) | 拡張の `Info.plist` / `RestActivityBundle.swift` / `RestActivityLiveActivity.swift` |
+| `ios/App/App/App.entitlements`(新規) | Time Sensitive |
+| `ios/App/App/Info.plist` | `NSSupportsLiveActivities` |
+| `ios/App/App/BridgeViewController.swift` | `RestTimerPlugin` の登録 |
+| `ios/App/App.xcodeproj/project.pbxproj` | 拡張ターゲット、埋め込み、ActivityKit(弱リンク)、エンタイトルメント、チームID |
+| `docs/休憩タイマー通知.md`(新規) | 設計判断と注意点 |
+
+バージョン: v111 → v112。
+
+## 残っている課題
+
+- **集中モード(フィットネス)を実際に抜けるか**、Apple Watch への転送のされ方は実機・TestFlight で確認する
+- iOS 15・16.0/16.1 の端末での起動(弱リンクは確認済み、実行は未確認)
+- 実機での Live Activity の見た目、Dynamic Island の無い機種での表示
+- 拡張の App ID 登録と Time Sensitive の capability は、実機ビルドか Archive のときに自動署名が行う。
+  Xcode で Apple アカウントにサインインしている必要がある
+- `APPSTORE.md` の掲載文(別セッションで改訂中)に Live Activity・Time Sensitive を載せるかは未調整

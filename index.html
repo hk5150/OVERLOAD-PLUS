@@ -230,7 +230,7 @@ const DRAFT_KEY = "workout-draft-v1"; // 入力途中の記録(アプリが落�
 const PRE_IMPORT_BACKUP_KEY = "workout-log-v1-pre-import"; // バックアップ復元前のデータ退避(復元に失敗した場合の保険)
 // ヘッダーのバージョンバッジとバックアップのappVersionで共有する単一の定数。
 // sw.js の CACHE 定数とは tests/version.test.js が数字の一致を機械的に縛っている(CLAUDE.md参照)。
-const APP_VERSION = "v111";
+const APP_VERSION = "v112";
 // store(保存レイヤ)は src/domain/storage.js へ移設(テストのため)。
 // LIBSで<script src>読み込み済みなのでグローバルの store をそのまま参照できる。
 const uid = () => Math.random().toString(36).slice(2, 8);
@@ -1186,6 +1186,15 @@ function App() {
     });
     checkRestNotificationPermission().then(setNotifyPerm);
   }, [loaded]);
+
+  // Live Activity(ロック画面・Dynamic Islandの経過表示)をrestStartAtに合わせる。iOS 16.2+のみ、
+  // Web版では何もしない。通知の許可・soundOnとは独立(Live Activityは許可が別枠で、常にオン)。
+  // loaded後の初回で前回の残骸も片付く(下書きから同じ値が戻れば何もせず、無ければ終了)。
+  // 前面復帰(visibilitychange)では呼ばない: ロック画面でスワイプして消した表示を復活させないため。
+  useEffect(() => {
+    if (!loaded) return;
+    runNotify(() => syncRestActivity(restStartAt, Date.now(), t("rest.title")));
+  }, [loaded, restStartAt, lang]);
 
   // ---- インターバルタイマー(カウントアップ・1分ごとに知らせる) ----
   useEffect(() => {
