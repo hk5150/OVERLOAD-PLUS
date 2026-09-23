@@ -9,15 +9,29 @@ import vm from "node:vm";
 
 const ORIGIN = "https://example.test";
 
+// sw.js が new Request(url, init) で作るリクエストの代わり。本物の Request は相対URL("./index.html")を
+// 受け付けない(Node には SW の基準URLが無い)ので、url と cache を持つだけの偽物にする。
+class FakeRequest {
+  constructor(url, init = {}) {
+    this.url = url;
+    this.cache = init.cache;
+  }
+}
+
+const urlOf = (req) => (typeof req === "string" ? req : req.url);
+
 function createFakeCache() {
   const store = new Map();
-  const key = (req) => new URL(typeof req === "string" ? req : req.url, ORIGIN + "/").href;
+  const key = (req) => new URL(urlOf(req), ORIGIN + "/").href;
+  const addAllCalls = [];
   return {
     async put(req, res) { store.set(key(req), res); },
     async match(req) { return store.get(key(req)); },
-    async addAll(urls) {
-      for (const u of urls) store.set(key(u), new Response(`cached:${u}`, { status: 200 }));
+    async addAll(reqs) {
+      addAllCalls.push(reqs);
+      for (const r of reqs) store.set(key(r), new Response(`cached:${urlOf(r)}`, { status: 200 }));
     },
+    addAllCalls,
     async keys() { return [...store.keys()]; },
     async delete(k) { return store.delete(k); },
     has(req) { return store.has(key(req)); },
@@ -43,10 +57,12 @@ export function createServiceWorkerHarness({ fetchImpl } = {}) {
     delete: async (k) => cache.delete(k),
   };
 
+  const fetchCalls = [];
   const sandbox = {
     self: fakeSelf,
     caches: fakeCaches,
-    fetch: (...args) => fetchImpl(...args),
+    fetch: (...args) => { fetchCalls.push(args); return fetchImpl(...args); },
+    Request: FakeRequest,
     Response,
     URL,
     AbortController,
@@ -59,6 +75,7 @@ export function createServiceWorkerHarness({ fetchImpl } = {}) {
 
   return {
     cache,
+    fetchCalls,
     origin: ORIGIN,
     async triggerInstall() {
       let waitPromise;

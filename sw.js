@@ -1,6 +1,6 @@
 // KURABELL+ Service Worker
 // アプリ本体をキャッシュし、オフラインでも起動できるようにする。ライブラリもすべてローカル同梱(CDN不使用)。
-const CACHE = "kurabell-v112";
+const CACHE = "kurabell-v113";
 
 // ネットワーク優先フェッチのタイムアウト(電波が弱い環境でハングし続けるのを防ぐ)
 const NETWORK_TIMEOUT_MS = 4000;
@@ -38,10 +38,17 @@ const APP_ASSETS = [
   "./fonts/barlow-condensed-800-latin.woff2",
 ];
 
+// SWのfetch/cache.addAllは既定でブラウザのHTTPキャッシュを通る。GitHub Pagesはmax-age付きで配信し、
+// ヘッダーが無くてもLast-Modifiedからの推定でキャッシュされるため、既定のままだと新しい版のCACHEに
+// 古いファイルが入り、新しいindex.htmlが古いsrc/domain/*.jsと組み合わさる(v112の検証で実際に踏んだ:
+// ReferenceError: syncRestActivity is not defined)。installは必ずサーバーに確認する(cache: "no-cache")。
+// "reload"にしないのは、版を上げるたびにvendor一式(約3.5MB)を全量取り直さず、変わっていないものは
+// 304で済ませるため(電波の弱いジムでinstallが失敗し続けるのを避ける)。
+// addAllは1件でも失敗すると全体がrejectする性質のまま使う(CLAUDE.md「www/に新しいファイルを足したら」参照)。
 self.addEventListener("install", (e) => {
   e.waitUntil(
     caches.open(CACHE).then(async (cache) => {
-      await cache.addAll(APP_ASSETS);
+      await cache.addAll(APP_ASSETS.map((u) => new Request(u, { cache: "no-cache" })));
       self.skipWaiting();
     })
   );
@@ -102,7 +109,9 @@ self.addEventListener("fetch", (e) => {
         }));
       });
 
-      fetch(req, { signal: controller.signal })
+      // no-cache: HTTPキャッシュを使う前に必ずサーバーへ確認する(変わっていなければ304で軽い)。
+      // 既定のままだと推定キャッシュで古いファイルを「ネットワークから取れた」ことにしてしまう。
+      fetch(req, { signal: controller.signal, cache: "no-cache" })
         .then((res) => {
           clearTimeout(timer);
           resolve(cacheIfOk(req, res));

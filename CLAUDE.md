@@ -37,15 +37,19 @@ KURABELL Workout Log は漸進性過負荷にもとづく筋トレ記録PWA。**
 - **バージョンは2箇所ある。** `sw.js` の `CACHE` と、ヘッダーのバッジ。
   片方だけ上げると、SWが古い `index.html` を配り続けて「直したはずの変更が返ってこない」という無症状の不具合になる。
   `tests/version.test.js` が一致を強制しているので、忘れてもテストが落ちる。
-  **実装中(まだバージョンを上げていない段階)のブラウザ検証でも同じ症状が出る。** 一度でもSWが
-  installされていると、`cache.addAll()`はブラウザのHTTPディスクキャッシュ越しに古いファイルを
-  つかむことがあり、その後何度locahost:8765をリロードしても新しいコードが反映されない
-  (`caches.delete()`や`unregister()`をしても、install時に再びブラウザキャッシュから古い版を
-  拾い直すことがある)。実際に6番・7番の検証でこれを踏み、30分ほど無駄にした。
-  **確実なのはSWを使わないwww版(`kurabell-www`, port 8766。事前に`npm run sync-www`が必要)
-  か、新しいタブ/別originで検証すること。**
-  **同じ症状はSWが1件も登録されていない状態でも起きる**(ブラウザのHTTPディスクキャッシュ単独で
-  発生する)。`src/domain/i18n.js` に足したはずのキーが画面に生のまま出て、`caches.keys()`は空、
+  **根はブラウザのHTTPディスクキャッシュ**(ヘッダーが無くてもLast-Modifiedから推定でキャッシュされる)。
+  v113 で `sw.js` の install とネットワーク優先fetchを `cache: "no-cache"` にし、**SWの経路では
+  HTTPキャッシュ由来の古いファイルはつかまなくなった**(`tests/sw-fetch-fallback.test.js` で縛ってある)。
+  別経路として、電波が弱くファイルごとに4秒のタイムアウトが分かれると、新しいindex.htmlと
+  CACHE上の古いスクリプトが混ざりうる(未対応。`docs/vite移行.md` のv113節)。
+  以前は `cache.addAll()` がHTTPキャッシュ越しに古い版を新しいCACHEへ入れ、新しいindex.htmlと
+  古い `src/domain/*.js` が組み合わさっていた(6番・7番の検証で30分ほど無駄にし、v112の検証でも
+  `ReferenceError` として踏んだ。本番のGitHub Pagesでも起こりえた)。
+  **ただしv112以前のSWがinstall済みのブラウザでは、1回目の更新までは古いSWが動くので同じ症状が出うる。**
+  迷ったらSWを使わないwww版(`kurabell-www`, port 8766。事前に`npm run sync-www`が必要)か、
+  新しいタブ/別originで検証すること。
+  **SWが制御していないページ読み込みでも同じ症状は起きる**(HTTPキャッシュ単独)。
+  `src/domain/i18n.js` に足したはずのキーが画面に生のまま出て、`caches.keys()`は空、
   という形で踏んだ。既定fetchでは41,906バイト(旧)、`{cache:'reload'}`では43,652バイト(新)だった。
   **クエリ付きURLでのリロードでは足りない。`<script src>`の実URLを`{cache:'reload'}`で
   再検証する必要がある。**

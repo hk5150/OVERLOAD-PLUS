@@ -1989,3 +1989,79 @@ v109 の残課題にあった2点。
 - 拡張の App ID 登録と Time Sensitive の capability は、実機ビルドか Archive のときに自動署名が行う。
   Xcode で Apple アカウントにサインインしている必要がある
 - `APPSTORE.md` の掲載文(別セッションで改訂中)に Live Activity・Time Sensitive を載せるかは未調整
+
+---
+
+# 2026-09-24: Service Worker が HTTP キャッシュ越しに古いファイルをつかむ(v113)
+
+v112 の検証中に Web 版で `ReferenceError: syncRestActivity is not defined` を踏んだ。
+新しい `index.html` と古い `src/domain/restNotifications.js` が組み合わさっていた。ユーザーの指示で修正。
+
+## 原因
+
+SW の `fetch` と `cache.addAll` は、既定でブラウザの HTTP ディスクキャッシュを通る。
+GitHub Pages は max-age 付きで配信し、ヘッダーが無くても Last-Modified からの推定でキャッシュされる。
+そのため古いファイルが紛れ込む経路が2つあった。
+
+1. **install**: 版を上げた新しい SW が、`cache.addAll(APP_ASSETS)` で HTTP キャッシュ上の古いファイルを
+   新しい CACHE に入れる
+2. **実行時のネットワーク優先 fetch**: 推定キャッシュで古いファイルを「ネットワークから取れた」ことにして返し、
+   CACHE も古いままで上書きする
+
+CLAUDE.md には開発時の罠として書かれていたが、本番のユーザーにも起こりうる不具合だった。
+iOS 版は SW を使わないので関係ない。
+
+## 対応
+
+- install は `cache.addAll(APP_ASSETS.map((u) => new Request(u, { cache: "no-cache" })))`。
+  必ずサーバーに確認する。`addAll` の「1件でも失敗したら全体を reject」する性質はそのまま
+  - 最初は `cache: "reload"`(必ず全量を取り直す)にしたが、reviewer の指摘で `no-cache` に変えた。
+    `reload` は条件付きリクエストを送らないので、版を上げるたびに vendor 一式(約3.5MB、うち
+    babel.min.js が 2.87MB)を丸ごと取り直す。版上げは頻繁で、電波の弱い場所では install が
+    失敗し続けて新しい版が有効にならない。`no-cache` なら変わっていないものは 304 で済む
+    (開発用の `python3 -m http.server` は Last-Modified が秒単位なので、同じ秒の中で書き換えると
+    誤って 304 になりうる。本番の GitHub Pages は ETag なので問題ない)
+- ネットワーク優先 fetch は `cache: "no-cache"`。毎回サーバーに確認し、変わっていなければ 304 で済む
+- vendor・fonts のキャッシュ優先経路は変えていない(中身が変わらず、版を上げれば install で取り直される)
+
+トレードオフ: 電波が弱い場所では、これまで HTTP キャッシュから即座に返っていたアプリ本体の取得が、
+サーバーへの確認を待つようになる。オフラインや4秒のタイムアウトで SW の CACHE に落ちる経路は従来どおり。
+
+## 検証内容
+
+- `npm test` 352件。新規3件(install・ネットワーク優先・画面遷移がすべて `no-cache`)は、修正を外すと落ちる。
+  テスト用のハーネス(`tests/helpers/loadServiceWorker.js`)に `Request` の偽物と、fetch・addAll の記録を足した
+- ブラウザ(8765)で再現して確認した(install を `reload` にしていた段階で1〜5、`no-cache` に変えた後に再確認)
+  1. 修正前の v112 を読み込み、SW と HTTP キャッシュを古い状態にした
+  2. 修正を入れて v113 にし、`units.js` の末尾に一時的な目印を付けた
+  3. 再読み込みで SW が更新され、**新しい CACHE にも、ページが受け取るファイルにも目印が入った**。
+     旧 CACHE は消え、画面は v113、エラーなし
+  4. SW の版は変えずに目印だけを書き換えると、ページはすぐ新しい中身を受け取り、CACHE も更新された(no-cache の経路)
+  5. 目印は削除し、`units.js` が元どおりであることを `git diff` で確認
+
+## 変更したファイル
+
+| ファイル | 内容 |
+|---|---|
+| `sw.js` | install とネットワーク優先を `cache: "no-cache"`、`CACHE` v113 |
+| `index.html` | `APP_VERSION` v113 |
+| `tests/helpers/loadServiceWorker.js` | `Request` の偽物、fetch・addAll 呼び出しの記録 |
+| `tests/sw-fetch-fallback.test.js` | キャッシュモードのテスト3件 |
+| `CLAUDE.md` | 「バージョンは2箇所ある」の罠の記述を実態に合わせた |
+
+バージョン: v112 → v113。
+
+## 残っている課題
+
+- **電波が弱いと、HTTP キャッシュとは別の経路で新旧のファイルが混ざりうる(以前からある問題)。**
+  アプリ本体はファイルごとに「ネットワーク優先、4秒で CACHE」なので、サーバーに新しい版が出ている状態で
+  `index.html` だけネットワークから取れ、スクリプトはタイムアウトして CACHE の旧版が返ると、同じ種類の
+  `ReferenceError` になる。取れた新しい `index.html` は旧 CACHE に書き戻されるので、新しい SW の install が
+  終わるまではオフライン起動でも混在が続く。根本的に直すなら、アプリ本体をキャッシュ優先にして、版の丸ごとの
+  入れ替えを install/activate だけに任せる設計変更が要る(今回は範囲外)
+- v112 以前の SW がインストール済みのブラウザでは、v113 の SW が有効になるまでの1回は古い SW が動く。
+  その1回だけは古いファイルが混ざりうる(SW は `skipWaiting` と `clients.claim` ですぐ切り替わる)
+- SW が制御していないページ読み込み(初回訪問など)の `<script src>` は、従来どおり HTTP キャッシュに従う。
+  index.html とスクリプトの取得時刻がずれると、古いスクリプトが混ざる可能性はゼロではない。
+  直すならスクリプト URL に版のクエリを付ける方法があるが、LIBS・APP_ASSETS・sync-www の3箇所に
+  影響するので今回は見送った

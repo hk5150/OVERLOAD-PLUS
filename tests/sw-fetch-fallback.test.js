@@ -86,3 +86,41 @@ describe("sw.js fetch フォールバック", () => {
     expect(harness.cache.has({ url })).toBe(true);
   });
 });
+
+// ブラウザのHTTPキャッシュを素通りさせる指定。既定のままだと、版を上げても新しいCACHEに古い
+// src/domain/*.js が入り、新しいindex.htmlと組み合わさって起動エラーになる(v112の検証で実際に踏んだ)。
+describe("sw.js はHTTPキャッシュ越しの古いファイルを掴まない", () => {
+  it("installはAPP_ASSETSをすべて cache: 'no-cache' でサーバーに確認する", async () => {
+    const harness = createServiceWorkerHarness({ fetchImpl: offlineFetch });
+    await harness.triggerInstall();
+
+    const [reqs] = harness.cache.addAllCalls;
+    expect(reqs.length).toBeGreaterThan(10);
+    expect(reqs.filter((r) => typeof r === "string" || r.cache !== "no-cache")).toEqual([]);
+    expect(reqs.map((r) => r.url)).toContain("./src/domain/restNotifications.js");
+  });
+
+  it("アプリ本体のネットワーク優先fetchは cache: 'no-cache' でサーバーに確認する", async () => {
+    const ok = async () => new Response("fresh", { status: 200 });
+    const harness = createServiceWorkerHarness({ fetchImpl: ok });
+    await harness.triggerInstall();
+
+    const req = { method: "GET", url: `${harness.origin}/src/domain/units.js`, mode: "same-origin" };
+    const res = await harness.triggerFetch(req);
+
+    expect(await res.text()).toBe("fresh");
+    const [, init] = harness.fetchCalls.at(-1);
+    expect(init.cache).toBe("no-cache");
+  });
+
+  it("画面遷移(navigate)も同じく cache: 'no-cache' で取りにいく", async () => {
+    const ok = async () => new Response("<html>fresh</html>", { status: 200 });
+    const harness = createServiceWorkerHarness({ fetchImpl: ok });
+    await harness.triggerInstall();
+
+    await harness.triggerFetch({ method: "GET", url: `${harness.origin}/`, mode: "navigate" });
+
+    const [, init] = harness.fetchCalls.at(-1);
+    expect(init.cache).toBe("no-cache");
+  });
+});
