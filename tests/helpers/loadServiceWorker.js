@@ -26,7 +26,8 @@ function createFakeCache() {
   const addAllCalls = [];
   return {
     async put(req, res) { store.set(key(req), res); },
-    async match(req) { return store.get(key(req)); },
+    // 本物の Cache API は match のたびに新しい Response を返す(同じ本文を何度でも読める)
+    async match(req) { return store.get(key(req))?.clone(); },
     async addAll(reqs) {
       addAllCalls.push(reqs);
       for (const r of reqs) store.set(key(r), new Response(`cached:${urlOf(r)}`, { status: 200 }));
@@ -45,7 +46,7 @@ export function createServiceWorkerHarness({ fetchImpl } = {}) {
   const listeners = {};
   const fakeSelf = {
     addEventListener(type, cb) { listeners[type] = cb; },
-    location: { origin: ORIGIN },
+    location: { origin: ORIGIN, href: `${ORIGIN}/sw.js` },
     skipWaiting() {},
     clients: { claim() {} },
   };

@@ -61,6 +61,10 @@ const STRINGS = {
   // 部位・器具の区切り。日本語は中黒、英語は中点(全角の・は英文に混ざると異物になる)。
   "common.sep":        { ja: "・",           en: " · " },
 
+  // ---- 新しいバージョンのお知らせ(Web版のみ。index.html末尾のSW登録ブロックが検知) ----
+  "update.ready":      { ja: "新しいバージョンがあります", en: "A new version is available" },
+  "update.reload":     { ja: "更新",         en: "Update" },
+
   // ---- 起動時・保存まわりのエラー ----
   "err.crashTitle":    { ja: "予期しないエラーが発生しました。記録データは保存されたままです。", en: "Something went wrong. Your records are still saved." },
   "err.crashHint":     { ja: "再読み込みしてお試しください。", en: "Please reload and try again." },

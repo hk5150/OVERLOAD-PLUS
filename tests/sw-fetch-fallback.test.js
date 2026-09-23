@@ -100,27 +100,88 @@ describe("sw.js はHTTPキャッシュ越しの古いファイルを掴まない
     expect(reqs.map((r) => r.url)).toContain("./src/domain/restNotifications.js");
   });
 
-  it("アプリ本体のネットワーク優先fetchは cache: 'no-cache' でサーバーに確認する", async () => {
+  it("APP_ASSETS以外のネットワーク優先fetchは cache: 'no-cache' でサーバーに確認する", async () => {
     const ok = async () => new Response("fresh", { status: 200 });
     const harness = createServiceWorkerHarness({ fetchImpl: ok });
     await harness.triggerInstall();
 
-    const req = { method: "GET", url: `${harness.origin}/src/domain/units.js`, mode: "same-origin" };
+    const req = { method: "GET", url: `${harness.origin}/some/new/asset.js`, mode: "same-origin" };
     const res = await harness.triggerFetch(req);
 
     expect(await res.text()).toBe("fresh");
     const [, init] = harness.fetchCalls.at(-1);
     expect(init.cache).toBe("no-cache");
   });
+});
 
-  it("画面遷移(navigate)も同じく cache: 'no-cache' で取りにいく", async () => {
-    const ok = async () => new Response("<html>fresh</html>", { status: 200 });
-    const harness = createServiceWorkerHarness({ fetchImpl: ok });
+// 電波が弱いとファイルごとにタイムアウトが分かれ、新しいindex.htmlと古いスクリプトが混ざった(v113の残課題)。
+// アプリ本体は保存済みの版から丸ごと返し、版の入れ替えはinstall/activateだけに任せる。
+describe("sw.js はアプリ本体を保存済みの版から丸ごと返す(キャッシュ優先)", () => {
+  // ネットワークは常に「新しい版」を返す状況。キャッシュ優先なら、これは使われないはず。
+  const newerOnNetwork = async () => new Response("NEWER-FROM-NETWORK", { status: 200 });
+
+  it("APP_ASSETSのスクリプトは、ネットワークが別の中身を返しても保存済みの版を返し、ネットワークに行かない", async () => {
+    const harness = createServiceWorkerHarness({ fetchImpl: newerOnNetwork });
     await harness.triggerInstall();
 
-    await harness.triggerFetch({ method: "GET", url: `${harness.origin}/`, mode: "navigate" });
+    const req = { method: "GET", url: `${harness.origin}/src/domain/units.js`, mode: "same-origin" };
+    const res = await harness.triggerFetch(req);
 
-    const [, init] = harness.fetchCalls.at(-1);
-    expect(init.cache).toBe("no-cache");
+    expect(await res.text()).toBe("cached:./src/domain/units.js");
+    expect(harness.fetchCalls).toHaveLength(0);
+  });
+
+  it("アプリとして開く画面遷移(/ と index.html)は保存済みのindex.htmlを返し、ネットワークに行かない", async () => {
+    const harness = createServiceWorkerHarness({ fetchImpl: newerOnNetwork });
+    await harness.triggerInstall();
+
+    for (const path of ["/", "/index.html", "/index.html?source=pwa"]) {
+      const res = await harness.triggerFetch({ method: "GET", url: `${harness.origin}${path}`, mode: "navigate" });
+      expect(await res.text(), path).toBe("cached:./index.html");
+    }
+    expect(harness.fetchCalls).toHaveLength(0);
+  });
+
+  // App Store Connectに登録しているURL。アプリの画面にすり替えると、Web版を開いたことがある
+  // ブラウザでプライバシーポリシーとサポートが読めなくなる。
+  it("privacy.html・support.htmlなどアプリ以外のページはネットワークから返す", async () => {
+    const harness = createServiceWorkerHarness({ fetchImpl: async () => new Response("PRIVACY", { status: 200 }) });
+    await harness.triggerInstall();
+
+    for (const path of ["/privacy.html", "/support.html"]) {
+      const res = await harness.triggerFetch({ method: "GET", url: `${harness.origin}${path}`, mode: "navigate" });
+      expect(await res.text(), path).toBe("PRIVACY");
+    }
+  });
+
+  it("保存先からindex.htmlが欠けていても、別ページの中身をindex.htmlとして保存しない", async () => {
+    const harness = createServiceWorkerHarness({
+      fetchImpl: async (req) => new Response(`from:${typeof req === "string" ? req : req.url}`, { status: 200 }),
+    });
+    await harness.triggerInstall();
+    await harness.cache.delete(new URL("./index.html", `${harness.origin}/`).href);
+
+    const res = await harness.triggerFetch({ method: "GET", url: `${harness.origin}/`, mode: "navigate" });
+    // 開こうとしたURL(/)ではなく index.html そのものを取りにいく
+    expect(await res.text()).toBe(`from:${harness.origin}/index.html`);
+  });
+
+  it("クエリ付きでもAPP_ASSETSなら保存済みの版を返す", async () => {
+    const harness = createServiceWorkerHarness({ fetchImpl: newerOnNetwork });
+    await harness.triggerInstall();
+
+    const req = { method: "GET", url: `${harness.origin}/manifest.json?v=1`, mode: "same-origin" };
+    expect(await (await harness.triggerFetch(req)).text()).toBe("cached:./manifest.json");
+  });
+
+  it("保存済みの版に無く、ネットワークも失敗したら503(index.htmlは返さない)", async () => {
+    const harness = createServiceWorkerHarness({ fetchImpl: offlineFetch });
+    await harness.triggerInstall();
+    await harness.cache.delete(new URL("./src/domain/units.js", `${harness.origin}/`).href);
+
+    const req = { method: "GET", url: `${harness.origin}/src/domain/units.js`, mode: "same-origin" };
+    const res = await harness.triggerFetch(req);
+
+    expect(res.status).toBe(503);
   });
 });

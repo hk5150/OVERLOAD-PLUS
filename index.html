@@ -139,7 +139,23 @@
   })();
 
   function bootMsg(t){ var e=document.getElementById('bootmsg'); if(e) e.textContent=t; }
+  // 新しい版のSWが有効になったとき(末尾のSW登録ブロックで検知)、起動に失敗している画面だけは
+  // 自動で再読み込みする。v112以前のSWが配った「新旧が混ざったページ」を1回で立ち直らせるため。
+  // 30秒以内の再読み込みはしない(万一のループ防止)。
+  // 再読み込みしたらtrue。しなかった(ガード中・ストレージ不可)ときはfalseを返し、呼び出し側は
+  // 通常のエラー表示を続ける(スピナーのまま固まらないように)。
+  window.__reloadOnceForUpdate = function(){
+    try {
+      var last = Number(sessionStorage.getItem('kurabell-update-reloaded-at')) || 0;
+      if (Date.now() - last < 30000) return false;
+      sessionStorage.setItem('kurabell-update-reloaded-at', String(Date.now()));
+    } catch (e) { return false; }
+    location.reload();
+    return true;
+  };
   function bootFail(title, detail){
+    window.__bootFailed = true;
+    if (window.__updateReady && window.__reloadOnceForUpdate()) return;
     var s=document.getElementById('spin'); if(s) s.style.display='none';
     bootMsg(title);
     var e=document.getElementById('booterr');
@@ -230,7 +246,7 @@ const DRAFT_KEY = "workout-draft-v1"; // 入力途中の記録(アプリが落�
 const PRE_IMPORT_BACKUP_KEY = "workout-log-v1-pre-import"; // バックアップ復元前のデータ退避(復元に失敗した場合の保険)
 // ヘッダーのバージョンバッジとバックアップのappVersionで共有する単一の定数。
 // sw.js の CACHE 定数とは tests/version.test.js が数字の一致を機械的に縛っている(CLAUDE.md参照)。
-const APP_VERSION = "v113";
+const APP_VERSION = "v114";
 // store(保存レイヤ)は src/domain/storage.js へ移設(テストのため)。
 // LIBSで<script src>読み込み済みなのでグローバルの store をそのまま参照できる。
 const uid = () => Math.random().toString(36).slice(2, 8);
@@ -787,6 +803,14 @@ function App() {
   const [iapBusy, setIapBusy] = useState(false); // 購入/復元の通信中(二重タップ防止)
   const [iapError, setIapError] = useState(""); // 設定タブでの購入/復元エラー(記録タブのerrorとは独立)
   const [iapPending, setIapPending] = useState(false); // 保護者の承認待ち(Ask to Buy)。承認の通知(entitlementsChanged)で解除される
+  // Web版で新しい版のSWが有効になった(index.html末尾のSW登録ブロックが検知)。押すまで再読み込みしない。
+  // iOS版にはSWが無いので常にfalse。
+  const [updateReady, setUpdateReady] = useState(() => !!window.__updateReady);
+  useEffect(() => {
+    const on = () => setUpdateReady(true);
+    window.addEventListener("kurabell:update-ready", on);
+    return () => window.removeEventListener("kurabell:update-ready", on);
+  }, []);
   const paywallModalRef = useRef(null);
   const closePaywall = () => { setShowPaywall(false); setIapError(""); };
   useModalA11y(showPaywall, closePaywall, paywallModalRef);
@@ -2817,6 +2841,19 @@ function App() {
         </div>
       )}
 
+      {/* 新しいバージョンのお知らせ(Web版のみ)。押すと再読み込み。入力途中の記録はpagehideで下書きに保存される */}
+      {updateReady && (
+        <div role="status" style={{
+          margin: "0 16px 12px", padding: "10px 12px", borderRadius: 10,
+          background: C.surface, border: `1px solid ${C.blue}`, display: "flex", gap: 10, alignItems: "center",
+        }}>
+          <div style={{ flex: 1, minWidth: 0, fontSize: 13, color: C.text, lineHeight: 1.6 }}>{t("update.ready")}</div>
+          <button onClick={() => location.reload()} style={{ ...btn(C.blue), padding: "7px 14px", fontSize: 13, flexShrink: 0 }}>
+            {t("update.reload")}
+          </button>
+        </div>
+      )}
+
       {/* バックアップ推奨バナー */}
       {backupNag && (
         <div style={{
@@ -4566,9 +4603,39 @@ root.render(<ErrorBoundary><App /></ErrorBoundary>);
 
 <script>
   if ('serviceWorker' in navigator) {
-    window.addEventListener('load', function () {
-      navigator.serviceWorker.register('sw.js').catch(function () {});
-    });
+    (function () {
+      // localhostでは既定でSWを使わない。アプリ本体はキャッシュ優先なので、ファイルを編集しても
+      // 再読み込みで古い版が出続けるため。SW自体を検証するときは ?sw=1 を付けて開く(CLAUDE.md)。
+      var isLocal = /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
+      if (isLocal && !/[?&]sw=1(&|$)/.test(location.search)) {
+        navigator.serviceWorker.getRegistrations().then(function (rs) {
+          rs.forEach(function (r) { r.unregister(); });
+        }).catch(function () {});
+        return;
+      }
+      // 新しい版の検知。sw.jsはアプリ本体を保存済みの版から丸ごと返すので、新しい版はinstallで全部
+      // 取れてactivate(skipWaiting + clients.claim)したときに初めて使える。そのときこのページの
+      // controllerが入れ替わる。開いた時点でSWに制御されていなかった(初回インストール)なら知らせない。
+      var hadController = !!navigator.serviceWorker.controller;
+      navigator.serviceWorker.addEventListener('controllerchange', function () {
+        if (!hadController) return;
+        window.__updateReady = true;
+        if (window.__bootFailed && window.__reloadOnceForUpdate()) return;
+        window.dispatchEvent(new Event('kurabell:update-ready')); // アプリ側がバナーを出す
+      });
+      window.addEventListener('load', function () {
+        navigator.serviceWorker.register('sw.js').then(function (reg) {
+          // ホーム画面のPWAは開きっぱなしにされがちで、ブラウザの自動の更新確認(画面遷移時)が
+          // 走らない。前面に戻ったとき、前回から10分以上たっていれば確認する。
+          var lastCheck = Date.now();
+          document.addEventListener('visibilitychange', function () {
+            if (document.visibilityState !== 'visible' || Date.now() - lastCheck < 10 * 60 * 1000) return;
+            lastCheck = Date.now();
+            reg.update().catch(function () {});
+          });
+        }).catch(function () {});
+      });
+    })();
   }
 </script>
 

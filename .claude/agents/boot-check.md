@@ -33,6 +33,9 @@ tools: Read, Grep, Bash, mcp__Claude_Browser__preview_start, mcp__Claude_Browser
      （`javascript_tool` で `!!document.getElementById('boot')` を評価するのが確実）
    - `get_page_text` で主要な画面のテキストが出ているか見る
 4. `preview_start` で `kurabell-www`(8766) を開き、同じ判定を繰り返す
+   - 8765 は localhost なので既定で Service Worker を使わない(`?sw=1` の無い読み込みでは解除される)。
+     **`sw.js` か index.html 末尾の SW 登録ブロックが変わったときは、8765 を `/index.html?sw=1` でも開き**、
+     2回読み込んで(1回目で SW が入り、2回目で SW 経由になる)同じ判定をする
 5. 依頼で特定の画面を指定されていれば、そこまで遷移して同じ確認をする
 
 ## 報告の形式

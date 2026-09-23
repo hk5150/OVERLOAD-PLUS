@@ -1,16 +1,20 @@
 ---
 name: kurabell-sw-nonatomic-shell
-description: sw.jsのアプリ本体はファイル単位のネットワーク優先+4秒タイムアウトなので、電波が弱いと新旧版のファイルが混ざりCACHEにも混在が書き戻される(v113レビューで未解決として指摘)
+description: sw.jsの新旧混在問題の経緯。v113までネットワーク優先で混在、v114でキャッシュ優先+navigate全部index.htmlに変更。同スコープのprivacy.html/support.htmlを飲み込む副作用に注意
 metadata:
   type: project
 ---
 
-sw.js のアプリ本体経路は「ファイルごとにネットワーク優先、4秒でCACHEへフォールバック、成功分は現行CACHEへ put」。
-サーバーが新版を配信済みでSWが旧版のまま、電波が弱いと index.html(新)+一部の src/domain/*.js(旧CACHE)が組み合わさり、
-新版の index.html が旧版名のCACHEに書き戻されるので、次のオフライン起動でも混在が続く。
-v113 は HTTPキャッシュ由来の混在(install の cache:"reload"、fetch の cache:"no-cache")だけを直しており、この経路は残っている(2026-09-24時点)。
+v113 まで: アプリ本体は「ファイルごとにネットワーク優先、4秒でCACHEへフォールバック」で、電波が弱いと新旧が混在し旧CACHEにも書き戻された。
+v114(2026-09-24レビュー時点で未コミット): APP_ASSETS と navigate をキャッシュ優先にし、版の入れ替えは install/activate のみ。
+controllerchange でバナー、起動失敗時だけ自動再読み込み。localhost は `?sw=1` 無しだと SW を解除する。
 
-**Why:** 「新しい index.html と古い domain JS の組み合わせ」は起動エラー(ReferenceError)になる。混在の原因はHTTPキャッシュだけではない。
+v114 レビューで指摘した残りの穴:
+- navigate を URL に関係なく index.html で返すため、同じスコープ(/OVERLOAD-PLUS/)にある `privacy.html` / `support.html`
+  (App Store Connect に登録する URL)が、Web版を使ったブラウザでは開けなくなる
+- 起動途中(LIBS 読み込み中)に新SWが activate+claim すると、残りの LIBS は新版から返り混在しうる(bootFail 側の自動再読み込みで一部救済)
 
-**How to apply:** sw.js の fetch/install を触る差分や、「SW経由では古いファイルを掴まない」と主張する文書を見たら、
-タイムアウト→CACHE フォールバックによる混在が残っていないか、主張の範囲が正しいかを確認する。関連: [[kurabell-version-entry-in-vite-doc]]
+**Why:** 「新旧は原理的に混ざらない」「navigate は全部 index.html でよい」という主張は、スコープ内の他のHTMLと起動中の claim を見落としやすい。
+
+**How to apply:** sw.js の fetch/install/activate を触る差分では、スコープ内の index.html 以外のHTML(git ls-files '*.html')と、
+claim のタイミングで起動中のページがどうなるかを確認する。関連: [[kurabell-version-entry-in-vite-doc]]

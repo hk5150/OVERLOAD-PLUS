@@ -1,6 +1,6 @@
 // KURABELL+ Service Worker
 // アプリ本体をキャッシュし、オフラインでも起動できるようにする。ライブラリもすべてローカル同梱(CDN不使用)。
-const CACHE = "kurabell-v113";
+const CACHE = "kurabell-v114";
 
 // ネットワーク優先フェッチのタイムアウト(電波が弱い環境でハングし続けるのを防ぐ)
 const NETWORK_TIMEOUT_MS = 4000;
@@ -72,41 +72,64 @@ const cacheIfOk = (req, res) => {
   return res;
 };
 
+// アプリ本体(APP_ASSETS)の絶対URL。スコープはsw.jsの場所(GitHub Pagesでは /OVERLOAD-PLUS/)。
+const APP_ASSET_URLS = new Set(APP_ASSETS.map((u) => new URL(u, self.location.href).href));
+const INDEX_URL = new URL("./index.html", self.location.href).href;
+// アプリとして開くURL(スコープ直下と index.html)。これ以外の画面遷移(privacy.html・support.html。
+// App Store Connectに登録しているURL)はアプリの画面にすり替えず、ネットワーク優先の経路で返す。
+const APP_ENTRY_URLS = new Set([new URL("./", self.location.href).href, INDEX_URL]);
+
+const offlineUnavailable = () => new Response("Offline asset unavailable", {
+  status: 503,
+  statusText: "Service Unavailable",
+  headers: { "Content-Type": "text/plain; charset=utf-8" },
+});
+
+// 保存済みの版(今のCACHE)から返す。無ければネットワークで補う(installのaddAllが通っていれば起きない保険)。
+// 補うときは開こうとしたURLではなくkeyそのものを取りにいく(別のページの中身をkeyの場所に保存しないため)。
+const fromCacheFirst = (key) =>
+  caches.open(CACHE)
+    .then((c) => c.match(key))
+    .then((hit) => hit || fetch(key, { cache: "no-cache" }).then((res) => cacheIfOk(key, res)))
+    .catch(offlineUnavailable);
+
 self.addEventListener("fetch", (e) => {
   const req = e.request;
   if (req.method !== "GET") return;
 
   // 同一origin以外は捕捉しない。ブラウザの通常のfetchに任せる
   // (現状すべて同梱なので外部リクエスト自体が無いはずだが、将来足された場合の保険)
-  if (new URL(req.url).origin !== self.location.origin) return;
+  const url = new URL(req.url);
+  if (url.origin !== self.location.origin) return;
 
-  // 同梱ライブラリとフォント: サイズが大きく中身も変わらないのでキャッシュ優先。
-  // 無ければネットワークから取得してキャッシュに補充する。
-  if (req.url.includes("/vendor/") || req.url.includes("/fonts/")) {
-    e.respondWith(
-      caches.match(req).then((hit) => {
-        if (hit) return hit;
-        return fetch(req).then((res) => cacheIfOk(req, res));
-      })
-    );
+  // アプリ本体と画面遷移は、保存済みの版から丸ごと返す(キャッシュ優先)。
+  // 以前はファイルごとに「ネットワーク優先、4秒でタイムアウトしたら保存済み」だったため、
+  // 電波が弱いと index.html だけ新しくスクリプトは古い、という混在が起きた(v113の残課題)。
+  // 版の入れ替えは install(addAllは1件でも失敗すれば全体が失敗)と activate だけに任せる。
+  // 新しい版の反映はページ側がcontrollerchangeで検知してバナーで知らせる(index.html末尾)。
+  url.search = "";
+  url.hash = "";
+  if (req.mode === "navigate" && APP_ENTRY_URLS.has(url.href)) {
+    e.respondWith(fromCacheFirst(INDEX_URL));
+    return;
+  }
+  if (req.mode !== "navigate" && APP_ASSET_URLS.has(url.href)) {
+    e.respondWith(fromCacheFirst(url.href));
     return;
   }
 
-  // アプリ本体: ネットワーク優先(更新を取りにいく)。タイムアウトまたは失敗時はキャッシュにフォールバック。
-  // キャッシュにも無い場合、index.htmlへのフォールバックはナビゲーションリクエストのみに限定する
-  // (JS/JSON/画像等のリクエストにHTMLを返すと「Unexpected token '<'」のような誤動作を招くため)。
+  // それ以外(APP_ASSETSに無いもの・アプリ以外のページ): ネットワーク優先。タイムアウトまたは失敗時は
+  // 以前取れたものがあればそれを返す。それも無ければ、画面遷移だけは保存済みのindex.htmlにし
+  // (オフラインで何も出ないよりはアプリを開く)、それ以外は503(JS等にHTMLを返すと
+  // 「Unexpected token '<'」のような誤動作を招くため)。
   e.respondWith(
     new Promise((resolve) => {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), NETWORK_TIMEOUT_MS);
       const fallback = () => caches.match(req).then((hit) => {
         if (hit) return resolve(hit);
-        if (req.mode === "navigate") return caches.match("./index.html").then(resolve);
-        resolve(new Response("Offline asset unavailable", {
-          status: 503,
-          statusText: "Service Unavailable",
-          headers: { "Content-Type": "text/plain; charset=utf-8" },
-        }));
+        if (req.mode === "navigate") return caches.match(INDEX_URL).then((idx) => resolve(idx || offlineUnavailable()));
+        resolve(offlineUnavailable());
       });
 
       // no-cache: HTTPキャッシュを使う前に必ずサーバーへ確認する(変わっていなければ304で軽い)。
