@@ -260,7 +260,8 @@ const STRINGS = {
   // ---- 使い方ガイド ----
   "guide.title":       { ja: "アプリの使い方ガイド",   en: "How to use this app" },
   "guide.welcome":     { ja: "KURABELL Workout Log へようこそ", en: "Welcome to KURABELL Workout Log" },
-  "guide.welcomeLead": { ja: "前回の内容がそのまま出てくる、筋トレ記録アプリです。", en: "A lifting log that puts your last session right in front of you." },
+  // 「|」は折り返してよい位置(ガイドのリード文だけが解釈する)。無いとスマホ幅で「…アプ/リ。」と割れる。
+  "guide.welcomeLead": { ja: "前回の自分を超えるための|筋トレ記録アプリ。", en: "A lifting log built to help you beat your last session." },
   "guide.welcomeBody": { ja: "同じ分割の前回の記録(重量・回数・セット数)がそのまま並ぶので、入力の手間なく「前回より上」を狙えます。推定1RMや自己ベストは自動で計算されます。", en: "Your last session on the same split day — weight, reps and set count — is laid out for you, so beating it takes no data entry. Estimated 1RM and personal bests are calculated automatically." },
   "guide.step1":       { ja: "① 分割を決める",         en: "① Choose a split" },
   "guide.step1Lead":   { ja: "「分割」タブで、あなたのトレーニング分割を作ります。", en: "Build your training split in the Split tab." },
