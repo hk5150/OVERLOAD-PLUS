@@ -1,0 +1,3 @@
+/* ヘルスケア連携の権限ダイアログの文言(日本語)。英語は Info.plist にある。 */
+"NSHealthShareUsageDescription" = "自重種目の計算に使うため、ヘルスケアから最新の体重を読み込みます。";
+"NSHealthUpdateUsageDescription" = "ワークアウトと、アプリで入力した体重をヘルスケアに記録します。";

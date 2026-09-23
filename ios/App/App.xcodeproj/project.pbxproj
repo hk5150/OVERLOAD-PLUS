@@ -10,6 +10,7 @@
 		1459699397BA435769AD9412 /* StoreManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D9B002FB6F5FB812D98229F /* StoreManager.swift */; };
 		298AF55A7C0A153BF3A885BC /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8770DE6CE1F21E972543BA20 /* SwiftUI.framework */; };
 		2FAD9763203C412B000D30F8 /* config.xml in Resources */ = {isa = PBXBuildFile; fileRef = 2FAD9762203C412B000D30F8 /* config.xml */; };
+		412C948172910A54B4C53024 /* HealthPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F46C657204AD1B2F3180EEAC /* HealthPlugin.swift */; };
 		41ED8E19A1465DD2D4223448 /* RestActivityBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0CAF3FA0EB0D91FD57B7661 /* RestActivityBundle.swift */; };
 		426BC6942F84D982D9F70207 /* RestActivity.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 30BD14DAAAE86D5CC41D0A7A /* RestActivity.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		45ECA843F55BE8A7CDEC36D2 /* ActivityKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8A8673594951CFDD7AC3688F /* ActivityKit.framework */; settings = {ATTRIBUTES = (Weak, ); }; };
@@ -22,6 +23,9 @@
 		50B271D11FEDC1A000F3C39B /* public in Resources */ = {isa = PBXBuildFile; fileRef = 50B271D01FEDC1A000F3C39B /* public */; };
 		59B23E7B675DD7F7E0882F65 /* IapPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDD8743137EA64209737AD3E /* IapPlugin.swift */; };
 		6A1D0C2E1A4B47D8B0E5F001 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 6A1D0C2D1A4B47D8B0E5F000 /* PrivacyInfo.xcprivacy */; };
+		6CF447A4C33BE277A375E86B /* HealthKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AA83C9C9F4006CE540CEEA64 /* HealthKit.framework */; };
+		8B012A538D7888067F838A56 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 5783F33A39803DE5BA4657C6 /* InfoPlist.strings */; };
+		8E62FF896F154D0AB2B7E0E1 /* HealthManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E531041F376EFAFA802652D /* HealthManager.swift */; };
 		905EFE9B01A85DAE37F9FF12 /* RestActivityLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80CFB1A042027EBA9941D491 /* RestActivityLiveActivity.swift */; };
 		90B2AFA841F38E689BBA405F /* RestTimerAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = D14AD22BEF97714C080BC66B /* RestTimerAttributes.swift */; };
 		92DD79B0AF33B524EDBD82DF /* RestTimerManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8D03ED677AFB8D417D4C04 /* RestTimerManager.swift */; };
@@ -73,16 +77,20 @@
 		5D9B002FB6F5FB812D98229F /* StoreManager.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = StoreManager.swift; sourceTree = "<group>"; };
 		60223FC6406A946ECEB0619A /* StoreKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = StoreKit.framework; path = System/Library/Frameworks/StoreKit.framework; sourceTree = SDKROOT; };
 		6A1D0C2D1A4B47D8B0E5F000 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		6E531041F376EFAFA802652D /* HealthManager.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HealthManager.swift; sourceTree = "<group>"; };
 		80CFB1A042027EBA9941D491 /* RestActivityLiveActivity.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RestActivityLiveActivity.swift; sourceTree = "<group>"; };
 		8770DE6CE1F21E972543BA20 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 		8A8673594951CFDD7AC3688F /* ActivityKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = ActivityKit.framework; path = System/Library/Frameworks/ActivityKit.framework; sourceTree = SDKROOT; };
 		A3C2354788ED14DA304DD61B /* BridgeViewController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BridgeViewController.swift; sourceTree = "<group>"; };
 		A518090B3BA1447F59E331AD /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
+		AA83C9C9F4006CE540CEEA64 /* HealthKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = HealthKit.framework; path = System/Library/Frameworks/HealthKit.framework; sourceTree = SDKROOT; };
 		AA8D03ED677AFB8D417D4C04 /* RestTimerManager.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RestTimerManager.swift; sourceTree = "<group>"; };
+		AE80F0411D4CFCF6A87B7A5E /* ja */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.strings; name = ja; path = ja.lproj/InfoPlist.strings; sourceTree = "<group>"; };
 		AF277DCFFFF123FFC6DF26C7 /* Pods_App.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_App.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		AF51FD2D460BCFE21FA515B2 /* Pods-App.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-App.release.xcconfig"; path = "Pods/Target Support Files/Pods-App/Pods-App.release.xcconfig"; sourceTree = "<group>"; };
 		D14AD22BEF97714C080BC66B /* RestTimerAttributes.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RestTimerAttributes.swift; sourceTree = "<group>"; };
 		E0CAF3FA0EB0D91FD57B7661 /* RestActivityBundle.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RestActivityBundle.swift; sourceTree = "<group>"; };
+		F46C657204AD1B2F3180EEAC /* HealthPlugin.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HealthPlugin.swift; sourceTree = "<group>"; };
 		FC68EB0AF532CFC21C3344DD /* Pods-App.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-App.debug.xcconfig"; path = "Pods/Target Support Files/Pods-App/Pods-App.debug.xcconfig"; sourceTree = "<group>"; };
 		FDD8743137EA64209737AD3E /* IapPlugin.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = IapPlugin.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -95,6 +103,7 @@
 				A084ECDBA7D38E1E42DFC39D /* Pods_App.framework in Frameworks */,
 				EA31416053B0D7A0A18C980E /* StoreKit.framework in Frameworks */,
 				45ECA843F55BE8A7CDEC36D2 /* ActivityKit.framework in Frameworks */,
+				6CF447A4C33BE277A375E86B /* HealthKit.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -157,6 +166,8 @@
 				A3C2354788ED14DA304DD61B /* BridgeViewController.swift */,
 				FE0810342031073768C4185C /* RestTimer */,
 				34A0471B1932971EEE4ECFED /* App.entitlements */,
+				B26D7BE78FA82F945F135C0D /* Health */,
+				5783F33A39803DE5BA4657C6 /* InfoPlist.strings */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -166,6 +177,7 @@
 			children = (
 				A518090B3BA1447F59E331AD /* WidgetKit.framework */,
 				8770DE6CE1F21E972543BA20 /* SwiftUI.framework */,
+				AA83C9C9F4006CE540CEEA64 /* HealthKit.framework */,
 			);
 			name = iOS;
 			sourceTree = "<group>";
@@ -198,6 +210,16 @@
 			);
 			name = RestActivity;
 			path = RestActivity;
+			sourceTree = "<group>";
+		};
+		B26D7BE78FA82F945F135C0D /* Health */ = {
+			isa = PBXGroup;
+			children = (
+				F46C657204AD1B2F3180EEAC /* HealthPlugin.swift */,
+				6E531041F376EFAFA802652D /* HealthManager.swift */,
+			);
+			name = Health;
+			path = Health;
 			sourceTree = "<group>";
 		};
 		FE0810342031073768C4185C /* RestTimer */ = {
@@ -281,6 +303,7 @@
 			knownRegions = (
 				en,
 				Base,
+				ja,
 			);
 			mainGroup = 504EC2FB1FED79650016851F;
 			productRefGroup = 504EC3051FED79650016851F /* Products */;
@@ -305,6 +328,7 @@
 				50379B232058CBB4000EE86E /* capacitor.config.json in Resources */,
 				504EC30D1FED79650016851F /* Main.storyboard in Resources */,
 				2FAD9763203C412B000D30F8 /* config.xml in Resources */,
+				8B012A538D7888067F838A56 /* InfoPlist.strings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -365,6 +389,8 @@
 				A7BEFDF1DA9DFA458C845B50 /* RestTimerPlugin.swift in Sources */,
 				92DD79B0AF33B524EDBD82DF /* RestTimerManager.swift in Sources */,
 				90B2AFA841F38E689BBA405F /* RestTimerAttributes.swift in Sources */,
+				412C948172910A54B4C53024 /* HealthPlugin.swift in Sources */,
+				8E62FF896F154D0AB2B7E0E1 /* HealthManager.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -404,6 +430,14 @@
 				504EC3111FED79650016851F /* Base */,
 			);
 			name = LaunchScreen.storyboard;
+			sourceTree = "<group>";
+		};
+		5783F33A39803DE5BA4657C6 /* InfoPlist.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				AE80F0411D4CFCF6A87B7A5E /* ja */,
+			);
+			name = InfoPlist.strings;
 			sourceTree = "<group>";
 		};
 /* End PBXVariantGroup section */

@@ -389,6 +389,11 @@ const STRINGS = {
   "unit.lb":           { ja: "lb",                     en: "lb" },
   "settings.guideAgain": { ja: "📖 使い方ガイドをもう一度見る", en: "📖 Show the guide again" },
   "settings.bodyweight": { ja: "体重(自重換算・カロリー計算に使用)", en: "Bodyweight (used for bodyweight lifts and calories)" },
+  // ヘルスケア連携(iOSのみ)。何を読み書きするかを画面上で明示する(App Store Guideline 2.5.1)。
+  "settings.health.title": { ja: "ヘルスケアと連携", en: "Connect to Apple Health" },
+  "settings.health.desc": { ja: "ワークアウトを「従来型筋力トレーニング」として記録し(時刻のみ。消費カロリーは記録しません)、体重を読み込み・記録します。オンにする前の記録は書き込みません。このアプリで記録を削除すると、ヘルスケアからも削除されます。", en: "Saves workouts as Traditional Strength Training (times only, no calories), and reads and saves your body weight. Workouts from before you turn this on are not added. Deleting a workout in this app also removes it from Health." },
+  "settings.health.denied": { ja: "ヘルスケアへの書き込みが一部許可されていません。ヘルスケアアプリの右上のアイコン →「App」→ KURABELL で許可してください。", en: "Some Health write permissions are off. Allow it in the Health app: tap your profile picture → Apps → KURABELL." },
+  "settings.health.failed": { ja: "ヘルスケアに接続できませんでした。", en: "Could not connect to Apple Health." },
   "settings.exercises": { ja: "種目の設定",            en: "Exercise settings" },
   "settings.exercisesDesc": { ja: "内蔵種目も含めて設定を変更できます。部位はボリューム集計に、片手(ダンベル)・自重は重量の計算に使われます。", en: "Adjust any exercise, built-in ones included. Muscle drives volume totals; per-hand and bodyweight drive weight calculations." },
   "settings.exSearch": { ja: "種目を検索(空欄なら使用中の種目)", en: "Search exercises (empty shows the ones you use)" },

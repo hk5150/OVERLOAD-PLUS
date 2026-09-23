@@ -186,6 +186,7 @@
     { key:'insight',    urls:['src/domain/insight.js'] },
     { key:'restNotifications', urls:['src/domain/restNotifications.js'] },
     { key:'iap',        urls:['src/domain/iap.js'] },
+    { key:'health',     urls:['src/domain/health.js'] },
     // iOS版のSQLite永続化層。Web版では何もしない(nativeSqliteDriver()がnullを返すだけ)。
     { key:'dbSchema',    urls:['src/domain/db/schema.js'] },
     { key:'dbMigration', urls:['src/domain/db/migration.js'] },
@@ -246,7 +247,7 @@ const DRAFT_KEY = "workout-draft-v1"; // 入力途中の記録(アプリが落�
 const PRE_IMPORT_BACKUP_KEY = "workout-log-v1-pre-import"; // バックアップ復元前のデータ退避(復元に失敗した場合の保険)
 // ヘッダーのバージョンバッジとバックアップのappVersionで共有する単一の定数。
 // sw.js の CACHE 定数とは tests/version.test.js が数字の一致を機械的に縛っている(CLAUDE.md参照)。
-const APP_VERSION = "v115";
+const APP_VERSION = "v116";
 // store(保存レイヤ)は src/domain/storage.js へ移設(テストのため)。
 // LIBSで<script src>読み込み済みなのでグローバルの store をそのまま参照できる。
 const uid = () => Math.random().toString(36).slice(2, 8);
@@ -314,6 +315,9 @@ const defaultProfile = (p) => ({
   unit: p?.unit ?? null,
   // 「AIに相談」で開くチャットサービス。値は AI_SERVICES のid。
   aiService: p?.aiService ?? DEFAULT_AI_SERVICE,
+  // ヘルスケア連携(iOSのみ)。healthBwAt は最後にヘルスケアと体重を同期した日時(エポックミリ秒)。
+  // これより新しいヘルスケアの体重だけを反映する(pickHealthWeight、src/domain/health.js)。
+  healthOn: p?.healthOn ?? false, healthBwAt: p?.healthBwAt ?? 0,
 });
 
 // extractWorkoutsArray・validateWorkoutsShapeは src/domain/backupValidation.js へ移設(テストのため)。
@@ -761,7 +765,7 @@ class ErrorBoundary extends React.Component {
 // 新規インストール時、および全データ削除後の既定値(clearAllで再利用し、削除直後に古いprofileが復活しないようにする)
 // defaultProfile() と同じフィールドを持たせる。ここに書き忘れると、初回起動と
 // 「全データ削除」直後だけ値がundefinedになり、設定タブの選択状態が消える。
-const DEFAULT_PROFILE = { bodyweight: 70, soundOn: true, defTargetReps: 10, defIncrement: 2.5, lang: null, unit: null, aiService: DEFAULT_AI_SERVICE };
+const DEFAULT_PROFILE = { bodyweight: 70, soundOn: true, defTargetReps: 10, defIncrement: 2.5, lang: null, unit: null, aiService: DEFAULT_AI_SERVICE, healthOn: false, healthBwAt: 0 };
 
 // ================= アプリ本体 =================
 // 文言中の「|」の位置だけで折り返す(日本語は語の途中でも折り返されるため、意味の切れ目を指定する)。
@@ -1057,6 +1061,71 @@ function App() {
       setSaveStatus("error");
       setError(t("err.saveFailed"));
     }
+  };
+
+  // ---- ヘルスケア連携(iOSのみ。docs/ヘルスケア連携.md) ----
+  // ヘルスケアの応答を待ってから反映する経路では、awaitの前に捕まえたpersistを呼ぶと、
+  // その間に変わった他の項目(workouts等)を古い値で上書きしてしまう。常に最新をrefで参照する。
+  const persistRef = useRef(persist); persistRef.current = persist;
+  const profileRef = useRef(profile); profileRef.current = profile;
+  const [healthOk, setHealthOk] = useState(false);       // この端末でヘルスケアが使えるか
+  const [healthStatus, setHealthStatus] = useState(null); // 書き込み権限 { workout, bodyMass }
+  const [healthError, setHealthError] = useState("");
+  const healthOn = healthOk && profile.healthOn === true;
+  const bwBeforeEditRef = useRef(null); // 体重欄の編集前の値。フォーカス中だけ非null
+  useEffect(() => { healthSupported().then(setHealthOk); }, []);
+  // 連携のオン/オフと同期日時は「この端末で権限を取ったか」という端末固有の状態なので、
+  // バックアップの復元では今の値を残す。復元でオンになると、権限シートを一度も出さないまま
+  // オンの表示になり、書き込みが黙って失敗し続ける(逆に、オンの端末に古いバックアップを戻すと黙ってオフになる)。
+  const keepDeviceHealth = (restored) => ({
+    ...restored, healthOn: profileRef.current.healthOn === true, healthBwAt: profileRef.current.healthBwAt ?? 0,
+  });
+
+  // ヘルスケアの最新の体重が、最後に同期したときより新しければ設定の体重に反映する。
+  const pullHealthWeight = async () => {
+    if (profileRef.current.healthOn !== true) return;
+    // 体重欄の編集中は差し替えない(入力途中の値が消え、離れたときにその値をヘルスケアへ書き戻してしまう)
+    if (bwBeforeEditRef.current != null) return;
+    const sample = await healthLatestBodyMass();
+    const cur = profileRef.current;
+    if (cur.healthOn !== true || bwBeforeEditRef.current != null) return; // 待っている間にオフ/編集開始
+    const next = pickHealthWeight(sample, cur.healthBwAt);
+    if (next) await persistRef.current({ profile: { ...cur, ...next } });
+  };
+  // 起動後と、画面が前面に戻ったとき(体重計アプリで量ってから戻ってくる使い方)に読み込む。
+  useEffect(() => {
+    if (!loaded || !healthOn) return;
+    const sync = () => { pullHealthWeight(); healthAuthorizationStatus().then(setHealthStatus); };
+    sync();
+    const onVisible = () => { if (document.visibilityState === "visible") sync(); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [loaded, healthOn]);
+
+  const toggleHealth = async () => {
+    setHealthError("");
+    if (profile.healthOn) { persist({ profile: { ...profile, healthOn: false } }); return; }
+    // 権限シートはここで初めて出す(起動時にいきなり出さない)。シートは初回しか出ないので、
+    // 2回目以降は現在の状態が返るだけ。拒否されていても連携自体はオンにして、案内文を出す。
+    const st = await healthRequestAuthorization();
+    if (!st) { setHealthError(t("settings.health.failed")); return; }
+    setHealthStatus(st);
+    // オンになるとeffectが体重を読み込む
+    await persistRef.current({ profile: { ...profileRef.current, healthOn: true } });
+  };
+
+  // 設定画面で体重を編集し終えたとき(フォーカスが外れたとき)だけヘルスケアに書く。
+  // 入力は1文字ごとに保存されるので、onChangeで書くと途中の値("7"など)まで記録されてしまう。
+  // 手で入れた値は、その時点より古いヘルスケアの体重で上書きしない。書き込みの成否や連携のオン/オフに
+  // よらず、同期日時を「書いたサンプルの日時(失敗・オフなら今)」まで進める。
+  const pushHealthWeight = async () => {
+    const before = bwBeforeEditRef.current;
+    bwBeforeEditRef.current = null;
+    const kg = healthWeightToWrite(before, profileRef.current.bodyweight);
+    if (kg == null) return;
+    const at = (healthOn ? await healthSaveBodyMass(kg) : null) ?? Date.now();
+    // 書いたサンプルの日時を同期済みにする(次の読み込みで自分の書いた値を拾い直さない)
+    await persistRef.current({ profile: { ...profileRef.current, healthBwAt: at } });
   };
 
   // 保存に失敗した後の再試行。楽観的更新で画面には既に反映されている現在のstateを、
@@ -1796,6 +1865,8 @@ function App() {
       setOfferSaveAsMenu({ exercises: exercises.map(ex => ex.name), muscles });
     }
     await persist({ workouts: [...workouts, entry], split: nextSplit });
+    // 待たない(ヘルスケアへの書き込みが遅れても失敗しても、記録の保存とは無関係)
+    if (healthOn) healthSaveWorkout(entry);
     // 終了コメント
     setToday([]); setSaving(false);
     setStartAt(null); setElapsed(0); stopRest();
@@ -2002,6 +2073,7 @@ function App() {
       if (!window.confirm(t("history.emptyAfterEdit"))) return;
       const next = workouts.filter((_, i) => i !== index);
       await persist({ workouts: next });
+      if (healthOn) healthDeleteWorkout(workouts[index]);
       setEditWorkout(null);
       return;
     }
@@ -2252,6 +2324,8 @@ function App() {
     if (!window.confirm(t("history.confirmDelete", { date: fmtDate(w.date) }))) return;
     const next = workouts.filter((_, i) => i !== index);
     await persist({ workouts: next });
+    // このアプリが書いたワークアウトだけが消える(バックアップの復元・全削除では消さない)
+    if (healthOn) healthDeleteWorkout(w);
     setEditWorkout(null);
   };
 
@@ -2314,7 +2388,7 @@ function App() {
       const next = {
         workouts: migrateWorkouts(ws),
         split: migrateSplit(p.split),
-        profile: defaultProfile(p.profile),
+        profile: keepDeviceHealth(defaultProfile(p.profile)),
         recentNames: p.recentNames || [],
         customExercises: p.customExercises || [],
         exerciseNotes: p.exerciseNotes || {},
@@ -2341,7 +2415,7 @@ function App() {
       const next = {
         workouts: migrateWorkouts(ws),
         split: migrateSplit(p.split),
-        profile: defaultProfile(p.profile),
+        profile: keepDeviceHealth(defaultProfile(p.profile)),
         recentNames: p.recentNames || [],
         customExercises: p.customExercises || [],
         exerciseNotes: p.exerciseNotes || {},
@@ -4284,9 +4358,37 @@ function App() {
           <div style={{ background: C.surface, borderRadius: 14, padding: 16, border: `1px solid ${C.border}`, marginBottom: 12 }}>
             <label style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 14 }}>
               {t("settings.bodyweight")}
-              <span><NumInput inputMode="decimal" value={wU(profile.bodyweight)} onChange={e => persist({ profile: { ...profile, bodyweight: fromU(e.target.value) } })} style={{ ...cfgInput, width: 70, fontSize: 16 }} /> {uLabel()}</span>
+              <span><NumInput inputMode="decimal" value={wU(profile.bodyweight)} onChange={e => persist({ profile: { ...profile, bodyweight: fromU(e.target.value) } })}
+                onFocus={() => { bwBeforeEditRef.current = profile.bodyweight; }} onBlur={pushHealthWeight}
+                style={{ ...cfgInput, width: 70, fontSize: 16 }} /> {uLabel()}</span>
             </label>
           </div>
+
+          {/* ヘルスケア連携(iOSでヘルスケアが使える端末だけ) */}
+          {healthOk && (
+            <div style={{ background: C.surface, borderRadius: 14, padding: 16, border: `1px solid ${C.border}`, marginBottom: 12 }}>
+              <label style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 14 }}>
+                {t("settings.health.title")}
+                <button onClick={toggleHealth}
+                  role="switch" aria-checked={healthOn} aria-label={t("settings.health.title")}
+                  style={{ width: 52, height: 30, borderRadius: 999, border: "none", cursor: "pointer", background: healthOn ? C.green : C.grey, position: "relative", flexShrink: 0 }}>
+                  <span style={{ position: "absolute", top: 3, left: healthOn ? 25 : 3, width: 24, height: 24, borderRadius: "50%", background: "#fff", transition: "left .15s" }} />
+                </button>
+              </label>
+              <p style={{ color: C.muted, fontSize: 13, margin: "10px 0 0", lineHeight: 1.6 }}>
+                {t("settings.health.desc")}
+              </p>
+              {/* 書き込みの権限は一度拒否されるとシートが出ないので、ヘルスケアアプリへ誘導する */}
+              {healthOn && (healthStatus?.workout === "denied" || healthStatus?.bodyMass === "denied") && (
+                <p style={{ color: C.yellow, fontSize: 13, margin: "10px 0 0", lineHeight: 1.6 }}>
+                  {t("settings.health.denied")}
+                </p>
+              )}
+              {healthError && (
+                <p style={{ color: C.red, fontSize: 13, margin: "10px 0 0", lineHeight: 1.6 }}>{healthError}</p>
+              )}
+            </div>
+          )}
 
           {/* 種目の設定 */}
           <div style={{ background: C.surface, borderRadius: 14, padding: 16, border: `1px solid ${C.border}`, marginBottom: 12 }}>
