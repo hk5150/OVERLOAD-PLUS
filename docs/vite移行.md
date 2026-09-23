@@ -1636,6 +1636,21 @@ if (!prevTop) return null;   // ← ゴースト表示の入力(sets)ごと失�
 サイレントスイッチがオンだと鳴りません」で、通知の方はサイレントでも鳴ると読めたが、
 実際は通知音もサイレントスイッチに従う(バイブとWatchのハプティックだけになる)。
 
+reviewerの指摘で、文言のうち「バイブや通知バナーだけになります」を通知を許可した側にだけ
+掛ける形に直した。未許可側は`beep()`だけで、`navigator.vibrate`はiOSのWKWebViewでは動かないので、
+「バイブが来る」と書くと嘘になる(修正前の文はこの点では正しく言い切れていた)。
+
+## 変更したファイル
+
+| ファイル | 内容 |
+|---|---|
+| `src/domain/restNotifications.js` | `buildRestNotifications`に`sound: "default"`を追加(この1行が本体) |
+| `src/domain/i18n.js` | `settings.soundDesc2`をサイレントスイッチの実態に合わせて書き換え |
+| `tests/restNotifications.test.js` | 全通知の`sound`が`"default"`であることのテストを追加 |
+| `index.html` / `sw.js` | `APP_VERSION` / `CACHE` をv109に |
+
+バージョン: v108 → v109。コミット `3c8a484`(push済み、`main`ブランチ)。
+
 ## 検証内容
 
 - `npm test` 322件(新規1件: 全通知に`sound`が付く)。`sound`を外すと落ちることを確認
