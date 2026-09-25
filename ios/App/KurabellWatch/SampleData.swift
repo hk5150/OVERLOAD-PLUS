@@ -20,7 +20,7 @@ enum SampleData {
         return WatchSnapshot(
             v: 1, sentAt: ms, state: .active, restStartAt: ms - 47_000, dayName: "Day A 胸・三頭",
             labels: .init(rest: "インターバル", restBody: "{n}分経過しました。次のセットへ。", prev: "前回", same: "→ 同じ", reps: "回",
-                          startOnPhone: "iPhoneで記録を開始してください", warmup: "W", addSet: "セットを追加", rirQuestion: "あと何回できた?"),
+                          startOnPhone: "iPhoneで記録を開始してください", warmup: "W", addSet: "セットを追加", rirQuestion: "あと何回できた?", next: "次"),
             exercises: [
                 .init(id: "a1", name: "ベンチプレス", weightLabel: "重量 kg", unit: "kg", step: 2.5, restAfter: true, sets: [
                     row("40", "10", nil, prev: nil, warmup: true),

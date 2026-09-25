@@ -68,6 +68,131 @@ struct RestRow: View {
     }
 }
 
+// 一覧の上の休憩表示。タップすると大きいタイマー画面を開く
+struct RestRowButton: View {
+    @ObservedObject var store: SessionStore
+    let label: String
+    let startAt: Date
+    var compact = false
+    // スクリーンショット用: -KurabellSample と一緒に -KurabellRest 1 で、一覧からタイマー画面を開いた状態にする
+    @State private var open = false
+
+    init(store: SessionStore, label: String, startAt: Date, compact: Bool = false) {
+        self.store = store
+        self.label = label
+        self.startAt = startAt
+        self.compact = compact
+        _open = State(initialValue: !compact && SampleData.launchValue("-KurabellRest") != nil)
+    }
+
+    var body: some View {
+        Button { open = true } label: {
+            RestRow(label: label, startAt: startAt, compact: compact)
+        }
+        .buttonStyle(.plain)
+        .sheet(isPresented: $open) { RestTimerView(store: store) }
+    }
+}
+
+// 休憩中の全画面タイマー。経過を大きく、1分ごとの3分割ゲージ(アプリ内・Live Activity と同じ)、
+// その下に次のセットと前回の実績。閉じる(左上の ×)とセット一覧に戻る。
+struct RestTimerView: View {
+    @ObservedObject var store: SessionStore
+
+    var body: some View {
+        if let snap = store.snapshot, let r = snap.restStartAt {
+            let startAt = Date(timeIntervalSince1970: r / 1000)
+            ScrollView {
+                VStack(spacing: 6) {
+                    TimelineView(.periodic(from: startAt, by: 1)) { ctx in
+                        let sec = ctx.date.timeIntervalSince(startAt)
+                        let color = sec < 60 ? Palette.green : sec < 120 ? Palette.yellow : Palette.red
+                        VStack(spacing: 2) {
+                            Text(snap.labels.rest)
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundStyle(Palette.muted)
+                            Text(timerInterval: startAt...startAt.addingTimeInterval(8 * 3600), countsDown: false)
+                                .numeric(58)
+                                .foregroundStyle(color)
+                                .multilineTextAlignment(.center)
+                        }
+                    }
+                    MinuteGauge(startAt: startAt)
+                        .padding(.horizontal, 6)
+                    if let n = nextSet(snap) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(snap.labels.next ?? "Next")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundStyle(Palette.muted)
+                            // セット一覧の行と同じく、番手を名前の前に置く
+                            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                                Text(n.number).numeric(15, weight: .bold).foregroundStyle(Palette.muted)
+                                Text(n.name)
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundStyle(Palette.text)
+                                    .lineLimit(1)
+                            }
+                            if let p = n.prev {
+                                Text("\(snap.labels.prev) \(p)")
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundStyle(Palette.muted)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(8)
+                        .background(RoundedRectangle(cornerRadius: 10).fill(Palette.surface))
+                        .padding(.top, 4)
+                    }
+                }
+            }
+            // 後ろの画面(一覧の緑の数字など)が透けて見えないよう、背景は黒で塗る
+            .background(Color.black.ignoresSafeArea())
+        } else {
+            // iPhone 側で休憩が止まった
+            Image(systemName: "checkmark")
+                .font(.system(size: 28, weight: .bold))
+                .foregroundStyle(Palette.muted)
+        }
+    }
+
+    // 次にやるセット: 最初の未実施(RIR 未入力)の本番セット
+    private func nextSet(_ snap: WatchSnapshot) -> (name: String, number: String, prev: String?)? {
+        for ex in snap.exercises {
+            var n = 0
+            for s in ex.sets {
+                if s.warmup { continue }
+                n += 1
+                if s.rir == nil { return (ex.name, String(n), s.prev?.text) }
+            }
+        }
+        return nil
+    }
+}
+
+// アプリ内の下部ゲージと同じ「1分ごとの3分割」。まだ来ていない分は灰色のまま、
+// 経過した分だけその分の色(緑 → 黄 → 赤)で伸ばす。
+private struct MinuteGauge: View {
+    let startAt: Date
+    var body: some View {
+        TimelineView(.periodic(from: startAt, by: 1)) { ctx in
+            let sec = ctx.date.timeIntervalSince(startAt)
+            HStack(spacing: 4) {
+                ForEach(0..<3, id: \.self) { i in
+                    let f = min(max((sec - Double(i) * 60) / 60, 0), 1)
+                    GeometryReader { g in
+                        ZStack(alignment: .leading) {
+                            Capsule().fill(Palette.surface2)
+                            Capsule().fill([Palette.green, Palette.yellow, Palette.red][i])
+                                .frame(width: g.size.width * f)
+                        }
+                    }
+                    .frame(height: 6)
+                }
+            }
+        }
+    }
+}
+
 // MARK: - 種目一覧
 
 struct ExerciseListView: View {
@@ -81,7 +206,7 @@ struct ExerciseListView: View {
     var body: some View {
         List {
             if let r = snap.restStartAt {
-                RestRow(label: snap.labels.rest, startAt: Date(timeIntervalSince1970: r / 1000))
+                RestRowButton(store: store, label: snap.labels.rest, startAt: Date(timeIntervalSince1970: r / 1000))
                     .listRowBackground(Color.clear)
             }
             ForEach(snap.exercises) { ex in
@@ -140,7 +265,7 @@ struct ExerciseView: View {
             let numbers = setNumbers(ex)
             List {
                 if let r = snap.restStartAt {
-                    RestRow(label: snap.labels.rest, startAt: Date(timeIntervalSince1970: r / 1000), compact: true)
+                    RestRowButton(store: store, label: snap.labels.rest, startAt: Date(timeIntervalSince1970: r / 1000), compact: true)
                         .listRowBackground(Color.clear)
                 }
                 ForEach(Array(ex.sets.enumerated()), id: \.offset) { i, s in
@@ -238,10 +363,21 @@ struct SetEditView: View {
     // (Double に読めない "80,5" などを 0 で上書きしないため)
     @State private var weightTouched = false
     @State private var repsTouched = false
+    // RIR を確定して休憩が始まったら、同じシートのままタイマー画面に切り替える
+    // (シートを閉じてから別の画面を出すと、SwiftUI の表示の競合が起きやすいため)
+    @State private var showRest = false
 
     private var row: WatchSnapshot.SetRow? { ex.sets.indices.contains(index) ? ex.sets[index] : nil }
 
     var body: some View {
+        if showRest {
+            RestTimerView(store: store)
+        } else {
+            editor
+        }
+    }
+
+    private var editor: some View {
         ScrollView {
             VStack(spacing: 4) {
                 if let p = row?.prev {
@@ -292,10 +428,10 @@ struct SetEditView: View {
     }
 
     private func commit(rir: Int?) {
-        store.commit(exId: ex.id, setIndex: index,
-                     weight: weightTouched ? formatWeight(weight) : (row?.weight ?? ""),
-                     reps: repsTouched ? String(Int(reps)) : (row?.reps ?? ""), rir: rir)
-        done()
+        let startedRest = store.commit(exId: ex.id, setIndex: index,
+                                       weight: weightTouched ? formatWeight(weight) : (row?.weight ?? ""),
+                                       reps: repsTouched ? String(Int(reps)) : (row?.reps ?? ""), rir: rir)
+        if startedRest { showRest = true } else { done() }
     }
 }
 

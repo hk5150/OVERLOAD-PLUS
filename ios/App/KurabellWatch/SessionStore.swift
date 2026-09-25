@@ -57,9 +57,10 @@ final class SessionStore: NSObject, ObservableObject {
 
     // MARK: - 入力
 
-    // セットを確定する。RIR が入り、種目が restAfter なら休憩を始める。
-    func commit(exId: String, setIndex: Int, weight: String, reps: String, rir: Int?) {
-        guard let ex = snapshot?.exercises.first(where: { $0.id == exId }) else { return }
+    // セットを確定する。RIR が入り、種目が restAfter なら休憩を始める(始めたら true)。
+    @discardableResult
+    func commit(exId: String, setIndex: Int, weight: String, reps: String, rir: Int?) -> Bool {
+        guard let ex = snapshot?.exercises.first(where: { $0.id == exId }) else { return false }
         let now = Date().timeIntervalSince1970 * 1000
         let startsRest = rir != nil && ex.restAfter
         let op = WatchOp(opId: UUID().uuidString, kind: "set", exId: exId, setIndex: setIndex,
@@ -72,6 +73,7 @@ final class SessionStore: NSObject, ObservableObject {
             ownRestStartAt = now
             scheduleRestNotifications(from: Date(timeIntervalSince1970: now / 1000))
         }
+        return startsRest
     }
 
     // 直前のセットを複製して1行足す(RIR は空 = 未実施)
