@@ -1,0 +1,4 @@
+/* iPhoneからまだ何も届いていないとき */
+"idle.message" = "iPhoneでKURABELLを開いてください";
+/* Watchで始めた休憩の通知本文。%d は経過分 */
+"rest.elapsed" = "%d分経過しました。次のセットへ。";

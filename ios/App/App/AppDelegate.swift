@@ -7,7 +7,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     var window: UIWindow?
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-        // Override point for customization after application launch.
+        // Watch からの op を取りこぼさないよう、WebView を待たずに受信を始める(docs/Watchアプリ.md)
+        WatchSessionManager.shared.activate()
         return true
     }
 

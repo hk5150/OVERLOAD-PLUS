@@ -187,6 +187,7 @@
     { key:'restNotifications', urls:['src/domain/restNotifications.js'] },
     { key:'iap',        urls:['src/domain/iap.js'] },
     { key:'health',     urls:['src/domain/health.js'] },
+    { key:'watch',      urls:['src/domain/watch.js'] },
     // iOS版のSQLite永続化層。Web版では何もしない(nativeSqliteDriver()がnullを返すだけ)。
     { key:'dbSchema',    urls:['src/domain/db/schema.js'] },
     { key:'dbMigration', urls:['src/domain/db/migration.js'] },
@@ -247,7 +248,7 @@ const DRAFT_KEY = "workout-draft-v1"; // 入力途中の記録(アプリが落�
 const PRE_IMPORT_BACKUP_KEY = "workout-log-v1-pre-import"; // バックアップ復元前のデータ退避(復元に失敗した場合の保険)
 // ヘッダーのバージョンバッジとバックアップのappVersionで共有する単一の定数。
 // sw.js の CACHE 定数とは tests/version.test.js が数字の一致を機械的に縛っている(CLAUDE.md参照)。
-const APP_VERSION = "v119";
+const APP_VERSION = "v120";
 // store(保存レイヤ)は src/domain/storage.js へ移設(テストのため)。
 // LIBSで<script src>読み込み済みなのでグローバルの store をそのまま参照できる。
 const uid = () => Math.random().toString(36).slice(2, 8);
@@ -906,6 +907,13 @@ function App() {
 
   // AIモーダル
   const [draftRestored, setDraftRestored] = useState(false); // 復元した旨の通知
+  // Apple Watchから合流させた操作のid(src/domain/watch.js)。下書きと一緒に保存し、
+  // 保存できてからネイティブのキューを消す(ack)。アプリが落ちても二重に適用しないため。
+  const [watchApplied, setWatchApplied] = useState([]);
+  const watchAppliedRef = useRef([]);
+  const todayRef = useRef([]); // Watchの合流で、非同期処理の中から最新のtodayを読むため(書き換えは必ずsetTodayで)
+  todayRef.current = today;
+  const restFromWatchRef = useRef(null); // Watchで始めた休憩の開始時刻。通知はWatch側が出すのでiPhoneでは予約しない(下書きにも保存)
 
   // ---- 入力途中の記録を自動保存 ----
   // 他アプリに切り替えてブラウザが破棄されても、記録が消えないようにする。
@@ -919,14 +927,16 @@ function App() {
             await store.del(DRAFT_KEY); // 記録がなければ下書きも消す
           } else {
             await store.set(DRAFT_KEY, JSON.stringify({
-              today, startAt, restStartAt, savedAt: Date.now(),
+              today, startAt, restStartAt, watchApplied, restFromWatch: restFromWatchRef.current, savedAt: Date.now(),
             }));
           }
+          // 合流させたWatchの操作は、下書きに残せてから(または記録が無く捨てた後に)キューから消す
+          await ackWatchOps(watchApplied);
         } catch { /* 保存できなくても操作は続行 */ }
       })();
     }, 800);
     return () => clearTimeout(t);
-  }, [today, startAt, restStartAt, loaded]);
+  }, [today, startAt, restStartAt, watchApplied, loaded]);
 
   // 画面を離れる直前にも保存(iOSでのバックグラウンド破棄対策)
   useEffect(() => {
@@ -934,7 +944,7 @@ function App() {
       if (today.length === 0 && !startAt) return;
       try {
         // 同期的に書けるlocalStorageへ直接退避
-        localStorage.setItem(DRAFT_KEY, JSON.stringify({ today, startAt, restStartAt, savedAt: Date.now() }));
+        localStorage.setItem(DRAFT_KEY, JSON.stringify({ today, startAt, restStartAt, watchApplied, restFromWatch: restFromWatchRef.current, savedAt: Date.now() }));
       } catch { /* noop */ }
     };
     const onHide = () => { if (document.visibilityState === "hidden") flush(); };
@@ -944,7 +954,7 @@ function App() {
       document.removeEventListener("visibilitychange", onHide);
       window.removeEventListener("pagehide", flush);
     };
-  }, [today, startAt, restStartAt]);
+  }, [today, startAt, restStartAt, watchApplied]);
 
   // ブラウザの容量逼迫時に記録がストレージごと消去されないよう、永続化を要求する(対応ブラウザのみ・拒否されても致命的ではない)
   useEffect(() => {
@@ -994,6 +1004,11 @@ function App() {
             setToday(draft.today);
             if (draft.startAt) setStartAt(draft.startAt);
             if (draft.restStartAt) setRestStartAt(draft.restStartAt);
+            if (draft.restFromWatch) restFromWatchRef.current = draft.restFromWatch;
+            if (Array.isArray(draft.watchApplied)) {
+              watchAppliedRef.current = draft.watchApplied;
+              setWatchApplied(draft.watchApplied);
+            }
             setDraftRestored(true);
             setView("log"); // 記録の続きから始められるように記録タブへ
           } else if (!fresh) {
@@ -1316,6 +1331,41 @@ function App() {
     runNotify(() => syncRestActivity(restStartAt, Date.now(), t("rest.title")));
   }, [loaded, restStartAt, lang]);
 
+  // ---- Apple Watchで入力されたセットを合流させる(src/domain/watch.js、docs/Watchアプリ.md) ----
+  // 操作はネイティブのキューに溜まっている(iPhoneのアプリが裏で寝ている間も)。起動時・前面復帰時・
+  // 受信時に読み、まだ合流させていないものだけをtodayへ。キューから消すのは下書きの保存後(上のeffect)。
+  useEffect(() => {
+    if (!loaded) return;
+    // ここではackしない。合流済みなのにキューに残っている分も、下書きの保存後にまとめてackする
+    // (保存前にackすると、その間にアプリが落ちたとき操作が失われる)。
+    const drain = async () => {
+      const ops = await peekWatchOps();
+      const known = new Set(watchAppliedRef.current);
+      const fresh = ops.filter(o => o && o.opId && !known.has(o.opId));
+      if (fresh.length === 0) return;
+      // 合流させる内容はsetTodayの関数形式で決める。休憩・合流済みidの判定は同じ規則を今のtodayに
+      // 当てて求める(どちらもapplyWatchOpsの結果。捨てた・保留にしたopの休憩は拾わない)。
+      const r = applyWatchOps(todayRef.current, fresh);
+      setToday(t => applyWatchOps(t, fresh).today);
+      if (r.applied.length > 0) {
+        const ids = [...watchAppliedRef.current, ...r.applied].slice(-WATCH_APPLIED_KEEP * 2);
+        watchAppliedRef.current = ids;
+        setWatchApplied(ids);
+      }
+      // 休憩は放置対策(Live Activityの30分)より古ければ無視する。遅れて届いた古い操作で
+      // 終わった休憩を走らせないため
+      if (r.restStartAt != null && Date.now() - r.restStartAt < 30 * 60000) {
+        restFromWatchRef.current = r.restStartAt;
+        setRestStartAt(cur => (cur == null || r.restStartAt > cur ? r.restStartAt : cur));
+      }
+    };
+    drain();
+    const sub = onWatchOps(drain);
+    const onVisible = () => { if (document.visibilityState === "visible") drain(); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => { sub.remove(); document.removeEventListener("visibilitychange", onVisible); };
+  }, [loaded]);
+
   // ---- インターバルタイマー(カウントアップ・1分ごとに知らせる) ----
   useEffect(() => {
     if (restStartAt == null) {
@@ -1326,7 +1376,8 @@ function App() {
     // 通知はOS側が発火するので、アプリがバックグラウンドでも届く(この機能の主目的)。
     // 許可要求はインターバルを実際に始めたときだけ、セッション中1回。設定トグルの操作で
     // 出すと、休憩中にトグルしたユーザーへ唐突にダイアログが出るため連動させない。
-    if (soundOn && restNotificationsAvailable()) {
+    // Watchで始めた休憩は、Watchが自分で通知する(iPhoneからも出すと手首に二重に届く)
+    if (soundOn && restNotificationsAvailable() && restStartAt !== restFromWatchRef.current) {
       runNotify(async () => {
         let ok = notifyGranted;
         if (!ok && !askedNotifyRef.current) {
@@ -1824,6 +1875,49 @@ function App() {
     const nextEx = today[idx + 1];
     return !nextEx || nextEx.ssGroup !== ex.ssGroup;
   };
+
+  // ---- Apple Watchへ今の状態を送る(iOS版のみ。Web版では何もしない) ----
+  // 表示文字列・単位換算・前回の同じ番手の対応付けはここで済ませ、Watchは並べるだけにする。
+  // セット入力のたびに作り直すと重いので、入力が止まってから送る。内容が変わっていなければ送らない。
+  const watchKeyRef = useRef("");
+  useEffect(() => {
+    if (!loaded) return;
+    const timer = setTimeout(() => {
+      const snap = buildWatchSnapshot({
+        now: Date.now(),
+        restStartAt,
+        dayName: todayDay ? dayName(todayDay.name) : null,
+        labels: {
+          rest: t("rest.title"), restBody: t("rest.notifyBody", { n: "{n}" }), prev: t("judge.prev"),
+          same: t("rir.same"), reps: t("set.reps"), startOnPhone: t("watch.startOnPhone"),
+          warmup: "W", addSet: t("watch.addSet"), assisted: t("menu.assistedShort"), rirQuestion: t("rir.question"),
+        },
+        exercises: today.map((ex, i) => ({
+          id: ex.id,
+          name: exName(ex.name),
+          weightLabel: ex.bwFactor > 0 ? t("set.weightAdded", { unit: uLabel() })
+            : resolveIsDb(ex.name, ex.isDb) ? t("set.weightPerHand", { unit: uLabel() }) : t("set.weight", { unit: uLabel() }),
+          unit: uLabel(),
+          step: wU(ex.increment ?? profile.defIncrement ?? 2.5) || 1,
+          restAfter: isLastInGroup(i),
+          sets: ex.sets,
+          prevSets: exerciseInsight(ex.name)?.sets || null,
+        })),
+        menu: today.length > 0 ? [] : autoMenu.map(m => ({
+          name: exName(m.prescription.name),
+          detail: (m.prescription.prevSets || []).filter(s => !s.warmup).map(s => `${wU(s.weight)}×${s.reps}`).join(" / "),
+        })),
+        applied: watchApplied,
+        fmtW: wU,
+      });
+      const { sentAt, ...content } = snap;
+      const key = JSON.stringify(content);
+      if (key === watchKeyRef.current) return;
+      watchKeyRef.current = key;
+      syncWatchSnapshot(snap);
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [loaded, today, restStartAt, todayDay, autoMenu, watchApplied, workouts, lang, unit, profile.defIncrement, customExercises, exerciseOverrides]);
 
   // カロリー(METs×体重×時間, 目安)
   const estimateKcal = (min) => Math.round(5.0 * profile.bodyweight * (min / 60));

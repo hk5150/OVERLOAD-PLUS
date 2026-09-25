@@ -76,6 +76,11 @@ KURABELL Workout Log は漸進性過負荷にもとづく筋トレ記録PWA。**
   `STORAGE_KEY` と手で一致させている(定数の共有はできない、storage.jsはindex.htmlより先に
   読み込まれるスクリプトなので)。下書き(`workout-draft-v1`)や復元前スナップショットは
   従来どおりPreferences止まり。詳細と設計判断は `DATA_MIGRATION.md` を参照。
+- **Watch から来たセットは `today` に後から合流する。** iPhone が裏にいる間の入力はネイティブのキューに溜まり、
+  JS が動いた時点で `applyWatchOps` で入る。キューを消すのは、下書きに `watchApplied` ごと保存できた後。
+  `today` の形(セットの並び・`id`)を変えるときは、`src/domain/watch.js` と Watch 側の `WatchModels.swift` も揃える。
+  Xcode のターゲットは App・RestActivity・KurabellWatch の3つあり、版番号は6箇所で一致させる(テストで縛ってある)。
+  詳細は `docs/Watchアプリ.md`
 - **SQLite関連はテストが緑でも何も保証しない。** `tests/db/` は `node:sqlite` のフェイク
   ドライバに対してのみ通しており、`src/domain/db/capacitorSqliteDriver.js` が
   `window.Capacitor.Plugins.CapacitorSQLite` を叩く部分は**テストの対象外**。

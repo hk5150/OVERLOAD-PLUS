@@ -1,0 +1,4 @@
+/* Shown before anything has arrived from the iPhone */
+"idle.message" = "Open KURABELL on your iPhone";
+/* Body of the rest notification started on the watch. %d is minutes elapsed */
+"rest.elapsed" = "%d min elapsed. Time for your next set.";

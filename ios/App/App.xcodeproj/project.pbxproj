@@ -7,9 +7,14 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		064641D0D11FEDE526FF8DA2 /* Views.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC1A1EC10F9C10A4FBF2BE46 /* Views.swift */; };
 		1459699397BA435769AD9412 /* StoreManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D9B002FB6F5FB812D98229F /* StoreManager.swift */; };
+		149521E462F1AF5ECF3F020E /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = AD480C0721A61B46103A3F41 /* Localizable.strings */; };
 		298AF55A7C0A153BF3A885BC /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8770DE6CE1F21E972543BA20 /* SwiftUI.framework */; };
 		2FAD9763203C412B000D30F8 /* config.xml in Resources */ = {isa = PBXBuildFile; fileRef = 2FAD9762203C412B000D30F8 /* config.xml */; };
+		32E91C24F130AAFFB7B13463 /* KurabellWatch.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = B18524BA9E23F0695ABD9894 /* KurabellWatch.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		3568666FA01BED71A1C9E2E2 /* WatchPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7812A8755F6BE2451C88A107 /* WatchPlugin.swift */; };
+		399B179AC9878CEA83BBAF31 /* SampleData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1DDE05CC57F5D774E8504675 /* SampleData.swift */; };
 		412C948172910A54B4C53024 /* HealthPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F46C657204AD1B2F3180EEAC /* HealthPlugin.swift */; };
 		41ED8E19A1465DD2D4223448 /* RestActivityBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0CAF3FA0EB0D91FD57B7661 /* RestActivityBundle.swift */; };
 		426BC6942F84D982D9F70207 /* RestActivity.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 30BD14DAAAE86D5CC41D0A7A /* RestActivity.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
@@ -22,15 +27,20 @@
 		504EC3121FED79650016851F /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 504EC3101FED79650016851F /* LaunchScreen.storyboard */; };
 		50B271D11FEDC1A000F3C39B /* public in Resources */ = {isa = PBXBuildFile; fileRef = 50B271D01FEDC1A000F3C39B /* public */; };
 		59B23E7B675DD7F7E0882F65 /* IapPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDD8743137EA64209737AD3E /* IapPlugin.swift */; };
+		5B98AF87C7D69E960032AF6A /* WatchModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 999DC06A7ED296A4FF29B986 /* WatchModels.swift */; };
 		6A1D0C2E1A4B47D8B0E5F001 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 6A1D0C2D1A4B47D8B0E5F000 /* PrivacyInfo.xcprivacy */; };
 		6CF447A4C33BE277A375E86B /* HealthKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AA83C9C9F4006CE540CEEA64 /* HealthKit.framework */; };
+		73C6041BE26132F06AA9695F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 0F583D8E24C3A2E6183FAD88 /* Assets.xcassets */; };
+		87B4D5FCC02991B60829DDE8 /* KurabellWatchApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8A0B5FB73B1E9FB4FC15A63 /* KurabellWatchApp.swift */; };
 		8B012A538D7888067F838A56 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 5783F33A39803DE5BA4657C6 /* InfoPlist.strings */; };
 		8E62FF896F154D0AB2B7E0E1 /* HealthManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E531041F376EFAFA802652D /* HealthManager.swift */; };
+		905A944F134D0F08E9DBF749 /* SessionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE9621A34CBDB135B8B37543 /* SessionStore.swift */; };
 		905EFE9B01A85DAE37F9FF12 /* RestActivityLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80CFB1A042027EBA9941D491 /* RestActivityLiveActivity.swift */; };
 		90B2AFA841F38E689BBA405F /* RestTimerAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = D14AD22BEF97714C080BC66B /* RestTimerAttributes.swift */; };
 		92DD79B0AF33B524EDBD82DF /* RestTimerManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8D03ED677AFB8D417D4C04 /* RestTimerManager.swift */; };
 		A084ECDBA7D38E1E42DFC39D /* Pods_App.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AF277DCFFFF123FFC6DF26C7 /* Pods_App.framework */; };
 		A7BEFDF1DA9DFA458C845B50 /* RestTimerPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B4E3951E4E87DE894080880 /* RestTimerPlugin.swift */; };
+		ABF8CD030A9B517246F8FB4F /* WatchSessionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1F242F17BCD3F27A210FC6C /* WatchSessionManager.swift */; };
 		ACFB888C57EFB2AD7468CE32 /* RestTimerAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = D14AD22BEF97714C080BC66B /* RestTimerAttributes.swift */; };
 		AD5E778047EE000709DCF73D /* BridgeViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3C2354788ED14DA304DD61B /* BridgeViewController.swift */; };
 		EA31416053B0D7A0A18C980E /* StoreKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 60223FC6406A946ECEB0619A /* StoreKit.framework */; };
@@ -43,6 +53,13 @@
 			proxyType = 1;
 			remoteGlobalIDString = 58BA5304F1A2071EC668DF62;
 			remoteInfo = RestActivity;
+		};
+		6531F3937089C80815CAB47C /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 504EC2FC1FED79650016851F /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A45F8053155466749C88EC5A;
+			remoteInfo = KurabellWatch;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -58,9 +75,23 @@
 			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		F0B840D600B626F3F27EFBDA /* Embed Watch Content */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "$(CONTENTS_FOLDER_PATH)/Watch";
+			dstSubfolderSpec = 16;
+			files = (
+				32E91C24F130AAFFB7B13463 /* KurabellWatch.app in Embed Watch Content */,
+			);
+			name = "Embed Watch Content";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		0F583D8E24C3A2E6183FAD88 /* Assets.xcassets */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		126678B07836F7BF2C036333 /* ja */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.strings; name = ja; path = ja.lproj/Localizable.strings; sourceTree = "<group>"; };
+		1DDE05CC57F5D774E8504675 /* SampleData.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SampleData.swift; sourceTree = "<group>"; };
 		2FAD9762203C412B000D30F8 /* config.xml */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = config.xml; sourceTree = "<group>"; };
 		30BD14DAAAE86D5CC41D0A7A /* RestActivity.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = RestActivity.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		34A0471B1932971EEE4ECFED /* App.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = App.entitlements; sourceTree = "<group>"; };
@@ -78,18 +109,26 @@
 		60223FC6406A946ECEB0619A /* StoreKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = StoreKit.framework; path = System/Library/Frameworks/StoreKit.framework; sourceTree = SDKROOT; };
 		6A1D0C2D1A4B47D8B0E5F000 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		6E531041F376EFAFA802652D /* HealthManager.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HealthManager.swift; sourceTree = "<group>"; };
+		7812A8755F6BE2451C88A107 /* WatchPlugin.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WatchPlugin.swift; sourceTree = "<group>"; };
 		80CFB1A042027EBA9941D491 /* RestActivityLiveActivity.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RestActivityLiveActivity.swift; sourceTree = "<group>"; };
 		8770DE6CE1F21E972543BA20 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 		8A8673594951CFDD7AC3688F /* ActivityKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = ActivityKit.framework; path = System/Library/Frameworks/ActivityKit.framework; sourceTree = SDKROOT; };
+		8BA292D9197F9E5F6E20F73F /* en */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/Localizable.strings; sourceTree = "<group>"; };
+		999DC06A7ED296A4FF29B986 /* WatchModels.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WatchModels.swift; sourceTree = "<group>"; };
 		A3C2354788ED14DA304DD61B /* BridgeViewController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BridgeViewController.swift; sourceTree = "<group>"; };
 		A518090B3BA1447F59E331AD /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
 		AA83C9C9F4006CE540CEEA64 /* HealthKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = HealthKit.framework; path = System/Library/Frameworks/HealthKit.framework; sourceTree = SDKROOT; };
 		AA8D03ED677AFB8D417D4C04 /* RestTimerManager.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RestTimerManager.swift; sourceTree = "<group>"; };
 		AE80F0411D4CFCF6A87B7A5E /* ja */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.strings; name = ja; path = ja.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+		AE9621A34CBDB135B8B37543 /* SessionStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SessionStore.swift; sourceTree = "<group>"; };
 		AF277DCFFFF123FFC6DF26C7 /* Pods_App.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_App.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		AF51FD2D460BCFE21FA515B2 /* Pods-App.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-App.release.xcconfig"; path = "Pods/Target Support Files/Pods-App/Pods-App.release.xcconfig"; sourceTree = "<group>"; };
+		B18524BA9E23F0695ABD9894 /* KurabellWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = KurabellWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		D14AD22BEF97714C080BC66B /* RestTimerAttributes.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RestTimerAttributes.swift; sourceTree = "<group>"; };
+		D8A0B5FB73B1E9FB4FC15A63 /* KurabellWatchApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = KurabellWatchApp.swift; sourceTree = "<group>"; };
+		DC1A1EC10F9C10A4FBF2BE46 /* Views.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = Views.swift; sourceTree = "<group>"; };
 		E0CAF3FA0EB0D91FD57B7661 /* RestActivityBundle.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RestActivityBundle.swift; sourceTree = "<group>"; };
+		E1F242F17BCD3F27A210FC6C /* WatchSessionManager.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WatchSessionManager.swift; sourceTree = "<group>"; };
 		F46C657204AD1B2F3180EEAC /* HealthPlugin.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HealthPlugin.swift; sourceTree = "<group>"; };
 		FC68EB0AF532CFC21C3344DD /* Pods-App.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-App.debug.xcconfig"; path = "Pods/Target Support Files/Pods-App/Pods-App.debug.xcconfig"; sourceTree = "<group>"; };
 		FDD8743137EA64209737AD3E /* IapPlugin.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = IapPlugin.swift; sourceTree = "<group>"; };
@@ -116,9 +155,26 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A56FE254402CC3ECDCD34110 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		13504BC9F0135BED63764DB7 /* Watch */ = {
+			isa = PBXGroup;
+			children = (
+				E1F242F17BCD3F27A210FC6C /* WatchSessionManager.swift */,
+				7812A8755F6BE2451C88A107 /* WatchPlugin.swift */,
+			);
+			name = Watch;
+			path = Watch;
+			sourceTree = "<group>";
+		};
 		27E2DDA53C4D2A4D1A88CE4A /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
@@ -126,6 +182,7 @@
 				60223FC6406A946ECEB0619A /* StoreKit.framework */,
 				8A8673594951CFDD7AC3688F /* ActivityKit.framework */,
 				73223B19509051D90C01F7B3 /* iOS */,
+				CFB5A260167164015C9A9846 /* watchOS */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -138,6 +195,7 @@
 				7F8756D8B27F46E3366F6CEA /* Pods */,
 				27E2DDA53C4D2A4D1A88CE4A /* Frameworks */,
 				ACF2FA9E923440A0FEE5E93C /* RestActivity */,
+				9175CCC906DB867D4EC6794F /* KurabellWatch */,
 			);
 			sourceTree = "<group>";
 		};
@@ -146,6 +204,7 @@
 			children = (
 				504EC3041FED79650016851F /* App.app */,
 				30BD14DAAAE86D5CC41D0A7A /* RestActivity.appex */,
+				B18524BA9E23F0695ABD9894 /* KurabellWatch.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -168,6 +227,7 @@
 				34A0471B1932971EEE4ECFED /* App.entitlements */,
 				B26D7BE78FA82F945F135C0D /* Health */,
 				5783F33A39803DE5BA4657C6 /* InfoPlist.strings */,
+				13504BC9F0135BED63764DB7 /* Watch */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -189,6 +249,21 @@
 				AF51FD2D460BCFE21FA515B2 /* Pods-App.release.xcconfig */,
 			);
 			name = Pods;
+			sourceTree = "<group>";
+		};
+		9175CCC906DB867D4EC6794F /* KurabellWatch */ = {
+			isa = PBXGroup;
+			children = (
+				D8A0B5FB73B1E9FB4FC15A63 /* KurabellWatchApp.swift */,
+				AE9621A34CBDB135B8B37543 /* SessionStore.swift */,
+				999DC06A7ED296A4FF29B986 /* WatchModels.swift */,
+				DC1A1EC10F9C10A4FBF2BE46 /* Views.swift */,
+				1DDE05CC57F5D774E8504675 /* SampleData.swift */,
+				0F583D8E24C3A2E6183FAD88 /* Assets.xcassets */,
+				AD480C0721A61B46103A3F41 /* Localizable.strings */,
+			);
+			name = KurabellWatch;
+			path = KurabellWatch;
 			sourceTree = "<group>";
 		};
 		9ABE470B716B9D52057A3795 /* Iap */ = {
@@ -222,6 +297,13 @@
 			path = Health;
 			sourceTree = "<group>";
 		};
+		CFB5A260167164015C9A9846 /* watchOS */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = watchOS;
+			sourceTree = "<group>";
+		};
 		FE0810342031073768C4185C /* RestTimer */ = {
 			isa = PBXGroup;
 			children = (
@@ -245,12 +327,14 @@
 				504EC3011FED79650016851F /* Frameworks */,
 				504EC3021FED79650016851F /* Resources */,
 				56B54C0DD746C60C91CCF9C4 /* Embed Foundation Extensions */,
+				F0B840D600B626F3F27EFBDA /* Embed Watch Content */,
 				9592DBEFFC6D2A0C8D5DEB22 /* [CP] Embed Pods Frameworks */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 				B3AE2BAB09057FC625AB0FF5 /* PBXTargetDependency */,
+				14521A5461939A4BBDF45244 /* PBXTargetDependency */,
 			);
 			name = App;
 			productName = App;
@@ -274,6 +358,23 @@
 			productReference = 30BD14DAAAE86D5CC41D0A7A /* RestActivity.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
+		A45F8053155466749C88EC5A /* KurabellWatch */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 1E75357754AA2EB93C311050 /* Build configuration list for PBXNativeTarget "KurabellWatch" */;
+			buildPhases = (
+				E238B2E4D883DF8761E8E116 /* Sources */,
+				A56FE254402CC3ECDCD34110 /* Frameworks */,
+				523AF3B6547421869219F6F0 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = KurabellWatch;
+			productName = KurabellWatch;
+			productReference = B18524BA9E23F0695ABD9894 /* KurabellWatch.app */;
+			productType = "com.apple.product-type.application";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -290,6 +391,11 @@
 						ProvisioningStyle = Automatic;
 					};
 					58BA5304F1A2071EC668DF62 = {
+						CreatedOnToolsVersion = 26.6;
+						DevelopmentTeam = LJR5Q5TU54;
+						ProvisioningStyle = Automatic;
+					};
+					A45F8053155466749C88EC5A = {
 						CreatedOnToolsVersion = 26.6;
 						DevelopmentTeam = LJR5Q5TU54;
 						ProvisioningStyle = Automatic;
@@ -312,6 +418,7 @@
 			targets = (
 				504EC3031FED79650016851F /* App */,
 				58BA5304F1A2071EC668DF62 /* RestActivity */,
+				A45F8053155466749C88EC5A /* KurabellWatch */,
 			);
 		};
 /* End PBXProject section */
@@ -329,6 +436,15 @@
 				504EC30D1FED79650016851F /* Main.storyboard in Resources */,
 				2FAD9763203C412B000D30F8 /* config.xml in Resources */,
 				8B012A538D7888067F838A56 /* InfoPlist.strings in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		523AF3B6547421869219F6F0 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				73C6041BE26132F06AA9695F /* Assets.xcassets in Resources */,
+				149521E462F1AF5ECF3F020E /* Localizable.strings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -391,6 +507,8 @@
 				90B2AFA841F38E689BBA405F /* RestTimerAttributes.swift in Sources */,
 				412C948172910A54B4C53024 /* HealthPlugin.swift in Sources */,
 				8E62FF896F154D0AB2B7E0E1 /* HealthManager.swift in Sources */,
+				ABF8CD030A9B517246F8FB4F /* WatchSessionManager.swift in Sources */,
+				3568666FA01BED71A1C9E2E2 /* WatchPlugin.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -404,9 +522,27 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		E238B2E4D883DF8761E8E116 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				87B4D5FCC02991B60829DDE8 /* KurabellWatchApp.swift in Sources */,
+				905A944F134D0F08E9DBF749 /* SessionStore.swift in Sources */,
+				5B98AF87C7D69E960032AF6A /* WatchModels.swift in Sources */,
+				064641D0D11FEDE526FF8DA2 /* Views.swift in Sources */,
+				399B179AC9878CEA83BBAF31 /* SampleData.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		14521A5461939A4BBDF45244 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = KurabellWatch;
+			target = A45F8053155466749C88EC5A /* KurabellWatch */;
+			targetProxy = 6531F3937089C80815CAB47C /* PBXContainerItemProxy */;
+		};
 		B3AE2BAB09057FC625AB0FF5 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			name = RestActivity;
@@ -438,6 +574,15 @@
 				AE80F0411D4CFCF6A87B7A5E /* ja */,
 			);
 			name = InfoPlist.strings;
+			sourceTree = "<group>";
+		};
+		AD480C0721A61B46103A3F41 /* Localizable.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				8BA292D9197F9E5F6E20F73F /* en */,
+				126678B07836F7BF2C036333 /* ja */,
+			);
+			name = Localizable.strings;
 			sourceTree = "<group>";
 		};
 /* End PBXVariantGroup section */
@@ -644,9 +789,71 @@
 			};
 			name = Release;
 		};
+		CFE94D54BD4A058D6012743A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 3;
+				DEVELOPMENT_TEAM = LJR5Q5TU54;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = KURABELL;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
+				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.hajime5150.kurabellplus;
+				INFOPLIST_KEY_WKRunsIndependentlyOfCompanionApp = NO;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.hajime5150.kurabellplus.watchkitapp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+			};
+			name = Debug;
+		};
+		F9D094D7407E4CC63E72AD24 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 3;
+				DEVELOPMENT_TEAM = LJR5Q5TU54;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = KURABELL;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
+				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.hajime5150.kurabellplus;
+				INFOPLIST_KEY_WKRunsIndependentlyOfCompanionApp = NO;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.hajime5150.kurabellplus.watchkitapp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				VALIDATE_PRODUCT = YES;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		1E75357754AA2EB93C311050 /* Build configuration list for PBXNativeTarget "KurabellWatch" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				F9D094D7407E4CC63E72AD24 /* Release */,
+				CFE94D54BD4A058D6012743A /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		34B21763E8D8E2415F106DE9 /* Build configuration list for PBXNativeTarget "RestActivity" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

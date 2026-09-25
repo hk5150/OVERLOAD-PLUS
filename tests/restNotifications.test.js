@@ -398,7 +398,8 @@ describe("休憩タイマーのネイティブ設定", () => {
       const values = new Set([...pbx.matchAll(new RegExp(`${key} = ([^;]+);`, "g"))].map((m) => m[1]));
       expect(values.size, key).toBe(1);
     }
-    expect((pbx.match(/SKIP_INSTALL = YES;/g) || []).length).toBe(2);
+    // RestActivity と KurabellWatch(Watch アプリ)の Debug/Release
+    expect((pbx.match(/SKIP_INSTALL = YES;/g) || []).length).toBe(4);
     // 埋め込みフェーズは [CP] Embed Pods Frameworks より前(後ろだと「Cycle inside App」)
     const phases = pbx.match(/buildPhases = \(([^)]*Embed Foundation Extensions[^)]*)\)/)[1];
     expect(phases.indexOf("Embed Foundation Extensions")).toBeLessThan(phases.indexOf("[CP] Embed Pods Frameworks"));
@@ -406,6 +407,7 @@ describe("休憩タイマーのネイティブ設定", () => {
 
   it("App と拡張の両方に正式なチームIDが入っている", () => {
     const pbx = read("ios/App/App.xcodeproj/project.pbxproj");
-    expect((pbx.match(/DEVELOPMENT_TEAM = LJR5Q5TU54;/g) || []).length).toBe(4);
+    // App・RestActivity・KurabellWatch の Debug/Release
+    expect((pbx.match(/DEVELOPMENT_TEAM = LJR5Q5TU54;/g) || []).length).toBe(6);
   });
 });

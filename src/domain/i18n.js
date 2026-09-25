@@ -254,6 +254,8 @@ const STRINGS = {
   "rest.coach2":       { ja: "そろそろ始めろ",         en: "Time to move" },
   "rest.coach3":       { ja: "パンプが冷めるぞ",       en: "Your pump's fading" },
   "rest.finish":       { ja: "終了",                   en: "Finish" },
+  "watch.startOnPhone": { ja: "iPhoneで記録を開始すると、ここで入力できます", en: "Start a workout on your iPhone to log sets here" },
+  "watch.addSet":      { ja: "セットを追加",           en: "Add set" },
   "rest.notifyTitle":  { ja: "インターバル",           en: "Rest timer" },
   "rest.notifyBody":   { ja: "{n}分経過しました。次のセットへ。", en: "{n} min elapsed. Time for your next set." },
 

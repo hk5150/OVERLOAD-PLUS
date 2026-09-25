@@ -9,5 +9,6 @@ class BridgeViewController: CAPBridgeViewController {
         bridge?.registerPluginInstance(IapPlugin())
         bridge?.registerPluginInstance(RestTimerPlugin())
         bridge?.registerPluginInstance(HealthPlugin())
+        bridge?.registerPluginInstance(WatchPlugin())
     }
 }
