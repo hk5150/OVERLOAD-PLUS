@@ -247,7 +247,7 @@ const DRAFT_KEY = "workout-draft-v1"; // 入力途中の記録(アプリが落�
 const PRE_IMPORT_BACKUP_KEY = "workout-log-v1-pre-import"; // バックアップ復元前のデータ退避(復元に失敗した場合の保険)
 // ヘッダーのバージョンバッジとバックアップのappVersionで共有する単一の定数。
 // sw.js の CACHE 定数とは tests/version.test.js が数字の一致を機械的に縛っている(CLAUDE.md参照)。
-const APP_VERSION = "v118";
+const APP_VERSION = "v119";
 // store(保存レイヤ)は src/domain/storage.js へ移設(テストのため)。
 // LIBSで<script src>読み込み済みなのでグローバルの store をそのまま参照できる。
 const uid = () => Math.random().toString(36).slice(2, 8);
@@ -1067,9 +1067,13 @@ function App() {
       // 消さないと、再試行ボタンだけが消えて「再試行から保存し直して」という文言が残る。
       // (saveStatusのクロージャ値で判定すると、書き込みが並走したときに消し漏れる)
       clearErrorIf("err.saveFailed", "err.saveRetryFailed");
+      return true;
     } catch {
       setSaveStatus("error");
       setError(t("err.saveFailed"));
+      // 例外は投げない(ほとんどの呼び出し元は待たずに呼んでいる)。後始末を
+      // 書き込みの成否で分けたい呼び出し元のために、成否だけ返す。
+      return false;
     }
   };
 
@@ -2410,7 +2414,8 @@ function App() {
         lastBackupAt: new Date().toISOString(),
       };
       setError(""); // persistより前に(書き込み失敗時のエラーを消さないため)
-      await persist(next);
+      // 失敗したら「復元しました」は出さない(エラー帯と再試行ボタンはpersistが出す)
+      if (!(await persist(next))) { setBackupMsg(""); return; }
       setBackupMsg(t("backup.imported", { n: next.workouts.length }));
     } catch (e) {
       setBackupMsg("");
@@ -2437,7 +2442,9 @@ function App() {
         lastBackupAt: p.lastBackupAt || null,
       };
       setError(""); // persistより前に(書き込み失敗時のエラーを消さないため)
-      await persist(next);
+      // 書き込みに失敗したら退避データは消さない。消すと、再試行する前にアプリが
+      // 終了したとき、戻したかったデータがどこにも残らない。
+      if (!(await persist(next))) { setBackupMsg(""); return; }
       await store.del(PRE_IMPORT_BACKUP_KEY);
       setHasPreImportSnapshot(false);
       setBackupMsg(t("backup.undone", { n: next.workouts.length }));
