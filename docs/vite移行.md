@@ -2192,3 +2192,108 @@ v113 の残課題2件を、ユーザーの指示で修正。SW のキャッシ�
 
 バージョン: v114 → v115。**v114 からアプリ本体はキャッシュ優先なので、版を上げないと Web 版の利用者に届かない**
 (最初は版を上げ忘れてコミットし、push 前に気づいて直した)。
+
+---
+
+# 2026-09-23〜24 のまとめ(v109 → v115)
+
+このセッションで行った作業を横断してまとめる。各作業の詳細(経緯・検証・reviewer の指摘)は上の各節にある。
+コミットはすべて `main` に push 済み。
+
+## 作業とコミット
+
+| 版 | コミット | 内容 | 詳細 |
+|---|---|---|---|
+| — | `1385382` | StoreKit Testing(ローカル `.storekit`)でシミュレータの購入フローを検証 | 2026-09-23 節 |
+| v110 | `e93fef0` | 「購入を復元」のサインインをキャンセルしても赤字を出さない | 2026-09-23(続き) |
+| v111 | `63a477b` | 保護者の承認待ち(Ask to Buy)の表示と、承認されたら開いたまま解除 | 2026-09-23(3回目) |
+| v112 | `e731651` | 休憩タイマーの Time Sensitive 通知と Live Activity | 2026-09-23(4回目)、`docs/休憩タイマー通知.md` |
+| v113 | `4b81ff5` | SW が HTTP キャッシュ越しに古いファイルをつかむ問題 | 2026-09-24 |
+| v114 | `5d3bbbf` | SW をキャッシュ優先にして版を丸ごと入れ替え、更新はバナーで知らせる | 2026-09-24(続き) |
+| v114 | `77baec6` | 使い方ガイドのリード文を「前回の自分を超えるための筋トレ記録アプリ。」に | 2026-09-24(3回目) |
+| v115 | `8ce02cd` | ガイドの見出し・リード文を意味の切れ目で折り返す | 2026-09-24(3回目) |
+
+## 決定事項
+
+**IAP(StoreKit)**
+- StoreKit Testing は、共有スキーム `App.xcscheme` から `ios/App/KurabellPlus.storekit` を参照し、
+  Xcode の Run を AppleScript で叩いて効かせる(`xcodebuild` + `simctl` では同期されない)。
+  スキーム内のパスはワークスペース基準
+- 復元のサインインのキャンセルは失敗扱いにしない(`restorePurchase()` は `null`)
+- 購入結果は `"purchased" | "cancelled" | "pending"` の文字列で返す(`"pending"` を真偽値で返すと購入済み扱いされる)。
+  承認待ちは「購入の承認待ちです」と黄色で表示(保護者に限定しない。決済の追加認証待ちでも返るため)
+- 権利の変化は `Transaction.updates` のたびに `currentEntitlements` から作り直して JS へ通知する
+  (1件だけ見て出し入れすると、返金で別の有効な権利まで消える)
+
+**休憩タイマー(iOS)**
+- 通知の**予約だけ**を自前プラグイン `RestTimer` に移し、Time Sensitive・`UNNotificationSound.default` で積む。
+  ID は同じ文字列なので、キャンセル・配信済み削除・許可は `@capacitor/local-notifications` のまま
+- Live Activity は常にオン(アプリ内設定なし)。Widget Extension `RestActivity`(iOS 16.2+)を `xcodeproj` gem で追加。
+  App 本体は iOS 15.0 のまま、ActivityKit は弱リンク
+- 30分で放置表示(「30:00+」)、それ以降の同期で終了
+- `DEVELOPMENT_TEAM` を正式なチームID `LJR5Q5TU54` に設定
+
+**Web 版の Service Worker**
+- アプリ本体と `./`・`index.html` への画面遷移は**キャッシュ優先**。版の入れ替えは install(`addAll` は全部取れたときだけ成功)に任せる
+- install とそれ以外のネットワーク取得は `cache: "no-cache"`(`reload` にしないのは vendor 約3.5MB を毎回取り直さないため)
+- 新しい版はバナー「新しいバージョンがあります [更新]」で知らせる(自動で再読み込みしない)。
+  起動に失敗している画面だけは自動で1回再読み込み
+- `privacy.html`・`support.html`(App Store Connect に登録している URL)はアプリの画面にすり替えない
+- localhost では既定で SW を使わない(`?sw=1` で有効)
+
+**文言**
+- 使い方ガイドの文言中の「|」は折り返してよい位置(`withBreaks()`)
+
+## 変更したファイル(主なもの)
+
+| ファイル | 内容 |
+|---|---|
+| `ios/App/KurabellPlus.storekit`(新規)、`ios/App/App.xcodeproj/xcshareddata/xcschemes/App.xcscheme`(新規) | StoreKit Testing |
+| `ios/App/App/Iap/IapPlugin.swift`、`StoreManager.swift` | 復元のキャンセル、購入結果の3種類、権利変化の通知 |
+| `src/domain/iap.js`、`tests/iap.test.js` | 同上の JS 側とテスト |
+| `ios/App/App/RestTimer/`(新規3ファイル)、`ios/App/RestActivity/`(新規3ファイル) | Time Sensitive 通知と Live Activity |
+| `ios/App/App/App.entitlements`(新規)、`Info.plist`、`BridgeViewController.swift` | エンタイトルメント、`NSSupportsLiveActivities`、プラグイン登録 |
+| `ios/App/App.xcodeproj/project.pbxproj` | 拡張ターゲット、埋め込み、ActivityKit(弱リンク)、チームID |
+| `src/domain/restNotifications.js`、`tests/restNotifications.test.js` | RestTimer 経由の予約、Live Activity の同期、ネイティブ設定の静的チェック |
+| `sw.js`、`tests/sw-fetch-fallback.test.js`、`tests/helpers/loadServiceWorker.js` | キャッシュ優先、`no-cache` |
+| `index.html` | 承認待ち・更新バナー・SW 登録ブロック・起動失敗時の再読み込み・`withBreaks()` など |
+| `src/domain/i18n.js` | `paywall.pending`、`update.*`、ガイドの文言 |
+| `docs/IAP実装方針.md`、`docs/休憩タイマー通知.md`(新規)、`CLAUDE.md`、`README.md`、`.claude/agents/boot-check.md` | 方針と注意点 |
+
+## 残っている課題
+
+**実機・TestFlight でしか確認できないもの**(Apple Developer Program 承認済み。次は署名 → Archive → TestFlight)
+- 本物の Ask to Buy の承認・返金がアプリに届くか(シミュレータでは Xcode の承認が届かず、通知経路は擬似的に確認しただけ)
+- 復元のキャンセルが実機でどちらの型(`StoreKitError` / `SKError`)で届くか
+- Time Sensitive 通知が集中モード(特に Apple Watch のワークアウトで入る「フィットネス」)を抜けるか、Watch にどう届くか
+- 休憩通知の既定音が実機で聞こえるか(v109 からの持ち越し)
+- iOS 15・16.0/16.1 の端末で起動するか(ActivityKit の弱リンクは確認済み、実行は未確認)
+- 実機での Live Activity の見た目(Dynamic Island の無い機種を含む)
+
+**提出準備**
+- In-App Purchase Capability の付与と、App Store Connect への非消耗型商品の登録(登録後は `IAP_PRODUCT_ID` を実際の ID に)。
+  sandbox で試すときは、スキームから `.storekit` の参照を外して一度 Xcode で Run する
+- 拡張 `RestActivity` の App ID 登録と Time Sensitive の capability は、初回の実機ビルドか Archive のときに自動署名が行う
+- **版番号を上げるときは拡張もそろえる**(`MARKETING_VERSION` / `CURRENT_PROJECT_VERSION` の4箇所。テストで縛ってある)
+- `APPSTORE.md` の掲載文の改訂(別セッションで作業中、未コミット)。Live Activity・Time Sensitive を載せるかは未調整
+
+**Web 版**
+- **v114 から、`CACHE` を上げない限り既存の利用者に新しいファイルは届かない**。公開直後の最初の1回は1つ前の版が表示される
+- 古い SW が古い `index.html` を返した混ざり方は自動では直らない(起動エラー画面の [再読み込み] で直る)
+- SW 登録ブロックと更新バナーは `npm test` の対象外(ブラウザでのみ確認)
+
+## 次のセッションでの再開方法
+
+「`docs/vite移行.md` を読んで続きから」で再開できる。進めるなら、上の「実機・TestFlight」と「提出準備」が次の山。
+
+---
+
+# 2026-09-24〜25: v116 ヘルスケア連携と提出準備
+
+- **v116**(`02f0a25`): iOS版にヘルスケア(HealthKit)連携。設計・検証・未検証の項目は `docs/ヘルスケア連携.md` にまとめた
+  (この文書には書き写さない)。Web版は設定の欄ごと出ないだけで、SW の `APP_ASSETS` に `health.js` が1つ増えた
+- `APPSTORE.md` の掲載文を課金方式(10回まで無料+買い切り)に合わせて改訂し、ヘルスケア連携と審査メモを追記(`75428c5`)
+- App Store Connect: アプリ登録、非消耗型IAP `com.hajime5150.kurabellplus.unlock`(¥600、ファミリー共有オン)、
+  実機を開発者アカウントに登録、1.0 (1) をアップロードして TestFlight の内部テストに配信
+- **次**: TestFlight の実機で確認(上の「実機・TestFlight でしか確認できないもの」とヘルスケアの拒否時の案内文)、
+  課金の審査用スクリーンショット、掲載文とスクリーンショットの入力、提出
