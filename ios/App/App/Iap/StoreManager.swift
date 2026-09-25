@@ -86,8 +86,20 @@ final class StoreManager {
     }
 
     // 「購入を復元」ボタン専用。AppStore.sync()を呼んでよいのはここだけ。
+    //
+    // sync()が失敗しても、端末の購入記録(currentEntitlements)に権利があれば復元は成功として扱う。
+    // TestFlight(sandbox)で、再インストール後に権利は起動時に戻っているのにsync()だけがエラーを返し、
+    // 「フル解除済み」と「復元できませんでした」が同時に出た(2026-09-25、実機)。審査も同じsandboxで
+    // 行われるので、復元ボタンがエラーを出すとGuideline 3.1.1で差し戻されかねない。
+    // 権利が無いときだけ元のエラーを投げる(キャンセルの判定はIapPlugin側)。
     func restore() async throws {
-        try await AppStore.sync()
+        do {
+            try await AppStore.sync()
+        } catch {
+            await refreshEntitlements()
+            guard purchasedProductIDs.isEmpty else { return }
+            throw error
+        }
         await refreshEntitlements()
     }
 

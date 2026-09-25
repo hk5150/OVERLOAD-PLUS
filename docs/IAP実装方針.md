@@ -155,3 +155,17 @@ iOS 13/14のシェアは2026年時点で実用上ゼロに近く、`@available`�
   「購入履歴が見つかりません」のエラー表示も確認済み
 - Swift側(`StoreManager.swift`/`IapPlugin.swift`)は自動テスト対象外(XCTestターゲットが
   このリポジトリに存在しない)。**Xcode統合後、シミュレータでの手動確認が必須**
+
+## 2026-09-25: TestFlightで「購入を復元」がエラーになる
+
+実機のTestFlight(sandbox)で、アプリを削除して入れ直すと、起動時の `currentEntitlements` で権利は戻り
+「フル解除済み」になるのに、「購入を復元」を押すと `AppStore.sync()` だけが失敗して
+「復元できませんでした」が同時に出た。審査も同じsandboxで行われるので、Guideline 3.1.1
+(復元の手段)で差し戻されかねない。
+
+対応: `StoreManager.restore()` で `sync()` が失敗したら `currentEntitlements` を見直し、権利があれば成功扱い。
+権利が無いときだけ元のエラーを投げる。サインインのキャンセルの扱い(`IapPlugin` 側)は変えていない。
+
+検証: シミュレータで `.storekit` の `_storeKitErrors` に `App Store Sync` を一時的に入れてXcodeからRun。
+storekitdのログに `Did fail to synchronize` が出る状態で、赤字は出ず「フル解除済み」のまま。
+(設定は戻してある。`tests/iap.test.js` がエラー注入の無効を縛っている)

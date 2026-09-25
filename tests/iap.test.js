@@ -347,3 +347,20 @@ describe("StoreKit Testing設定", () => {
     expect(path.resolve(workspace, m[1])).toBe(storekitPath);
   });
 });
+
+// 実機のTestFlight(sandbox)で、再インストール後に権利は戻っているのにAppStore.sync()だけが失敗し、
+// 「フル解除済み」と「復元できませんでした」が同時に出た(2026-09-25)。審査も同じsandboxで行われる。
+// sync()の失敗時もcurrentEntitlementsを見直し、権利があれば成功扱いにしていることを縛る
+// (Swift側はnpm testで実行できないので、ファイルの中身で見る)。
+describe("購入の復元(ネイティブ)", () => {
+  it("AppStore.sync()が失敗しても、権利があれば復元を成功として扱う", () => {
+    const src = fs.readFileSync(path.join(process.cwd(), "ios/App/App/Iap/StoreManager.swift"), "utf-8");
+    const body = src.slice(src.indexOf("func restore()"), src.indexOf("func isPurchased"));
+    const catchBody = body.slice(body.indexOf("} catch {"));
+    expect(body).toMatch(/do\s*\{\s*try await AppStore\.sync\(\)\s*\}\s*catch\s*\{/);
+    // catch節の中で、権利を取り直してから、空のときだけ投げる(この順序)
+    const order = ["refreshEntitlements()", "purchasedProductIDs.isEmpty", "throw error"].map(k => catchBody.indexOf(k));
+    expect(order.every(i => i >= 0)).toBe(true);
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+  });
+});
