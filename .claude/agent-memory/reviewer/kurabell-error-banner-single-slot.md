@@ -14,7 +14,10 @@ v117レビュー(2026-09-25)で見た穴:
 - saveWorkout の setError("") が試用上限(ペイウォール)の早期returnより前にあり、未保存状態の帯と再試行を消す
 - 同じ行が err.loadFailed(「データは端末に残っています」)も消す。persistは読込失敗時でも上書きするガードが無い(既存)
 - persist の `saveStatus === "error"` 判定はクロージャ値なので、書き込みが並走すると解除漏れが残る
-- restoreFromPreImportSnapshot は persist が例外を投げない(内部でcatch)ため、書き込み失敗でもスナップショットを削除する(既存)
+- restoreFromPreImportSnapshot は persist が例外を投げない(内部でcatch)ため、書き込み失敗でもスナップショットを削除する
+  → v119(ブランチ claude/keep-undo-snapshot)で persist が true/false を返すようにして対処。以後 persist の戻り値を見る呼び出し元が増えたら、
+  「失敗時は persist 自身が err.saveFailed を出すので呼び出し元は setError しない・成功メッセージだけ抑える」形になっているかを見る
+- retrySave の setError("") は無条件のまま(clearErrorIf ではない)。成功時に無関係なエラーも消す(既存)
 
 **Why:** エラーの「種類」を持たずに文字列1枠で運用しているため、消す側が何を消しているか判別できない。
 
