@@ -241,6 +241,10 @@ describe("Watch アプリのネイティブ設定", () => {
     expect(phases.indexOf("Embed Watch Content")).toBeLessThan(phases.indexOf("[CP] Embed Pods Frameworks"));
   });
 
+  it("入力に Digital Crown を使わない(ジムで回しにくく、誤って回るため。docs/Watchアプリ.md)", () => {
+    expect(read("ios/App/KurabellWatch/Views.swift")).not.toContain("digitalCrownRotation");
+  });
+
   it("pbxproj が特定の SDK のパスに依存していない(Xcode の更新で参照が壊れる)", () => {
     const pbx = read("ios/App/App.xcodeproj/project.pbxproj");
     expect(pbx).not.toMatch(/SDKs\/\w+\d+\.\d+\.sdk/);

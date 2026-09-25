@@ -222,6 +222,9 @@ struct SetRowView: View {
 
 // MARK: - セット入力
 
+// Digital Crown は使わない(ジムで回しにくく、腕の動きで誤って回ることもあるため)。
+// 値は iPhone で入っているもの(前回の複製)から始まり、変えるときだけ −/+ を押す。
+// いちばん多い「前回どおりにやって RIR だけ入れる」は、RIR を1回押すだけで済む。
 struct SetEditView: View {
     @ObservedObject var store: SessionStore
     let ex: WatchSnapshot.Exercise
@@ -229,52 +232,48 @@ struct SetEditView: View {
     let labels: WatchSnapshot.Labels
     let done: () -> Void
 
-    enum Field { case weight, reps }
     @State private var weight: Double = 0
     @State private var reps: Double = 0
-    // Crown を回していない値は、iPhone で入力されたままの文字列を送り返す
+    // −/+ を押していない値は、iPhone で入力されたままの文字列を送り返す
     // (Double に読めない "80,5" などを 0 で上書きしないため)
     @State private var weightTouched = false
     @State private var repsTouched = false
-    @FocusState private var focus: Field?
 
     private var row: WatchSnapshot.SetRow? { ex.sets.indices.contains(index) ? ex.sets[index] : nil }
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 8) {
+            VStack(spacing: 4) {
                 if let p = row?.prev {
                     Text("\(labels.prev) \(p.text)")
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(Palette.muted)
                 }
-                HStack(spacing: 6) {
-                    field(.weight, value: formatWeight(weight), caption: ex.weightLabel)
-                        .digitalCrownRotation($weight, from: 0, through: 999, by: ex.step,
-                                              sensitivity: .low, isContinuous: false, isHapticFeedbackEnabled: true)
-                        .onChange(of: weight) { weightTouched = true }
-                    field(.reps, value: String(Int(reps)), caption: labels.reps)
-                        .digitalCrownRotation($reps, from: 0, through: 100, by: 1,
-                                              sensitivity: .low, isContinuous: false, isHapticFeedbackEnabled: true)
-                        .onChange(of: reps) { repsTouched = true }
-                }
+                ValueStepper(value: formatWeight(weight), caption: ex.weightLabel,
+                        minus: { weight = max(0, weight - ex.step); weightTouched = true },
+                        plus: { weight += ex.step; weightTouched = true })
+                ValueStepper(value: String(Int(reps)), caption: labels.reps,
+                        minus: { reps = max(0, reps - 1); repsTouched = true },
+                        plus: { reps += 1; repsTouched = true })
                 if row?.warmup == true {
                     Button("OK") { commit(rir: nil) }
                         .buttonStyle(.borderedProminent)
                         .tint(Palette.green)
+                        .padding(.top, 4)
                 } else {
                     Text("\(labels.rirQuestion ?? "") (RIR)")
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(Palette.muted)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.top, 2)
-                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 4), count: 2), spacing: 4) {
-                        // iPhone の RIR 選択肢(0/1/2/3+、3+ は 3 として保存)と同じ
+                    // いちばん押すボタンなので、スクロールせずに見える1行に並べる。
+                    // 選択肢は iPhone と同じ 0/1/2/3+(3+ は 3 として保存)
+                    HStack(spacing: 4) {
                         ForEach(0...3, id: \.self) { r in
                             Button { commit(rir: r) } label: {
                                 Text(r == 3 ? "3+" : String(r))
                                     .numeric(20)
-                                    .frame(maxWidth: .infinity, minHeight: 34)
+                                    .frame(maxWidth: .infinity, minHeight: 40)
                             }
                             .buttonStyle(.plain)
                             .background(RoundedRectangle(cornerRadius: 8)
@@ -289,23 +288,7 @@ struct SetEditView: View {
             reps = Double(row?.reps ?? "") ?? 0
             weightTouched = false
             repsTouched = false
-            focus = .weight
         }
-    }
-
-    private func field(_ f: Field, value: String, caption: String) -> some View {
-        VStack(spacing: 0) {
-            Text(value).numeric(30)
-            Text(caption).font(.system(size: 10, weight: .semibold)).foregroundStyle(Palette.muted).lineLimit(1)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 4)
-        .background(RoundedRectangle(cornerRadius: 8)
-            .stroke(focus == f ? Palette.green : Palette.surface2, lineWidth: 2))
-        .focusable()
-        .focusEffectDisabled() // 枠線で示すので、システムのフォーカスの光は消す
-        .focused($focus, equals: f)
-        .onTapGesture { focus = f }
     }
 
     private func commit(rir: Int?) {
@@ -313,6 +296,36 @@ struct SetEditView: View {
                      weight: weightTouched ? formatWeight(weight) : (row?.weight ?? ""),
                      reps: repsTouched ? String(Int(reps)) : (row?.reps ?? ""), rir: rir)
         done()
+    }
+}
+
+// 値を真ん中に、左右に大きめの −/+。汗や手袋でも押せるよう、ボタンは横 44pt を確保する。
+private struct ValueStepper: View {
+    let value: String
+    let caption: String
+    let minus: () -> Void
+    let plus: () -> Void
+
+    var body: some View {
+        HStack(spacing: 4) {
+            stepButton("minus", action: minus)
+            VStack(spacing: 0) {
+                Text(value).numeric(26).lineLimit(1).minimumScaleFactor(0.6)
+                Text(caption).font(.system(size: 10, weight: .semibold)).foregroundStyle(Palette.muted).lineLimit(1)
+            }
+            .frame(maxWidth: .infinity)
+            stepButton("plus", action: plus)
+        }
+    }
+
+    private func stepButton(_ symbol: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 18, weight: .bold))
+                .frame(width: 44, height: 38)
+        }
+        .buttonStyle(.plain)
+        .background(Capsule().fill(Palette.surface2))
     }
 }
 
