@@ -247,7 +247,7 @@ const DRAFT_KEY = "workout-draft-v1"; // 入力途中の記録(アプリが落�
 const PRE_IMPORT_BACKUP_KEY = "workout-log-v1-pre-import"; // バックアップ復元前のデータ退避(復元に失敗した場合の保険)
 // ヘッダーのバージョンバッジとバックアップのappVersionで共有する単一の定数。
 // sw.js の CACHE 定数とは tests/version.test.js が数字の一致を機械的に縛っている(CLAUDE.md参照)。
-const APP_VERSION = "v116";
+const APP_VERSION = "v117";
 // store(保存レイヤ)は src/domain/storage.js へ移設(テストのため)。
 // LIBSで<script src>読み込み済みなのでグローバルの store をそのまま参照できる。
 const uid = () => Math.random().toString(36).slice(2, 8);
@@ -805,6 +805,9 @@ function App() {
   const [customDraft, setCustomDraft] = useState({ muscle: "", eq: "" });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  // エラー帯は1枠を共有しているので、無条件の setError("") は無関係なエラー
+  // (読み込み失敗の案内、保存失敗と再試行ボタン)まで消してしまう。消すときは表示中の文言で絞る。
+  const clearErrorIf = (...keys) => setError(e => keys.some(k => e === t(k)) ? "" : e);
   const [saveStatus, setSaveStatus] = useState("idle"); // idle | saving | saved | error(persist()の書き込み状態)
   const [loaded, setLoaded] = useState(false);
   const [guideSeen, setGuideSeen] = useState(false); // 初回ガイドを見たか
@@ -1057,6 +1060,10 @@ function App() {
     try {
       await store.set(STORAGE_KEY, JSON.stringify(next));
       setSaveStatus("saved");
+      // 全項目を書き直しているので、以前の書き込み失敗はこれで解消している。
+      // 消さないと、再試行ボタンだけが消えて「再試行から保存し直して」という文言が残る。
+      // (saveStatusのクロージャ値で判定すると、書き込みが並走したときに消し漏れる)
+      clearErrorIf("err.saveFailed", "err.saveRetryFailed");
     } catch {
       setSaveStatus("error");
       setError(t("err.saveFailed"));
@@ -1747,6 +1754,7 @@ function App() {
     const ex = today.find(e => e.id === id);
     setToday(t => t.filter(e => e.id !== id));
     if (ex) updateSplitDayExercise(ex.name, null);
+    if (today.every(e => e.id === id)) clearErrorIf("log.noValidSets"); // 最後の種目を消した
   };
   // 種目の並べ替え(dir: -1=上へ, +1=下へ)
   // 種目の差し替え(セット内容は維持したまま種目だけ変更)
@@ -1842,6 +1850,9 @@ function App() {
       setSaving(false);
       return;
     }
+    // 前回押したときの「実施したセットがありません」を消す。persistより前に消すこと
+    // (後で消すと、書き込み失敗時にpersistが出したエラーまで消してしまう)。
+    clearErrorIf("log.noValidSets");
     // 試用上限(10回)。空の記録を弾いた後に判定する — 何も入力していない状態で
     // ペイウォールを出すと「何も記録していないのに課金を迫られた」という誤解を生む。
     // Web版はpurchasedが常にtrueなのでここには来ない。
@@ -2395,9 +2406,9 @@ function App() {
         exerciseOverrides: p.exerciseOverrides || {},
         lastBackupAt: new Date().toISOString(),
       };
+      setError(""); // persistより前に(書き込み失敗時のエラーを消さないため)
       await persist(next);
       setBackupMsg(t("backup.imported", { n: next.workouts.length }));
-      setError("");
     } catch (e) {
       setBackupMsg("");
       setError(t("backup.importFailed", { msg: e?.message || t("backup.checkFile") }));
@@ -2422,11 +2433,11 @@ function App() {
         exerciseOverrides: p.exerciseOverrides || {},
         lastBackupAt: p.lastBackupAt || null,
       };
+      setError(""); // persistより前に(書き込み失敗時のエラーを消さないため)
       await persist(next);
       await store.del(PRE_IMPORT_BACKUP_KEY);
       setHasPreImportSnapshot(false);
       setBackupMsg(t("backup.undone", { n: next.workouts.length }));
-      setError("");
     } catch (e) {
       setError(t("backup.undoFailed", { msg: e?.message || t("backup.checkData") }));
     }
@@ -2923,6 +2934,7 @@ function App() {
               <button onClick={async () => {
                 if (!window.confirm(t("log.discardDraft"))) return;
                 setToday([]); setStartAt(null); setElapsed(0); stopRest(); setDraftRestored(false);
+                clearErrorIf("log.noValidSets");
                 try { await store.del(DRAFT_KEY); localStorage.removeItem(DRAFT_KEY); } catch { /* noop */ }
               }} style={{ ...btn("transparent", C.muted), padding: "6px 10px", fontSize: 13 }}>{t("log.discard")}</button>
             </div>
