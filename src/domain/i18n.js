@@ -375,6 +375,7 @@ const STRINGS = {
   "settings.iap.unlocked": { ja: "フル解除済みです。試用の記録上限はありません。", en: "You've unlocked the full version. There's no trial limit." },
   "settings.iap.unlock":   { ja: "{price}でフル解除を購入", en: "Unlock full version for {price}" },
   "settings.iap.restore":  { ja: "購入を復元",         en: "Restore purchase" },
+  "settings.iap.restored": { ja: "購入を復元しました。", en: "Purchase restored." },
   "settings.iap.restoreNotFound": { ja: "この端末のApple IDに購入履歴が見つかりませんでした。", en: "No purchase found for this Apple ID." },
   "settings.iap.restoreFailed": { ja: "復元できませんでした。もう一度お試しください。", en: "Couldn't restore. Please try again." },
   "settings.ai":       { ja: "AIに相談",               en: "Ask AI" },

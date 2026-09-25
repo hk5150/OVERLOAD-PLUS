@@ -247,7 +247,7 @@ const DRAFT_KEY = "workout-draft-v1"; // 入力途中の記録(アプリが落�
 const PRE_IMPORT_BACKUP_KEY = "workout-log-v1-pre-import"; // バックアップ復元前のデータ退避(復元に失敗した場合の保険)
 // ヘッダーのバージョンバッジとバックアップのappVersionで共有する単一の定数。
 // sw.js の CACHE 定数とは tests/version.test.js が数字の一致を機械的に縛っている(CLAUDE.md参照)。
-const APP_VERSION = "v117";
+const APP_VERSION = "v118";
 // store(保存レイヤ)は src/domain/storage.js へ移設(テストのため)。
 // LIBSで<script src>読み込み済みなのでグローバルの store をそのまま参照できる。
 const uid = () => Math.random().toString(36).slice(2, 8);
@@ -823,6 +823,9 @@ function App() {
   const [iapBusy, setIapBusy] = useState(false); // 購入/復元の通信中(二重タップ防止)
   const [iapError, setIapError] = useState(""); // 設定タブでの購入/復元エラー(記録タブのerrorとは独立)
   const [iapPending, setIapPending] = useState(false); // 保護者の承認待ち(Ask to Buy)。承認の通知(entitlementsChanged)で解除される
+  // 「購入を復元」が成功したことの表示。解除済みの状態で押すと画面が何も変わらず、効いたか分からなかった
+  // (TestFlightの実機で「復元できていない」と受け取られた)。次に購入/復元を押すまで出しておく。
+  const [iapNotice, setIapNotice] = useState("");
   // Web版で新しい版のSWが有効になった(index.html末尾のSW登録ブロックが検知)。押すまで再読み込みしない。
   // iOS版にはSWが無いので常にfalse。
   const [updateReady, setUpdateReady] = useState(() => !!window.__updateReady);
@@ -4332,6 +4335,7 @@ function App() {
               <div style={{ fontSize: 14, fontWeight: 900, marginBottom: 10 }}>{t("settings.iap.title")}</div>
               {iapError && <div role="alert" style={{ fontSize: 13, color: C.red, marginBottom: 10 }}>{iapError}</div>}
               {iapPending && !purchased && <div role="status" style={{ fontSize: 13, color: C.yellow, lineHeight: 1.6, marginBottom: 10 }}>{t("paywall.pending")}</div>}
+              {iapNotice && <div role="status" style={{ fontSize: 13, color: C.green, lineHeight: 1.6, marginBottom: 10 }}>{iapNotice}</div>}
               {purchased ? (
                 <p style={{ color: C.muted, fontSize: 13, lineHeight: 1.7, margin: "0 0 10px" }}>{t("settings.iap.unlocked")}</p>
               ) : (
@@ -4340,7 +4344,7 @@ function App() {
                 // 以前はここでfetchUnlockProduct()を取り直していたが、Swift側の
                 // purchase()も内部でfetchProducts()をもう一度呼ぶため二重フェッチだった。
                 <button disabled={iapBusy} onClick={async () => {
-                  setIapBusy(true); setIapError(""); setIapPending(false);
+                  setIapBusy(true); setIapError(""); setIapNotice(""); setIapPending(false);
                   try {
                     const status = await purchaseUnlock();
                     if (status === "purchased") setPurchased(true);
@@ -4352,12 +4356,13 @@ function App() {
                 </button>
               )}
               <button disabled={iapBusy} onClick={async () => {
-                setIapBusy(true); setIapError(""); setIapPending(false);
+                setIapBusy(true); setIapError(""); setIapNotice(""); setIapPending(false);
                 try {
                   const ok = await restorePurchase();
                   if (ok !== null) { // null=サインインをキャンセル。何も表示しない
                     setPurchased(ok);
-                    if (!ok) setIapError(t("settings.iap.restoreNotFound"));
+                    if (ok) setIapNotice(t("settings.iap.restored"));
+                    else setIapError(t("settings.iap.restoreNotFound"));
                   }
                 } catch { setIapError(t("settings.iap.restoreFailed")); }
                 setIapBusy(false);
