@@ -103,16 +103,16 @@ struct RestTimerView: View {
         if let snap = store.snapshot, let r = snap.restStartAt {
             let startAt = Date(timeIntervalSince1970: r / 1000)
             ScrollView {
-                VStack(spacing: 6) {
+                VStack(spacing: 4) {
                     TimelineView(.periodic(from: startAt, by: 1)) { ctx in
                         let sec = ctx.date.timeIntervalSince(startAt)
                         let color = sec < 60 ? Palette.green : sec < 120 ? Palette.yellow : Palette.red
-                        VStack(spacing: 2) {
+                        VStack(spacing: 0) {
                             Text(snap.labels.rest)
                                 .font(.system(size: 13, weight: .bold))
                                 .foregroundStyle(Palette.muted)
                             Text(timerInterval: startAt...startAt.addingTimeInterval(8 * 3600), countsDown: false)
-                                .numeric(58)
+                                .numeric(46)
                                 .foregroundStyle(color)
                                 .multilineTextAlignment(.center)
                         }
@@ -121,27 +121,37 @@ struct RestTimerView: View {
                         .padding(.horizontal, 6)
                     if let n = nextSet(snap) {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(snap.labels.next ?? "Next")
-                                .font(.system(size: 11, weight: .bold))
-                                .foregroundStyle(Palette.muted)
-                            // セット一覧の行と同じく、番手を名前の前に置く
+                            // 「次」と番手・種目名を1行に(スクロールせずに前回の行まで見えるように)
                             HStack(alignment: .firstTextBaseline, spacing: 6) {
+                                Text(snap.labels.next ?? "Next")
+                                    .font(.system(size: 11, weight: .bold))
+                                    .foregroundStyle(Palette.muted)
                                 Text(n.number).numeric(15, weight: .bold).foregroundStyle(Palette.muted)
                                 Text(n.name)
                                     .font(.system(size: 14, weight: .semibold))
                                     .foregroundStyle(Palette.text)
                                     .lineLimit(1)
                             }
-                            if let p = n.prev {
-                                Text("\(snap.labels.prev) \(p)")
+                            // 次に挙げる重量×回数(今日入っている値。前回の複製から始まる)を大きく出し、
+                            // 休憩中にプレートやピンの準備ができるようにする
+                            HStack(alignment: .firstTextBaseline, spacing: 3) {
+                                Text(n.set.weight.isEmpty ? "–" : n.set.weight).numeric(26)
+                                Text(n.unit).font(.system(size: 12, weight: .semibold)).foregroundStyle(Palette.muted)
+                                Text("×").font(.system(size: 16, weight: .semibold)).foregroundStyle(Palette.muted)
+                                Text(n.set.reps.isEmpty ? "–" : n.set.reps).numeric(26)
+                            }
+                            .foregroundStyle(Palette.text)
+                            if let p = n.set.prev {
+                                Text(prevLine(n.set, p, snap.labels))
                                     .font(.system(size: 12, weight: .medium))
                                     .foregroundStyle(Palette.muted)
                             }
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(8)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 6)
                         .background(RoundedRectangle(cornerRadius: 10).fill(Palette.surface))
-                        .padding(.top, 4)
+                        .padding(.top, 2)
                     }
                 }
             }
@@ -156,16 +166,23 @@ struct RestTimerView: View {
     }
 
     // 次にやるセット: 最初の未実施(RIR 未入力)の本番セット
-    private func nextSet(_ snap: WatchSnapshot) -> (name: String, number: String, prev: String?)? {
+    private func nextSet(_ snap: WatchSnapshot) -> (name: String, number: String, unit: String, set: WatchSnapshot.SetRow)? {
         for ex in snap.exercises {
             var n = 0
             for s in ex.sets {
                 if s.warmup { continue }
                 n += 1
-                if s.rir == nil { return (ex.name, String(n), s.prev?.text) }
+                if s.rir == nil { return (ex.name, String(n), ex.unit, s) }
             }
         }
         return nil
+    }
+
+    // 前回と同じ重量・回数なら「前回 RIR1」だけ。変えている(重量を上げた等)なら前回の重量×回数も並べる
+    private func prevLine(_ s: WatchSnapshot.SetRow, _ p: WatchSnapshot.Prev, _ labels: WatchSnapshot.Labels) -> String {
+        let sameLoad = Double(s.weight) != nil && Double(s.weight) == Double(p.weight) && Int(s.reps) == Int(p.reps)
+        if sameLoad, let r = p.rir { return "\(labels.prev) RIR\(r)" }
+        return "\(labels.prev) \(p.text)"
     }
 }
 
