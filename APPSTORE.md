@@ -295,3 +295,22 @@ App Store Connect の Apple ID は 6816090624、SKU は `kurabell-ios-001`。ア
 - **スクリーンショット**: 6.9インチ(1320×2868)の枠に日英それぞれ6枚。**同時にアップロードすると順番が崩れる**ので1枚ずつ入れた。
   6.5インチの枠には 6.9インチの画像が自動で使われる
 - **課金の審査用スクリーンショット**: TestFlight の実機で撮ったペイウォール。923×2000 では寸法エラーになったので 1290×2796 に拡大して添付
+
+### 1.0 (ビルド3) — 2026-09-26 に「2.1 Information Needed」→ 2026-09-27 8:09 に返信して再提出
+
+不具合の指摘ではなく、実績の少ない新規アカウントへの定型の追加情報依頼だった。求められたのは
+(1) 実機の画面収録(起動から、有料機能にたどり着くまで)と、(2)〜(7) 目的・使い方・外部サービス・地域差・規制・課金の説明。
+返信と「App Review に関する情報」のメモ欄の両方に入れる必要がある(メモ欄は4000文字までなので、まとめ直した版を入れた)。
+
+- **画面収録**: TestFlight で一度購入した端末はペイウォールが出ない(TestFlight の購入履歴は消せない)。
+  1.0 (3) と同じコミットの作業ツリーから `xcodebuild` で開発版を作り、`devicectl` で実機に入れて、
+  **Sandbox テスター**(ASC の「ユーザとアクセス」→ Sandbox で作成、`+sandbox` 付きの Gmail で可)で購入を撮った。
+  アプリを消して入れ直さないと、前の購入が端末に残っていて「購入済み」になる。記録10件は JSON バックアップを iCloud Drive 経由で読み込んだ
+- Xcode の画面から実機で Run すると「Personal development teams … do not support Time Sensitive / In-App Purchase」で失敗した。
+  Xcode がチームを無料の Personal Team として覚えたまま(`defaults read com.apple.dt.Xcode IDEProvisioningTeamByIdentifier`)。
+  サインインし直すと Individual に直ったが、今度は「capability USERNOTIFICATIONS_TIMESENSITIVE could not be determined」で失敗。
+  **コマンドの `xcodebuild -allowProvisioningUpdates` は通る**ので、実機への開発版はコマンドで入れるのが確実
+- ヘルスケアの権限シートで「許可しない」を選ぶと「Could not connect to Apple Health.」と出る(収録から切り落とした)。次のアップデートで直す
+- スクリーンショットの6枚目(文字だけの料金説明)は Guideline 2.3.3 の注意に当たりうるので削除し、日英5枚にした
+- 返信後、バージョンのページで「**審査内容を更新**」→ 提出物の画面で「App Review に再提出」の順に押す必要があった
+  (メタデータを変えた後は、再提出ボタンがグレーのまま)。新しいビルド(1.0 (5))があると確認が出るが、そのまま「提出」で 1.0 (3) のまま出せる
