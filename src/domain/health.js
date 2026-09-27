@@ -98,6 +98,17 @@ async function healthDeleteWorkout(w) {
   } catch { return 0; }
 }
 
+// 記録を開始したときに Watch アプリを起動し、Watch でワークアウトを始めさせる。
+// Watch が無い・Watch アプリが入っていない・Web 版では false(何もしない)。
+async function healthStartWatchWorkout() {
+  const plugin = capHealthPlugin();
+  if (!plugin) return false;
+  try {
+    const r = await plugin.startWatchWorkout();
+    return !!(r && r.started);
+  } catch { return false; }
+}
+
 // 最新の体重 { kg, date(エポックミリ秒) }。無い・読めないときはnull
 // (読み込みを拒否されていても、HealthKitの仕様で「データなし」と区別できない)。
 async function healthLatestBodyMass() {
@@ -155,6 +166,7 @@ globalThis.HEALTH_MAX_WORKOUT_MS = HEALTH_MAX_WORKOUT_MS;
 globalThis.healthWorkoutRange = healthWorkoutRange;
 globalThis.healthSaveWorkout = healthSaveWorkout;
 globalThis.healthDeleteWorkout = healthDeleteWorkout;
+globalThis.healthStartWatchWorkout = healthStartWatchWorkout;
 globalThis.healthLatestBodyMass = healthLatestBodyMass;
 globalThis.healthSaveBodyMass = healthSaveBodyMass;
 globalThis.pickHealthWeight = pickHealthWeight;

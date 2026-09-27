@@ -1,0 +1,4 @@
+/* Reading heart rate and active energy during a workout on Apple Watch */
+"NSHealthShareUsageDescription" = "Used to include heart rate and active energy in the workout you record on Apple Watch.";
+/* Writing the workout recorded on Apple Watch */
+"NSHealthUpdateUsageDescription" = "Saves the strength-training workout you record on Apple Watch, including heart rate and active energy, to Apple Health.";

@@ -4,8 +4,10 @@ import HealthKit
 // ヘルスケア(HealthKit)連携のネイティブ処理本体。Capacitorには依存しない(ブリッジはHealthPlugin.swift)。
 // 設計判断は docs/ヘルスケア連携.md。
 //
-// 扱うのは3つだけ: ワークアウトの書き込み(ウエイトトレーニング、時刻のみ。消費カロリーは書かない)、
-// 体重の読み込み、体重の書き込み。
+// 扱うのは: ワークアウトの書き込み(ウエイトトレーニング、時刻のみ。消費カロリーは書かない)、
+// 体重の読み込み、体重の書き込み、Watch アプリの起動(Watch 側でワークアウトを始める)。
+// Watch でワークアウトを記録した回は、心拍・カロリー付きのワークアウトを Watch が保存し、
+// iPhone はここで書かない(二重にしない。判断は JS 側の saveWorkout。docs/Watchアプリ.md)。
 final class HealthManager {
     static let shared = HealthManager()
     private init() {}
@@ -60,13 +62,28 @@ final class HealthManager {
         _ = try await builder.finishWorkout()
     }
 
-    // このアプリが書いた分だけが対象(他のアプリのデータは消せない仕様だが、述語でも絞る)。
+    // 記録を開始したときに Watch アプリを起動し、筋トレのワークアウトを始めさせる。
+    // Watch 側は WKApplicationDelegate.handle(_ workoutConfiguration:) で受ける(KurabellWatchApp.swift)。
+    // Watch がペアになっていない・Watch アプリが入っていないときは失敗する(呼び出し側は無視してよい)。
+    func startWatchApp() async throws {
+        let config = HKWorkoutConfiguration()
+        config.activityType = .traditionalStrengthTraining
+        config.locationType = .indoor
+        try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
+            store.startWatchApp(with: config) { ok, error in
+                if let error { cont.resume(throwing: error) }
+                else if !ok { cont.resume(throwing: NSError(domain: "HealthManager", code: 1)) }
+                else { cont.resume() }
+            }
+        }
+    }
+
+    // 同じ syncIdentifier のワークアウトを消す。Watch アプリが保存した分(ソースが Watch アプリ)も
+    // 対象にするため、ソースでは絞らない。HealthKit はほかのアプリのデータを消させないうえ、
+    // syncIdentifier はこのアプリ固有の接頭辞付きなので、ほかのアプリの記録に当たることはない。
     func deleteWorkout(key: String) async throws -> Int {
-        let predicate = NSCompoundPredicate(andPredicateWithSubpredicates: [
-            HKQuery.predicateForObjects(from: HKSource.default()),
-            HKQuery.predicateForObjects(withMetadataKey: HKMetadataKeySyncIdentifier,
-                                        allowedValues: [syncIdentifier(key)]),
-        ])
+        let predicate = HKQuery.predicateForObjects(withMetadataKey: HKMetadataKeySyncIdentifier,
+                                                    allowedValues: [syncIdentifier(key)])
         return try await withCheckedThrowingContinuation { cont in
             store.deleteObjects(of: workoutType, predicate: predicate) { _, count, error in
                 if let error { cont.resume(throwing: error) } else { cont.resume(returning: count) }

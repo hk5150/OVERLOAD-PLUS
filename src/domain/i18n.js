@@ -395,7 +395,7 @@ const STRINGS = {
   "settings.bodyweight": { ja: "体重(自重換算・カロリー計算に使用)", en: "Bodyweight (used for bodyweight lifts and calories)" },
   // ヘルスケア連携(iOSのみ)。何を読み書きするかを画面上で明示する(App Store Guideline 2.5.1)。
   "settings.health.title": { ja: "ヘルスケアと連携", en: "Connect to Apple Health" },
-  "settings.health.desc": { ja: "ワークアウトを「従来型筋力トレーニング」として記録し(時刻のみ。消費カロリーは記録しません)、体重を読み込み・記録します。オンにする前の記録は書き込みません。このアプリで記録を削除すると、ヘルスケアからも削除されます。", en: "Saves workouts as Traditional Strength Training (times only, no calories), and reads and saves your body weight. Workouts from before you turn this on are not added. Deleting a workout in this app also removes it from Health." },
+  "settings.health.desc": { ja: "ワークアウトを「従来型筋力トレーニング」として記録し、体重を読み込み・記録します。iPhoneから書き込むワークアウトは時刻のみです(消費カロリーは記録しません)。Apple Watchにアプリを入れている場合は、記録を始めるとWatchでワークアウトが始まり、心拍数と消費カロリー付きでWatchが記録します。オンにする前の記録は書き込みません。このアプリで記録を削除すると、ヘルスケアからも削除されます。", en: "Saves workouts as Traditional Strength Training, and reads and saves your body weight. Workouts written from iPhone have times only, no calories. If the app is on your Apple Watch, starting a workout also starts one on the watch, which records it with heart rate and active energy. Workouts from before you turn this on are not added. Deleting a workout in this app also removes it from Health." },
   "settings.health.denied": { ja: "ヘルスケアへの書き込みが一部許可されていません。ヘルスケアアプリの右上のアイコン →「App」→ KURABELL で許可してください。", en: "Some Health write permissions are off. Allow it in the Health app: tap your profile picture → Apps → KURABELL." },
   "settings.health.failed": { ja: "ヘルスケアに接続できませんでした。", en: "Could not connect to Apple Health." },
   "settings.exercises": { ja: "種目の設定",            en: "Exercise settings" },

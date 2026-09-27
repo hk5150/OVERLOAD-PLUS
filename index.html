@@ -245,10 +245,13 @@ const FONT_UI = "-apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Hiragino K
 
 const STORAGE_KEY = "workout-log-v1";
 const DRAFT_KEY = "workout-draft-v1"; // 入力途中の記録(アプリが落ちても復元できるように)
+// Apple Watch のワークアウトとヘルスケアの書き込みの受け渡し(docs/Watchアプリ.md の「ワークアウト」)
+const WATCH_HEALTH_PENDING_KEY = "watch-health-pending-v1";
+const WATCH_LAST_SAVED_KEY = "watch-last-saved-v1";
 const PRE_IMPORT_BACKUP_KEY = "workout-log-v1-pre-import"; // バックアップ復元前のデータ退避(復元に失敗した場合の保険)
 // ヘッダーのバージョンバッジとバックアップのappVersionで共有する単一の定数。
 // sw.js の CACHE 定数とは tests/version.test.js が数字の一致を機械的に縛っている(CLAUDE.md参照)。
-const APP_VERSION = "v121";
+const APP_VERSION = "v122";
 // store(保存レイヤ)は src/domain/storage.js へ移設(テストのため)。
 // LIBSで<script src>読み込み済みなのでグローバルの store をそのまま参照できる。
 const uid = () => Math.random().toString(36).slice(2, 8);
@@ -914,6 +917,18 @@ function App() {
   const todayRef = useRef([]); // Watchの合流で、非同期処理の中から最新のtodayを読むため(書き換えは必ずsetTodayで)
   todayRef.current = today;
   const restFromWatchRef = useRef(null); // Watchで始めた休憩の開始時刻。通知はWatch側が出すのでiPhoneでは予約しない(下書きにも保存)
+  // Watchがワークアウト(心拍・カロリー)を記録している記録の startAt(ms)。この記録を保存するときは
+  // Watchがヘルスケアに書くので、iPhoneからは書かない(二重防止。下書きにも保存)。
+  const watchWorkoutForRef = useRef(null);
+  // 直近に保存した記録 { key, startAt, endAt }。Watchはこれを見て自分のワークアウトを保存するか破棄するか決める。
+  // 保存直後にアプリが終了されても届くよう、store にも残す(WATCH_LAST_SAVED_KEY)
+  const [watchLastSaved, setWatchLastSaved] = useState(null);
+  // Watchに任せたヘルスケアの書き込み。Watchが "saved" を返すまで残し、"discarded" や
+  // 1時間の無応答なら iPhone が時刻だけ書く(settleWatchHealth。store に残す)
+  const watchHealthPendingRef = useRef([]);
+  const healthOnRef = useRef(false);
+  const startAtRef = useRef(null);
+  startAtRef.current = startAt;
 
   // ---- 入力途中の記録を自動保存 ----
   // 他アプリに切り替えてブラウザが破棄されても、記録が消えないようにする。
@@ -927,7 +942,8 @@ function App() {
             await store.del(DRAFT_KEY); // 記録がなければ下書きも消す
           } else {
             await store.set(DRAFT_KEY, JSON.stringify({
-              today, startAt, restStartAt, watchApplied, restFromWatch: restFromWatchRef.current, savedAt: Date.now(),
+              today, startAt, restStartAt, watchApplied, restFromWatch: restFromWatchRef.current,
+              watchWorkoutFor: watchWorkoutForRef.current, savedAt: Date.now(),
             }));
           }
           // 合流させたWatchの操作は、下書きに残せてから(または記録が無く捨てた後に)キューから消す
@@ -944,7 +960,7 @@ function App() {
       if (today.length === 0 && !startAt) return;
       try {
         // 同期的に書けるlocalStorageへ直接退避
-        localStorage.setItem(DRAFT_KEY, JSON.stringify({ today, startAt, restStartAt, watchApplied, restFromWatch: restFromWatchRef.current, savedAt: Date.now() }));
+        localStorage.setItem(DRAFT_KEY, JSON.stringify({ today, startAt, restStartAt, watchApplied, restFromWatch: restFromWatchRef.current, watchWorkoutFor: watchWorkoutForRef.current, savedAt: Date.now() }));
       } catch { /* noop */ }
     };
     const onHide = () => { if (document.visibilityState === "hidden") flush(); };
@@ -994,6 +1010,14 @@ function App() {
         setError(t("err.loadFailed", { msg: e?.message || t("err.dataCorrupt") }));
       }
 
+      // Watchとヘルスケアの受け渡しの状態(保存直後にアプリが終了されても失わないため store に置いている)
+      try {
+        const p = await store.get(WATCH_HEALTH_PENDING_KEY);
+        if (p?.value) watchHealthPendingRef.current = JSON.parse(p.value) || [];
+        const ls = await store.get(WATCH_LAST_SAVED_KEY);
+        if (ls?.value) setWatchLastSaved(JSON.parse(ls.value));
+      } catch { /* 無ければ空 */ }
+
       // 入力途中の記録を復元(24時間以内のものだけ)
       try {
         const d = await store.get(DRAFT_KEY);
@@ -1005,6 +1029,7 @@ function App() {
             if (draft.startAt) setStartAt(draft.startAt);
             if (draft.restStartAt) setRestStartAt(draft.restStartAt);
             if (draft.restFromWatch) restFromWatchRef.current = draft.restFromWatch;
+            if (draft.watchWorkoutFor) watchWorkoutForRef.current = draft.watchWorkoutFor;
             if (Array.isArray(draft.watchApplied)) {
               watchAppliedRef.current = draft.watchApplied;
               setWatchApplied(draft.watchApplied);
@@ -1101,6 +1126,7 @@ function App() {
   const [healthStatus, setHealthStatus] = useState(null); // 書き込み権限 { workout, bodyMass }
   const [healthError, setHealthError] = useState("");
   const healthOn = healthOk && profile.healthOn === true;
+  healthOnRef.current = healthOn;
   const bwBeforeEditRef = useRef(null); // 体重欄の編集前の値。フォーカス中だけ非null
   useEffect(() => { healthSupported().then(setHealthOk); }, []);
   // 連携のオン/オフと同期日時は「この端末で権限を取ったか」という端末固有の状態なので、
@@ -1342,10 +1368,20 @@ function App() {
       const ops = await peekWatchOps();
       const known = new Set(watchAppliedRef.current);
       const fresh = ops.filter(o => o && o.opId && !known.has(o.opId));
+      // Watchに任せたヘルスケアの書き込みを締める(新しいopが無くても、1時間の無応答はここで判定する)
+      const settled = settleWatchHealth(watchHealthPendingRef.current, fresh, Date.now());
+      if (settled.keep.length !== watchHealthPendingRef.current.length) {
+        watchHealthPendingRef.current = settled.keep;
+        try { await store.set(WATCH_HEALTH_PENDING_KEY, JSON.stringify(settled.keep)); } catch { /* 次回また判定する */ }
+        if (healthOnRef.current) settled.write.forEach(w => healthSaveWorkout(w));
+      }
       if (fresh.length === 0) return;
       // 合流させる内容はsetTodayの関数形式で決める。休憩・合流済みidの判定は同じ規則を今のtodayに
       // 当てて求める(どちらもapplyWatchOpsの結果。捨てた・保留にしたopの休憩は拾わない)。
       const r = applyWatchOps(todayRef.current, fresh);
+      // 今の記録の知らせだけ採用する(遅れて届いた前の記録の知らせで上書きしない)
+      const wk = watchWorkoutFromOps(fresh);
+      if (wk != null && wk === startAtRef.current) watchWorkoutForRef.current = wk;
       setToday(t => applyWatchOps(t, fresh).today);
       if (r.applied.length > 0) {
         const ids = [...watchAppliedRef.current, ...r.applied].slice(-WATCH_APPLIED_KEEP * 2);
@@ -1433,7 +1469,13 @@ function App() {
   const stopRest = () => { setRestStartAt(null); setRestElapsed(0); firedMinRef.current = 0; setRestFull(false); };
 
   // 記録開始時にセッションタイマー始動
-  const ensureStarted = () => { if (!startAt) { setStartAt(Date.now()); setElapsed(0); } };
+  // 記録の開始。ヘルスケア連携がオンなら、Watchアプリを起動してワークアウトを始めさせる
+  // (下書きからの復元は「開始」ではないので起動しない。docs/Watchアプリ.md)
+  const ensureStarted = () => {
+    if (startAt) return;
+    setStartAt(Date.now()); setElapsed(0);
+    if (healthOn) healthStartWatchWorkout();
+  };
 
   // ---- 集計 ----
   const daysSince = (iso) => Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
@@ -1908,6 +1950,8 @@ function App() {
           detail: (m.prescription.prevSets || []).filter(s => !s.warmup).map(s => `${wU(s.weight)}×${s.reps}`).join(" / "),
         })),
         applied: watchApplied,
+        recordStartAt: startAt,
+        lastSaved: watchLastSaved,
         fmtW: wU,
       });
       const { sentAt, ...content } = snap;
@@ -1917,7 +1961,7 @@ function App() {
       syncWatchSnapshot(snap);
     }, 400);
     return () => clearTimeout(timer);
-  }, [loaded, today, restStartAt, todayDay, autoMenu, watchApplied, workouts, lang, unit, customExercises, exerciseOverrides]);
+  }, [loaded, today, restStartAt, todayDay, autoMenu, watchApplied, workouts, lang, unit, customExercises, exerciseOverrides, startAt, watchLastSaved]);
 
   // カロリー(METs×体重×時間, 目安)
   const estimateKcal = (min) => Math.round(5.0 * profile.bodyweight * (min / 60));
@@ -1977,8 +2021,24 @@ function App() {
       setOfferSaveAsMenu({ exercises: exercises.map(ex => ex.name), muscles });
     }
     await persist({ workouts: [...workouts, entry], split: nextSplit });
+    // Watchがこの記録のワークアウト(心拍・カロリー付き)を記録していれば、ヘルスケアにはWatchが書く。
+    // iPhoneは今は書かず、保存した時刻をWatchに渡す(Watchは終了時刻をこれに合わせて保存する)。
+    // Watchの結果("saved"/"discarded")が返るまで pending に残し、保存できなかったら iPhone が書く(drain)。
+    // 4時間を超えるなど iPhone でも書かない記録は、Watch にも破棄させる(lastSaved に載せない)。
+    const watchRecorded = watchWorkoutForRef.current != null && watchWorkoutForRef.current === start;
+    const range = healthWorkoutRange(entry);
+    const handToWatch = watchRecorded && healthOn && !!range;
+    const lastSaved = handToWatch ? { key: healthWorkoutKey(entry), ...range } : null;
+    setWatchLastSaved(lastSaved);
+    watchWorkoutForRef.current = null;
+    try { await store.set(WATCH_LAST_SAVED_KEY, JSON.stringify(lastSaved)); } catch { /* noop */ }
+    if (handToWatch) {
+      watchHealthPendingRef.current = [...watchHealthPendingRef.current,
+        { recordStartAt: start, startAt: entry.startAt, endAt: entry.endAt, savedAt: Date.now() }];
+      try { await store.set(WATCH_HEALTH_PENDING_KEY, JSON.stringify(watchHealthPendingRef.current)); } catch { /* noop */ }
+    }
     // 待たない(ヘルスケアへの書き込みが遅れても失敗しても、記録の保存とは無関係)
-    if (healthOn) healthSaveWorkout(entry);
+    if (healthOn && !watchRecorded) healthSaveWorkout(entry);
     // 終了コメント
     setToday([]); setSaving(false);
     setStartAt(null); setElapsed(0); stopRest();
@@ -3038,6 +3098,7 @@ function App() {
               <button onClick={async () => {
                 if (!window.confirm(t("log.discardDraft"))) return;
                 setToday([]); setStartAt(null); setElapsed(0); stopRest(); setDraftRestored(false);
+                watchWorkoutForRef.current = null;
                 clearErrorIf("log.noValidSets");
                 try { await store.del(DRAFT_KEY); localStorage.removeItem(DRAFT_KEY); } catch { /* noop */ }
               }} style={{ ...btn("transparent", C.muted), padding: "6px 10px", fontSize: 13 }}>{t("log.discard")}</button>

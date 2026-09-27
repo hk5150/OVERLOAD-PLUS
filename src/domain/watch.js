@@ -29,13 +29,21 @@ const watchRir = (v) => (v === "" || v == null || isNaN(Number(v)) ? null : Numb
 // index.html から渡す情報で、Watch に送るスナップショットを作る純粋関数(テスト対象)。
 // exercises の各要素: { id, name, weightLabel, unit, step, restAfter, sets(today のまま), prevSets(kg。exerciseInsight の sets) }
 // fmtW: kg → 表示単位の文字列(wU)
-function buildWatchSnapshot({ now, exercises = [], restStartAt = null, dayName = null, menu = [], labels, applied = [], fmtW }) {
+// recordStartAt: 記録中なら、その記録の startAt(ms)。Watch のワークアウトとこの記録を対応付ける
+// lastSaved: 直近に保存した記録 { key(ヘルスケアの紐づけキー), startAt, endAt }。Watch はこれを見て、
+//            自分のワークアウトを保存する(一致)か破棄する(不一致=破棄された記録)かを決める
+function buildWatchSnapshot({ now, exercises = [], restStartAt = null, dayName = null, menu = [], labels, applied = [], fmtW,
+  recordStartAt = null, lastSaved = null }) {
   const state = exercises.length > 0 ? "active" : menu.length > 0 ? "menu" : "idle";
   return {
     v: WATCH_SNAPSHOT_VERSION,
     sentAt: now,
     state,
     restStartAt: state === "active" ? restStartAt : null,
+    // 種目を全部消して一時的に active でなくなっても、記録(startAt)が続いている間は載せ続ける。
+    // Watch はこれが消えたときに「記録が終わった」と判断する
+    recordStartAt,
+    lastSaved,
     dayName,
     labels,
     exercises: exercises.map((ex) => {
@@ -90,6 +98,9 @@ function applyWatchOps(today, ops, alreadyApplied = []) {
   for (const op of sorted) {
     if (seen.has(op.opId)) continue;
     seen.add(op.opId);
+    // 行の操作ではない op(Watch のワークアウトの開始の知らせなど)は、ここでは触らずに合流済みにする
+    // (中身は watchWorkoutFromOps が読む)
+    if (op.kind && op.kind !== "add" && op.kind !== "set") { applied.push(op.opId); continue; }
     const i = next.findIndex((ex) => ex.id === op.exId);
     if (i < 0) { applied.push(op.opId); continue; }
     const ex = next[i];
@@ -109,6 +120,50 @@ function applyWatchOps(today, ops, alreadyApplied = []) {
     if (op.restStartAt != null && (restStartAt == null || op.restStartAt > restStartAt)) restStartAt = op.restStartAt;
   }
   return { today: next, restStartAt, applied, deferred };
+}
+
+// Watch がワークアウトを始めた記録の startAt(ms)。無ければ null(純粋関数)。
+// 呼び出し側は、今の記録(startAt)と一致するときだけ採用する(遅れて届いた前の記録の知らせで上書きしない)。
+function watchWorkoutFromOps(ops) {
+  let found = null;
+  for (const op of ops || []) {
+    if (op && op.kind === "workout" && op.status === "started" && Number.isFinite(op.recordStartAt)) {
+      if (found == null || (op.at || 0) >= found.at) found = { recordStartAt: op.recordStartAt, at: op.at || 0 };
+    }
+  }
+  return found ? found.recordStartAt : null;
+}
+
+// Watch に任せたヘルスケアの書き込みを、Watch の結果で締める(純粋関数)。
+// iPhone は、Watch がワークアウトを記録している回は保存時にヘルスケアへ書かず、pending に積む。
+// - Watch が "saved" を返した → pending から外す(Watch が書いた)
+// - Watch が "discarded" を返した(保存に失敗した・システムに止められた) → iPhone が時刻だけ書く
+// - どちらも返らないまま WATCH_HEALTH_CONFIRM_MS を過ぎた(Watch のアプリが落ちた・届かない) → iPhone が書く
+// これで、Watch 側でワークアウトを始めた後に何が起きても、ヘルスケアから記録が消えることはない
+// (最悪でも、心拍の無い時刻だけのワークアウトになる)。
+// pending の要素: { recordStartAt(ms), startAt(ISO), endAt(ISO), savedAt(ms) }
+// 戻り値: { keep(残す pending), write(iPhone が書く記録 {startAt, endAt}) }
+const WATCH_HEALTH_CONFIRM_MS = 60 * 60 * 1000;
+function settleWatchHealth(pending, ops, now) {
+  const saved = new Set();
+  const discarded = new Set();
+  for (const op of ops || []) {
+    if (!op || op.kind !== "workout" || !Number.isFinite(op.recordStartAt)) continue;
+    if (op.status === "saved") saved.add(op.recordStartAt);
+    if (op.status === "discarded") discarded.add(op.recordStartAt);
+  }
+  const keep = [];
+  const write = [];
+  for (const p of pending || []) {
+    if (!p || !Number.isFinite(p.recordStartAt)) continue;
+    if (saved.has(p.recordStartAt)) continue;
+    if (discarded.has(p.recordStartAt) || now - (p.savedAt || 0) > WATCH_HEALTH_CONFIRM_MS) {
+      write.push({ startAt: p.startAt, endAt: p.endAt });
+      continue;
+    }
+    keep.push(p);
+  }
+  return { keep, write };
 }
 
 function capWatch() {
@@ -170,6 +225,9 @@ globalThis.WATCH_APPLIED_KEEP = WATCH_APPLIED_KEEP;
 globalThis.watchWeightStep = watchWeightStep;
 globalThis.buildWatchSnapshot = buildWatchSnapshot;
 globalThis.applyWatchOps = applyWatchOps;
+globalThis.watchWorkoutFromOps = watchWorkoutFromOps;
+globalThis.settleWatchHealth = settleWatchHealth;
+globalThis.WATCH_HEALTH_CONFIRM_MS = WATCH_HEALTH_CONFIRM_MS;
 globalThis.syncWatchSnapshot = syncWatchSnapshot;
 globalThis.peekWatchOps = peekWatchOps;
 globalThis.ackWatchOps = ackWatchOps;

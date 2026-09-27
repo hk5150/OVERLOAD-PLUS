@@ -8,3 +8,4 @@
 - [SWの新旧混在とv114キャッシュ優先](kurabell-sw-nonatomic-shell.md) — v114でnavigate全部index.html化。同スコープのprivacy/support.htmlと起動中claimに注意
 - [HealthKit連携とprofileの端末固有フラグ](kurabell-health-profile-flags.md) — healthOnが復元で上書き/persistRefの描画待ち窓/フォーカス中pullの書き戻し(v116)
 - [エラー帯は1枠共有](kurabell-error-banner-single-slot.md) — setError("")は無関係なエラーと再試行ボタンまで消す。saveStatusはクロージャ値(v117)。persistはv119から成否を返す
+- [Watchワークアウトの書き手の所有権](kurabell-watch-workout-ownership.md) — v122: started op後にWatchが保存失敗してもiPhoneに戻らない。未対応付けセッションの後始末

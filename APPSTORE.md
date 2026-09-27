@@ -314,3 +314,22 @@ App Store Connect の Apple ID は 6816090624、SKU は `kurabell-ios-001`。ア
 - スクリーンショットの6枚目(文字だけの料金説明)は Guideline 2.3.3 の注意に当たりうるので削除し、日英5枚にした
 - 返信後、バージョンのページで「**審査内容を更新**」→ 提出物の画面で「App Review に再提出」の順に押す必要があった
   (メタデータを変えた後は、再提出ボタンがグレーのまま)。新しいビルド(1.0 (5))があると確認が出るが、そのまま「提出」で 1.0 (3) のまま出せる
+
+---
+
+## 次のバージョン(Apple Watch 版)で差し替えるもの
+
+1.0 の審査中に書いた。**1.0 の審査メモ・説明文は 1.0 の動作どおりなので、今は変えない。** Watch 版を提出するときに、下の内容で差し替える。
+
+### 審査メモ(英語)のヘルスケアの段落
+
+HealthKit: off by default. When the user turns on "Connect to Apple Health" in the Settings tab, the app asks for permission and then (1) saves each workout the user logs as Traditional Strength Training with its start and end times only (no calories), (2) reads the latest body weight to calculate bodyweight exercises, and (3) saves the body weight the user enters in Settings. If the companion Apple Watch app is installed, starting a workout on iPhone launches the watch app with HKHealthStore.startWatchApp and starts a strength-training HKWorkoutSession; the watch reads heart rate and active energy and saves that workout (with heart rate and active energy) to Health, and the iPhone does not write a second copy. Deleting a workout in the app also deletes the workout written to Health. Health data stays on the device; it is never sent to a server or used for advertising.
+
+### 審査メモ(日本語)
+
+ヘルスケア(HealthKit)連携: 既定はオフです。設定タブの「ヘルスケアと連携」をオンにすると権限を求め、(1)記録したワークアウトを「従来型筋力トレーニング」として開始・終了時刻のみ書き込み、(2)自重種目の計算のため最新の体重を読み込み、(3)設定で入力した体重を書き込みます。Apple Watch 版が入っている場合は、iPhone で記録を始めると HKHealthStore.startWatchApp で Watch アプリを起動して筋トレの HKWorkoutSession を始め、Watch が心拍数と消費カロリーを読み込んで、それらを含むワークアウトとしてヘルスケアに保存します(iPhone からは同じワークアウトを書き込みません)。アプリで記録を削除すると、ヘルスケアのワークアウトも削除します。ヘルスケアのデータは端末内だけで扱い、外部への送信や広告目的の利用はしません。
+
+### 説明文の「ヘルスケアと連携」「Works with Apple Health」
+
+Watch の記録(自動起動・心拍・消費カロリー・リング)を1文足す。App Privacy は「データを収集しない」のまま(端末の外に送らないため)。
+

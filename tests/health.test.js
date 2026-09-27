@@ -46,7 +46,7 @@ function sampleBodyMass(overrides = {}) {
 function fakeHealthPlugin(overrides = {}) {
   const calls = {
     isAvailable: 0, requestAuthorization: 0, authorizationStatus: 0,
-    saveWorkout: [], deleteWorkout: [], latestBodyMass: 0, saveBodyMass: [],
+    saveWorkout: [], deleteWorkout: [], latestBodyMass: 0, saveBodyMass: [], startWatchWorkout: 0,
   };
   const fail = () => { if (overrides.fails) throw new Error("native failed"); };
   const plugin = {
@@ -63,6 +63,7 @@ function fakeHealthPlugin(overrides = {}) {
     async deleteWorkout(arg) { calls.deleteWorkout.push(arg); fail(); return overrides.deleteWorkoutResult ?? { deleted: 1 }; },
     async latestBodyMass() { calls.latestBodyMass++; fail(); return "latestBodyMassResult" in overrides ? overrides.latestBodyMassResult : sampleBodyMass(); },
     async saveBodyMass(arg) { calls.saveBodyMass.push(arg); fail(); return overrides.saveBodyMassResult ?? { date: 1_800_000_500_000 }; },
+    async startWatchWorkout() { calls.startWatchWorkout++; fail(); return overrides.startWatchWorkoutResult ?? { started: true }; },
   };
   const globals = {
     window: { Capacitor: { isNativePlatform: () => true, Plugins: { Health: plugin } } },
@@ -207,6 +208,7 @@ describe("プラグインが無い環境(Web版)では何もしない", () => {
       await expect(m.healthDeleteWorkout(sampleWorkout())).resolves.toBe(0);
       await expect(m.healthLatestBodyMass()).resolves.toBeNull();
       await expect(m.healthSaveBodyMass(70)).resolves.toBeNull();
+      await expect(m.healthStartWatchWorkout()).resolves.toBe(false);
     });
   }
 
@@ -355,6 +357,19 @@ describe("healthDeleteWorkout", () => {
   });
 });
 
+describe("healthStartWatchWorkout(記録の開始で Watch アプリを起動する)", () => {
+  it("起動できたら true", async () => {
+    const { globals, calls } = fakeHealthPlugin();
+    expect(await load(globals).healthStartWatchWorkout()).toBe(true);
+    expect(calls.startWatchWorkout).toBe(1);
+  });
+
+  it("Watch が無い・Watch アプリが入っていない(started: false)、ネイティブの失敗は false で、例外を出さない", async () => {
+    expect(await load(fakeHealthPlugin({ startWatchWorkoutResult: { started: false } }).globals).healthStartWatchWorkout()).toBe(false);
+    await expect(load(fakeHealthPlugin({ fails: true }).globals).healthStartWatchWorkout()).resolves.toBe(false);
+  });
+});
+
 describe("healthLatestBodyMass", () => {
   it("kgとdateをそのまま返す", async () => {
     const { globals } = fakeHealthPlugin({ latestBodyMassResult: { kg: 72.34, date: 1_800_000_000_000 } });
@@ -452,7 +467,7 @@ describe("ヘルスケア連携のネイティブ設定", () => {
     expect(unusedInJs, `JSから呼ばれないメソッド: ${unusedInJs.join(", ")}`).toEqual([]);
     expect([...called].sort()).toEqual([
       "authorizationStatus", "deleteWorkout", "isAvailable", "latestBodyMass",
-      "requestAuthorization", "saveBodyMass", "saveWorkout",
+      "requestAuthorization", "saveBodyMass", "saveWorkout", "startWatchWorkout",
     ]);
   });
 

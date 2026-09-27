@@ -92,6 +92,7 @@ final class SessionStore: NSObject, ObservableObject {
     // MARK: - 合流(iPhone の applyWatchOps と同じ規則。表示のためだけに使う)
 
     static func apply(_ op: WatchOp, to s: inout WatchSnapshot) {
+        guard op.kind == "add" || op.kind == "set" else { return } // ワークアウトの知らせなどは行を触らない
         guard let i = s.exercises.firstIndex(where: { $0.id == op.exId }) else { return }
         var sets = s.exercises[i].sets
         if op.setIndex == sets.count {
@@ -116,9 +117,11 @@ final class SessionStore: NSObject, ObservableObject {
         base = snap
         let applied = Set(snap.applied ?? [])
         pending.removeAll { applied.contains($0.opId) }
-        // iPhone が記録を終えた(保存・破棄)なら、宙に浮いた op は捨てる
-        if snap.state != .active { pending.removeAll() }
+        // iPhone が記録を終えた(保存・破棄)なら、宙に浮いたセットの op は捨てる。
+        // ワークアウトの知らせ(started/saved/discarded)は記録が終わった後に送るものなので残す
+        if snap.state != .active { pending.removeAll { $0.kind != "workout" } }
         save()
+        syncWorkout(with: snap)
         // Watch で始めた休憩が iPhone で確認された後に、iPhone 側で止まった・別の休憩が始まったら、
         // Watch の通知を取り消す(確認前の古いスナップショットでは判断しない)
         if let own = ownRestStartAt, !pending.contains(where: { $0.restStartAt == own }) {
@@ -127,6 +130,58 @@ final class SessionStore: NSObject, ObservableObject {
                 ownRestStartAt = nil
             }
         }
+    }
+
+    // MARK: - ワークアウト(WorkoutManager)との対応付け
+
+    // 直近に iPhone で保存した記録(WorkoutManager が前のセッションを締めるときに使う)
+    var lastSaved: WatchSnapshot.LastSaved? { base?.lastSaved }
+
+    // WorkoutManager がセッションを始めたとき。記録中のスナップショットが先に届いていれば、ここで対応付ける
+    func workoutDidStart() {
+        if let snap = base { syncWorkout(with: snap) }
+    }
+
+    // スナップショットの状態に合わせて、ワークアウトを記録に対応付ける・保存する・破棄する。
+    private func syncWorkout(with snap: WatchSnapshot) {
+        let wm = WorkoutManager.shared
+        guard wm.isRunning, !wm.isBusy else { return }
+        if let r = wm.recordStartAt {
+            if snap.recordStartAt == r { return } // 記録はまだ続いている(種目を消して入れ直す途中も含む)
+            // 記録 r が終わった(保存・破棄)か、別の記録に替わった
+            if let saved = snap.lastSaved, saved.startAt == r {
+                Task { await wm.finish(key: saved.key, endAt: saved.endAt) }
+            } else {
+                Task { await wm.discard(report: true) }
+            }
+            return
+        }
+        // まだ対応付いていない。
+        // 記録中のスナップショットは、セッションより前に送られたものでも対応付けてよい(iPhone は種目を足した
+        // 時点で状態を送り、その後で Watch を起動するので、ふつうはこちらが先に届く)。前の記録の古い状態に
+        // 誤って付かないよう、記録とセッションの開始時刻の近さで判断する(attach)。
+        if let r = snap.recordStartAt {
+            if wm.attach(recordStartAt: r) {
+                sendWorkoutEvent("started", recordStartAt: r)
+            } else if snap.sentAt >= wm.sessionStartMs {
+                // セッションの開始後に届いた記録が、開始時刻から離れすぎている = このセッションのための記録ではない
+                Task { await wm.discard(report: false) }
+            }
+        } else if snap.sentAt > wm.sessionStartMs + 5000 {
+            // 対応付く前に記録が終わった(iPhone は started を受け取っていないので自分で書く)
+            Task { await wm.discard(report: false) }
+        }
+    }
+
+    // iPhone への知らせ: "started"(この記録は Watch が記録する)/ "saved" / "discarded"
+    func sendWorkoutEvent(_ status: String, recordStartAt: Double) {
+        let op = WatchOp(opId: UUID().uuidString, kind: "workout", exId: "", setIndex: 0,
+                         weight: "", reps: "", rir: nil, restStartAt: nil,
+                         at: Date().timeIntervalSince1970 * 1000,
+                         status: status, recordStartAt: recordStartAt)
+        pending.append(op) // 届くまで送り直す(iPhone が合流済みにしたら外れる)
+        save()
+        send(op)
     }
 
     #if DEBUG

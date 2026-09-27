@@ -78,6 +78,74 @@ describe("buildWatchSnapshot", () => {
   });
 });
 
+describe("Watch のワークアウトとの対応付け", () => {
+  it("recordStartAt は記録(startAt)が続く間は種目が0件でも載せる。lastSaved はいつでも載せる", () => {
+    const { buildWatchSnapshot } = load();
+    const lastSaved = { key: "2026-09-28T00:00:00.000Z", startAt: 1, endAt: 2 };
+    const active = buildWatchSnapshot({ now: 1, labels: LABELS, fmtW, exercises: [bench([])], recordStartAt: 100, lastSaved });
+    expect(active.recordStartAt).toBe(100);
+    expect(active.lastSaved).toEqual(lastSaved);
+    // 最後の種目を消して差し替える途中: Watch がワークアウトを破棄しないよう、記録は続いていると伝える
+    const emptied = buildWatchSnapshot({ now: 1, labels: LABELS, fmtW, recordStartAt: 100, lastSaved });
+    expect(emptied.state).toBe("idle");
+    expect(emptied.recordStartAt).toBe(100);
+    // 保存・破棄の後(startAt が null): Watch に「記録は終わった」と分かる
+    expect(buildWatchSnapshot({ now: 1, labels: LABELS, fmtW, lastSaved }).recordStartAt).toBeNull();
+  });
+
+  it("watchWorkoutFromOps は開始の知らせのうち一番新しい記録を返す", () => {
+    const { watchWorkoutFromOps } = load();
+    expect(watchWorkoutFromOps([])).toBeNull();
+    expect(watchWorkoutFromOps([
+      { opId: "a", kind: "set", exId: "e1", setIndex: 0, at: 5 },
+      { opId: "b", kind: "workout", status: "started", recordStartAt: 100, at: 1 },
+      { opId: "c", kind: "workout", status: "started", recordStartAt: 200, at: 2 },
+    ])).toBe(200);
+    expect(watchWorkoutFromOps([{ opId: "d", kind: "workout", status: "failed", recordStartAt: 300, at: 3 }])).toBeNull();
+  });
+
+  it("applyWatchOps はワークアウトの知らせで行を触らず、合流済みにだけ数える", () => {
+    const { applyWatchOps } = load();
+    const t = [{ id: "e1", name: "x", sets: [{ weight: "80", reps: "8", rir: "", warmup: false }] }];
+    const r = applyWatchOps(t, [{ opId: "w", kind: "workout", status: "started", recordStartAt: 1, exId: "", setIndex: 0, at: 1 }]);
+    expect(r.today).toBe(t);
+    expect(r.applied).toEqual(["w"]);
+    expect(r.restStartAt).toBeNull();
+  });
+});
+
+describe("settleWatchHealth(Watch に任せたヘルスケアの書き込みを締める)", () => {
+  const pend = (o) => ({ recordStartAt: 100, startAt: "2026-09-28T00:00:00.000Z", endAt: "2026-09-28T00:40:00.000Z", savedAt: 1000, ...o });
+  const op = (status, recordStartAt = 100) => ({ opId: status, kind: "workout", status, recordStartAt, at: 1 });
+
+  it("Watch が保存できたら外すだけ(iPhone は書かない)", () => {
+    const { settleWatchHealth } = load();
+    expect(settleWatchHealth([pend()], [op("saved")], 2000)).toEqual({ keep: [], write: [] });
+  });
+
+  it("Watch が破棄した(保存に失敗した)ら iPhone が時刻だけ書く", () => {
+    const { settleWatchHealth } = load();
+    const r = settleWatchHealth([pend()], [op("discarded")], 2000);
+    expect(r.keep).toEqual([]);
+    expect(r.write).toEqual([{ startAt: "2026-09-28T00:00:00.000Z", endAt: "2026-09-28T00:40:00.000Z" }]);
+  });
+
+  it("返事が無いうちは残し、1時間を過ぎたら iPhone が書く(Watch のアプリが落ちた・届かない)", () => {
+    const { settleWatchHealth, WATCH_HEALTH_CONFIRM_MS } = load();
+    expect(settleWatchHealth([pend()], [], 1000 + WATCH_HEALTH_CONFIRM_MS).keep).toHaveLength(1);
+    const late = settleWatchHealth([pend()], [], 1000 + WATCH_HEALTH_CONFIRM_MS + 1);
+    expect(late.keep).toEqual([]);
+    expect(late.write).toHaveLength(1);
+  });
+
+  it("別の記録の知らせでは締めない", () => {
+    const { settleWatchHealth } = load();
+    const r = settleWatchHealth([pend()], [op("saved", 999), op("discarded", 998)], 2000);
+    expect(r.keep).toHaveLength(1);
+    expect(r.write).toEqual([]);
+  });
+});
+
 describe("watchWeightStep", () => {
   it("Watch の重量の刻みは種目によらず kg なら 1、lb なら 2.5", () => {
     const { watchWeightStep } = load();
@@ -269,6 +337,30 @@ describe("Watch アプリのネイティブ設定", () => {
     expect(editor).not.toMatch(/ScrollView\s*\{/); // コメントで名前を挙げるのは可
   });
 
+  it("iPhone から起動されたワークアウトを受けられる(HealthKit・バックグラウンド・利用目的の文言)", () => {
+    const pbx = read("ios/App/App.xcodeproj/project.pbxproj");
+    expect(pbx).toContain("CODE_SIGN_ENTITLEMENTS = KurabellWatch/KurabellWatch.entitlements;");
+    expect(read("ios/App/KurabellWatch/KurabellWatch.entitlements")).toMatch(/<key>com\.apple\.developer\.healthkit<\/key>\s*<true\/>/);
+    // WKBackgroundModes はビルド設定(INFOPLIST_KEY_*)では入らないので、Info.plist に書いている
+    expect(pbx).toContain("INFOPLIST_FILE = KurabellWatch/Info.plist;");
+    expect(read("ios/App/KurabellWatch/Info.plist")).toMatch(/<key>WKBackgroundModes<\/key>\s*<array>\s*<string>workout-processing<\/string>/);
+    // 利用目的の文言が無いと、権限を求めた時点でクラッシュする
+    expect(pbx).toContain("INFOPLIST_KEY_NSHealthShareUsageDescription");
+    expect(pbx).toContain("INFOPLIST_KEY_NSHealthUpdateUsageDescription");
+    const ja = read("ios/App/KurabellWatch/ja.lproj/InfoPlist.strings");
+    expect(ja).toContain('"NSHealthShareUsageDescription"');
+    expect(ja).toContain('"NSHealthUpdateUsageDescription"');
+    // 起動の受け口
+    expect(read("ios/App/KurabellWatch/KurabellWatchApp.swift")).toContain("func handle(_ workoutConfiguration: HKWorkoutConfiguration)");
+  });
+
+  it("Watch が保存するワークアウトの syncIdentifier は iPhone と同じ形(履歴の削除で iPhone から消せるように)", () => {
+    const wm = read("ios/App/KurabellWatch/WorkoutManager.swift");
+    const hm = read("ios/App/App/Health/HealthManager.swift");
+    expect(wm).toContain('"kurabell-workout-\\(key)"');
+    expect(hm).toContain('"kurabell-workout-\\(key)"');
+  });
+
   it("pbxproj が特定の SDK のパスに依存していない(Xcode の更新で参照が壊れる)", () => {
     const pbx = read("ios/App/App.xcodeproj/project.pbxproj");
     expect(pbx).not.toMatch(/SDKs\/\w+\d+\.\d+\.sdk/);
@@ -285,5 +377,21 @@ describe("Watch アプリのネイティブ設定", () => {
     expect(mgr).toContain("didReceiveUserInfo userInfo: [String: Any] = [:]) {\n        receiveOp(userInfo)");
     expect(mgr).toContain('updateApplicationContext(["snapshot": json])');
     expect(store).toContain('context["snapshot"]');
+  });
+});
+
+// index.html(#appsrc)はテストで実行されないので、「宣言より前でrefを使う」TDZは起動するまで分からない
+// (v122の実装中に「Cannot access 'startAtRef' before initialization」で起動できなくなった)。
+// コンポーネント直下(2字下げ)の `xxxRef.current = ...` は、その ref の宣言より後に書かれていること。
+describe("index.html のrefの宣言順", () => {
+  it("コンポーネント直下で ref に代入する行は、その ref の useRef 宣言より後にある", () => {
+    const html = fs.readFileSync(path.join(process.cwd(), "index.html"), "utf-8");
+    const assigns = [...html.matchAll(/^ {2}(\w+Ref)\.current = /gm)];
+    expect(assigns.length).toBeGreaterThan(0);
+    for (const m of assigns) {
+      const decl = html.search(new RegExp(`^ {2}const ${m[1]} = useRef\\(`, "m"));
+      expect(decl, `${m[1]} の宣言が見つからない`).toBeGreaterThanOrEqual(0);
+      expect(decl, `${m[1]} を宣言より前で使っている`).toBeLessThan(m.index);
+    }
   });
 });

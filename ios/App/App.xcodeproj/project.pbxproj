@@ -43,7 +43,9 @@
 		ABF8CD030A9B517246F8FB4F /* WatchSessionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1F242F17BCD3F27A210FC6C /* WatchSessionManager.swift */; };
 		ACFB888C57EFB2AD7468CE32 /* RestTimerAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = D14AD22BEF97714C080BC66B /* RestTimerAttributes.swift */; };
 		AD5E778047EE000709DCF73D /* BridgeViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3C2354788ED14DA304DD61B /* BridgeViewController.swift */; };
+		CAD1B389E14726C0A8EB539C /* WorkoutManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD6C99B61B52D5D166DCD8E7 /* WorkoutManager.swift */; };
 		EA31416053B0D7A0A18C980E /* StoreKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 60223FC6406A946ECEB0619A /* StoreKit.framework */; };
+		EFC85C0F6079461828D7C2E8 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = E283E4B6ED6071BB80F918FC /* InfoPlist.strings */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -92,6 +94,7 @@
 		0F583D8E24C3A2E6183FAD88 /* Assets.xcassets */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		126678B07836F7BF2C036333 /* ja */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.strings; name = ja; path = ja.lproj/Localizable.strings; sourceTree = "<group>"; };
 		1DDE05CC57F5D774E8504675 /* SampleData.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SampleData.swift; sourceTree = "<group>"; };
+		2258CE603024CBCA8EBC9642 /* ja */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.strings; name = ja; path = ja.lproj/InfoPlist.strings; sourceTree = "<group>"; };
 		2FAD9762203C412B000D30F8 /* config.xml */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = config.xml; sourceTree = "<group>"; };
 		30BD14DAAAE86D5CC41D0A7A /* RestActivity.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = RestActivity.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		34A0471B1932971EEE4ECFED /* App.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = App.entitlements; sourceTree = "<group>"; };
@@ -107,13 +110,16 @@
 		50B271D01FEDC1A000F3C39B /* public */ = {isa = PBXFileReference; lastKnownFileType = folder; path = public; sourceTree = "<group>"; };
 		5D9B002FB6F5FB812D98229F /* StoreManager.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = StoreManager.swift; sourceTree = "<group>"; };
 		60223FC6406A946ECEB0619A /* StoreKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = StoreKit.framework; path = System/Library/Frameworks/StoreKit.framework; sourceTree = SDKROOT; };
+		67D0AB22498F49E8350556B7 /* KurabellWatch.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = KurabellWatch.entitlements; sourceTree = "<group>"; };
 		6A1D0C2D1A4B47D8B0E5F000 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		6E531041F376EFAFA802652D /* HealthManager.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HealthManager.swift; sourceTree = "<group>"; };
+		76D9C62DB89B5D28ACE679E7 /* en */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/InfoPlist.strings; sourceTree = "<group>"; };
 		7812A8755F6BE2451C88A107 /* WatchPlugin.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WatchPlugin.swift; sourceTree = "<group>"; };
 		80CFB1A042027EBA9941D491 /* RestActivityLiveActivity.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RestActivityLiveActivity.swift; sourceTree = "<group>"; };
 		8770DE6CE1F21E972543BA20 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 		8A8673594951CFDD7AC3688F /* ActivityKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = ActivityKit.framework; path = System/Library/Frameworks/ActivityKit.framework; sourceTree = SDKROOT; };
 		8BA292D9197F9E5F6E20F73F /* en */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/Localizable.strings; sourceTree = "<group>"; };
+		958D1B8D2340EA65A6D42B7A /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		999DC06A7ED296A4FF29B986 /* WatchModels.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WatchModels.swift; sourceTree = "<group>"; };
 		A3C2354788ED14DA304DD61B /* BridgeViewController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BridgeViewController.swift; sourceTree = "<group>"; };
 		A518090B3BA1447F59E331AD /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
@@ -131,6 +137,7 @@
 		E1F242F17BCD3F27A210FC6C /* WatchSessionManager.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WatchSessionManager.swift; sourceTree = "<group>"; };
 		F46C657204AD1B2F3180EEAC /* HealthPlugin.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HealthPlugin.swift; sourceTree = "<group>"; };
 		FC68EB0AF532CFC21C3344DD /* Pods-App.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-App.debug.xcconfig"; path = "Pods/Target Support Files/Pods-App/Pods-App.debug.xcconfig"; sourceTree = "<group>"; };
+		FD6C99B61B52D5D166DCD8E7 /* WorkoutManager.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WorkoutManager.swift; sourceTree = "<group>"; };
 		FDD8743137EA64209737AD3E /* IapPlugin.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = IapPlugin.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -261,6 +268,10 @@
 				1DDE05CC57F5D774E8504675 /* SampleData.swift */,
 				0F583D8E24C3A2E6183FAD88 /* Assets.xcassets */,
 				AD480C0721A61B46103A3F41 /* Localizable.strings */,
+				FD6C99B61B52D5D166DCD8E7 /* WorkoutManager.swift */,
+				67D0AB22498F49E8350556B7 /* KurabellWatch.entitlements */,
+				E283E4B6ED6071BB80F918FC /* InfoPlist.strings */,
+				958D1B8D2340EA65A6D42B7A /* Info.plist */,
 			);
 			name = KurabellWatch;
 			path = KurabellWatch;
@@ -445,6 +456,7 @@
 			files = (
 				73C6041BE26132F06AA9695F /* Assets.xcassets in Resources */,
 				149521E462F1AF5ECF3F020E /* Localizable.strings in Resources */,
+				EFC85C0F6079461828D7C2E8 /* InfoPlist.strings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -531,6 +543,7 @@
 				5B98AF87C7D69E960032AF6A /* WatchModels.swift in Sources */,
 				064641D0D11FEDE526FF8DA2 /* Views.swift in Sources */,
 				399B179AC9878CEA83BBAF31 /* SampleData.swift in Sources */,
+				CAD1B389E14726C0A8EB539C /* WorkoutManager.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -583,6 +596,15 @@
 				126678B07836F7BF2C036333 /* ja */,
 			);
 			name = Localizable.strings;
+			sourceTree = "<group>";
+		};
+		E283E4B6ED6071BB80F918FC /* InfoPlist.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				76D9C62DB89B5D28ACE679E7 /* en */,
+				2258CE603024CBCA8EBC9642 /* ja */,
+			);
+			name = InfoPlist.strings;
 			sourceTree = "<group>";
 		};
 /* End PBXVariantGroup section */
@@ -793,12 +815,16 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = KurabellWatch/KurabellWatch.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 5;
 				DEVELOPMENT_TEAM = LJR5Q5TU54;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = KurabellWatch/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = KURABELL;
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "Used to include heart rate and active energy in the workout you record on Apple Watch.";
+				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "Saves the strength-training workout you record on Apple Watch, including heart rate and active energy, to Apple Health.";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.hajime5150.kurabellplus;
 				INFOPLIST_KEY_WKRunsIndependentlyOfCompanionApp = NO;
@@ -819,12 +845,16 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = KurabellWatch/KurabellWatch.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 5;
 				DEVELOPMENT_TEAM = LJR5Q5TU54;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = KurabellWatch/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = KURABELL;
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "Used to include heart rate and active energy in the workout you record on Apple Watch.";
+				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "Saves the strength-training workout you record on Apple Watch, including heart rate and active energy, to Apple Health.";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.hajime5150.kurabellplus;
 				INFOPLIST_KEY_WKRunsIndependentlyOfCompanionApp = NO;

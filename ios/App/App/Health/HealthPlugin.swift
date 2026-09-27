@@ -16,6 +16,7 @@ public class HealthPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "deleteWorkout", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "latestBodyMass", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "saveBodyMass", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "startWatchWorkout", returnType: CAPPluginReturnPromise),
     ]
 
     private let manager = HealthManager.shared
@@ -78,6 +79,20 @@ public class HealthPlugin: CAPPlugin, CAPBridgedPlugin {
                 call.resolve(["deleted": n])
             } catch {
                 call.reject(error.localizedDescription)
+            }
+        }
+    }
+
+    // 記録の開始時に Watch アプリを起動してワークアウトを始めさせる。→ { started: Bool }
+    // Watch が無い・Watch アプリが入っていないのは普通のことなので、reject せず started: false で返す。
+    @objc func startWatchWorkout(_ call: CAPPluginCall) {
+        guard manager.isAvailable else { call.resolve(["started": false]); return }
+        Task {
+            do {
+                try await manager.startWatchApp()
+                call.resolve(["started": true])
+            } catch {
+                call.resolve(["started": false])
             }
         }
     }

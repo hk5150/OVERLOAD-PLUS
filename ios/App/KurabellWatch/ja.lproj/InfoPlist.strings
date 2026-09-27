@@ -1,0 +1,4 @@
+/* Watch でのワークアウト中の心拍・消費カロリーの読み込み */
+"NSHealthShareUsageDescription" = "Apple Watchで記録するワークアウトに、心拍数と消費カロリーを含めて保存するために使います。";
+/* Watch で記録したワークアウトの書き込み */
+"NSHealthUpdateUsageDescription" = "Apple Watchで記録したウエイトトレーニングのワークアウト(心拍数・消費カロリーを含む)をヘルスケアに保存します。";

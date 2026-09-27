@@ -101,6 +101,59 @@ Watch で −/+ を押していない値は、iPhone で入力されたままの
 いちばん多い「前回どおりにやって RIR だけ入れる」はワンタップで済むように、RIR の4つのボタンを
 スクロールせずに見える1行に並べてある。`tests/watch.test.js` で `digitalCrownRotation` を使っていないことを縛っている。
 
+### ワークアウト(iPhone で記録を始めると Watch が自動で起動する、v122)
+
+ユーザーの要望は「iPhone でアプリを立ち上げたら、Watch アプリも自動で立ち上がってほしい」(2026-09-28)。
+iPhone から Watch アプリを起動できる公式の方法は `HKHealthStore.startWatchApp(with:)` だけで、Watch 側でワークアウトセッションを始める形になる。
+ワークアウト中は腕を下ろしても KURABELL の画面のまま保たれ、心拍・消費カロリーも取れる。
+
+ユーザーの決定:
+- **Watch で心拍・消費カロリー付きのワークアウトを保存する。** その記録では、iPhone 側の時刻だけの書き込みを止める(二重にしない)
+- **自動起動は「ヘルスケアと連携」(`profile.healthOn`)に連動させる。** 新しい設定項目は足さない
+
+流れ:
+1. iPhone の `ensureStarted`(startAt が null から値になる唯一の場所)で、`healthOn` なら `healthStartWatchWorkout()` を呼ぶ。
+   下書きの復元は「開始」ではないので呼ばない
+2. Watch の `AppDelegate.handle(_ workoutConfiguration:)` → `WorkoutManager.start` で `HKWorkoutSession` と `HKLiveWorkoutBuilder` を作る。
+   権限(書き込み: ワークアウト・消費カロリー、読み取り: 心拍・消費カロリー)は初回だけ Watch で求める
+3. 記録中のスナップショットの `recordStartAt` で、ワークアウトをその記録に対応付ける。
+   op `{kind: "workout", status: "started", recordStartAt}` を iPhone に送り、iPhone は `watchWorkoutFor` として下書きに保存する
+4. iPhone の保存(`saveWorkout`)で、`watchWorkoutFor === startAt` なら iPhone はその場ではヘルスケアに書かない。
+   代わりに `lastSaved: {key, startAt, endAt}` をスナップショットに載せ、書き込みを pending に積む(どちらも store に保存)
+5. Watch はスナップショットが active でなくなったら、次のとおり処理する
+   - `lastSaved.startAt` が自分の記録と一致する: iPhone の保存時刻で締めて保存(`finishWorkout`)
+   - 一致しない: 破棄(`discardWorkout`)
+6. 4時間(`HEALTH_MAX_WORKOUT_MS` と同じ)たっても終わらなければ、Watch が破棄する。iPhone も4時間を超える記録は書かない決まりなので、それに揃えている
+7. **Watch は結果を返す。** 保存できたら `saved`、破棄した・保存に失敗した・システムにセッションを止められたら `discarded`。
+   iPhone は `settleWatchHealth` で pending を締める。`saved` なら外すだけ、`discarded` か1時間の無応答なら **iPhone が時刻だけ書く**。
+   これで、Watch で始めた後に何が起きても(Watch のアプリが落ちる、届かない、保存に失敗する)、ヘルスケアから記録が消えない。
+   最悪でも、心拍の無い時刻だけのワークアウトになる(reviewer の指摘で追加)
+
+落とし穴:
+- **`recordStartAt` は、種目が0件でも記録(startAt)が続く間は送る。** 以前は active のときだけ送っていたので、差し替えのために
+  最後の種目を消すと、Watch は「記録が終わった」と判断してワークアウトを破棄していた(reviewer の指摘)
+- **対応付けは、記録とセッションの開始時刻の近さ(10分以内)で判断する。** 送信時刻で判断してはいけない。
+  iPhone は種目を足した時点で状態を送り、その後で Watch を起動するので、正しいスナップショットほど「セッションより前」に送られている
+  (送信時刻で弾いたら対応付かなくなった。シミュレータで確認)
+- 対応付けの前は、「記録が無い」スナップショットで破棄するのは、セッション開始から5秒より後に送られたものだけにする
+  (起動直後に届く古い状態で、始めたばかりのワークアウトを破棄しないため)
+- start / finish / discard は `isBusy` で二重に走らせない。await の途中で別のスナップショットが届くため
+- 保存は Apple の手順どおり、`session.end()` → ended の通知 → `endCollection` → `finishWorkout` の順にする
+- Watch の `WKBackgroundModes`(`workout-processing`)は、ビルド設定の `INFOPLIST_KEY_*` では入らない。`KurabellWatch/Info.plist` に書いて、自動生成の分と合わせている
+- **シミュレータでは、署名なし(`CODE_SIGNING_ALLOWED=NO`)でビルドすると HealthKit の entitlement が入らない。**
+  「Missing com.apple.developer.healthkit entitlement」で全部失敗する。検証では署名ありでビルドする
+- 保存するワークアウトの syncIdentifier は、iPhone と同じ `kurabell-workout-<startAt ISO>` にしている。
+  iPhone の `deleteWorkout` はソースで絞らない形に変えた(Watch が保存した分も消せるように)。
+  **実際に iPhone から Watch 由来のワークアウトを消せるかは、実機で未確認**
+
+シミュレータで確認済み(2026-09-28、iPhone 17 Pro Max + Watch Series 11。reviewer の指摘の修正後も再確認):
+- 最後の種目を消して入れ直しても、Watch のワークアウトは続く
+- 保存すると Watch が `saved` を返し、iPhone の pending(`watch-health-pending-v1`)が空になる
+- iPhone で記録を開始すると Watch アプリが起動し、初回はヘルスケアの許可画面が出る(日本語の説明文)。許可するとセッションが running になる
+- iPhone に `watchWorkoutFor` が届き、記録の startAt と一致する
+- 保存すると Watch がワークアウトを Finished にし、iPhone はヘルスケアに書かない
+- 2回目以降は許可画面なしで始まる。記録を破棄すると Watch のワークアウトも Discarded になる
+
 ## Xcode プロジェクト
 
 - ターゲット `KurabellWatch` は `xcodeproj` gem で追加した。

@@ -15,6 +15,14 @@ struct WatchSnapshot: Codable, Equatable {
     var exercises: [Exercise]
     var menu: [MenuItem]
     var applied: [String]?          // iPhone が today に合流済みの opId(直近のもの)
+    var recordStartAt: Double? = nil    // 記録中なら、その記録の startAt(ms)。Watch のワークアウトと対応付ける
+    var lastSaved: LastSaved? = nil     // 直近に保存した記録。Watch のワークアウトを保存するか破棄するかの判断に使う
+
+    struct LastSaved: Codable, Equatable {
+        var key: String             // ヘルスケアの紐づけキー(記録の startAt の ISO 文字列)
+        var startAt: Double         // ms
+        var endAt: Double           // ms(ワークアウトの終了時刻にする)
+    }
 
     struct Labels: Codable, Equatable {
         var rest: String            // インターバル / Rest
@@ -76,6 +84,9 @@ struct WatchOp: Codable, Equatable {
     var rir: Int?
     var restStartAt: Double?        // この op で休憩を始めたなら、その時刻(ms)
     var at: Double                  // ms
+    // kind "workout" のときだけ: Watch がワークアウトを始めた知らせ(iPhone はその記録をヘルスケアに書かない)
+    var status: String? = nil
+    var recordStartAt: Double? = nil
 }
 
 extension WatchSnapshot.SetRow {
