@@ -1,4 +1,5 @@
 import SwiftUI
+import WatchKit
 
 // 色は iPhone アプリ(index.html の C)と Live Activity(RestActivityLiveActivity.swift)に揃える。
 // 背景は OLED の黒に溶かし、面だけ C.surface で浮かせる。
@@ -88,6 +89,7 @@ struct RestRowButton: View {
     var body: some View {
         Button { open = true } label: {
             RestRow(label: label, startAt: startAt, compact: compact)
+                .contentShape(Rectangle()) // 文字の間(Spacer)を押しても開くように
         }
         .buttonStyle(.plain)
         .sheet(isPresented: $open) { RestTimerView(store: store) }
@@ -395,7 +397,9 @@ struct SetEditView: View {
     }
 
     private var editor: some View {
-        ScrollView {
+        // ScrollView で包まない: 包むと、スクロールかタップかを見分けるためにボタンの反応が遅れる
+        // (シミュレータで、押した結果が次に押すまで出ない現象を確認)。46mm で1画面に収まる量にしてある
+        Group {
             VStack(spacing: 4) {
                 if let p = row?.prev {
                     Text("\(labels.prev) \(p.text)")
@@ -428,9 +432,8 @@ struct SetEditView: View {
                                     .numeric(20)
                                     .frame(maxWidth: .infinity, minHeight: 40)
                             }
-                            .buttonStyle(.plain)
-                            .background(RoundedRectangle(cornerRadius: 8)
-                                .fill(row?.rir == r ? Palette.green : Palette.surface2))
+                            .buttonStyle(PadButtonStyle(fill: row?.rir == r ? Palette.green : Palette.surface2,
+                                                        shape: RoundedRectangle(cornerRadius: 8)))
                         }
                     }
                 }
@@ -463,7 +466,8 @@ private struct ValueStepper: View {
         HStack(spacing: 4) {
             stepButton("minus", action: minus)
             VStack(spacing: 0) {
-                Text(value).numeric(26).lineLimit(1).minimumScaleFactor(0.6)
+                // 高さが足りないときに縮めない(小さい数字は手首で読みにくい)。横幅が足りないときだけ縮める
+                Text(value).numeric(26).lineLimit(1).minimumScaleFactor(0.6).fixedSize(horizontal: false, vertical: true)
                 Text(caption).font(.system(size: 10, weight: .semibold)).foregroundStyle(Palette.muted).lineLimit(1)
             }
             .frame(maxWidth: .infinity)
@@ -472,13 +476,58 @@ private struct ValueStepper: View {
     }
 
     private func stepButton(_ symbol: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: symbol)
-                .font(.system(size: 18, weight: .bold))
-                .frame(width: 44, height: 38)
-        }
-        .buttonStyle(.plain)
-        .background(Capsule().fill(Palette.surface2))
+        StepPad(symbol: symbol, action: action)
+    }
+}
+
+// −/+ は続けて何度も押すので、標準の Button ではなく「指が触れた瞬間」に反応させる。
+// Button は指を離したときに確定し、素早く続けて押すと取りこぼした(シミュレータで3回押して1回しか増えない)。
+// 入力画面は ScrollView で包まないので、スクロールのつもりで触れて誤って増減することはない。
+private struct StepPad: View {
+    let symbol: String
+    let action: () -> Void
+    // 触れている間だけ true。@GestureState は、指を離したときだけでなく、ジェスチャが途中で
+    // 取り消されたときも必ず false に戻る(@State だと戻らずに次の接触を無視し続ける恐れがある)
+    @GestureState private var pressed = false
+
+    var body: some View {
+        Image(systemName: symbol)
+            .font(.system(size: 18, weight: .bold))
+            .frame(width: 50, height: 40)
+            .background(Capsule().fill(Palette.surface2).brightness(pressed ? 0.15 : 0))
+            .contentShape(Capsule())
+            .scaleEffect(pressed ? 0.94 : 1)
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .updating($pressed) { _, isDown, _ in
+                        guard !isDown else { return } // 1回の接触で1回だけ(触れた瞬間)
+                        isDown = true
+                        DispatchQueue.main.async {
+                            WKInterfaceDevice.current().play(.click) // 押せたことを指先に返す
+                            action()
+                        }
+                    }
+            )
+            .accessibilityElement()
+            .accessibilityLabel(Text(symbol == "plus" ? "+" : "−"))
+            .accessibilityAddTraits(.isButton)
+            .accessibilityAction { action() }
+    }
+}
+
+// Watch の押しボタン共通の見た目と当たり判定。
+// .plain スタイルに外から background を付けると、当たり判定が記号・数字の線だけになり、
+// 「−」のような細い記号はほとんど押せなかった(実機で「回数の − の反応が悪い」)。
+// 面をラベルの内側に描き、contentShape で面全体を押せる範囲にする。押している間は明るく縮めて反応を見せる。
+struct PadButtonStyle<S: Shape>: ButtonStyle {
+    var fill: Color
+    var shape: S
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .background(shape.fill(fill).brightness(configuration.isPressed ? 0.15 : 0))
+            .contentShape(shape)
+            .scaleEffect(configuration.isPressed ? 0.94 : 1)
     }
 }
 

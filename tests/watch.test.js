@@ -254,6 +254,21 @@ describe("Watch アプリのネイティブ設定", () => {
     expect(read("ios/App/KurabellWatch/Views.swift")).not.toContain("digitalCrownRotation");
   });
 
+  it("Watch のボタンは面全体を押せる(.plain に外から background を付けると線しか反応しない)", () => {
+    const views = read("ios/App/KurabellWatch/Views.swift");
+    expect(views).not.toMatch(/\.buttonStyle\(\.plain\)\s*\n\s*\.background/);
+    expect(views).toContain(".contentShape(shape)");
+  });
+
+  it("−/+ は触れた瞬間に反応し、入力画面はスクロールで包まない(包むとボタンの反応が遅れる)", () => {
+    const views = read("ios/App/KurabellWatch/Views.swift");
+    const pad = views.slice(views.indexOf("private struct StepPad"));
+    expect(pad).toContain("DragGesture(minimumDistance: 0)");
+    expect(pad).toContain("@GestureState private var pressed"); // 取り消されても押しっぱなしにならない
+    const editor = views.slice(views.indexOf("private var editor: some View"), views.indexOf(".onAppear {", views.indexOf("private var editor: some View")));
+    expect(editor).not.toContain("ScrollView");
+  });
+
   it("pbxproj が特定の SDK のパスに依存していない(Xcode の更新で参照が壊れる)", () => {
     const pbx = read("ios/App/App.xcodeproj/project.pbxproj");
     expect(pbx).not.toMatch(/SDKs\/\w+\d+\.\d+\.sdk/);
