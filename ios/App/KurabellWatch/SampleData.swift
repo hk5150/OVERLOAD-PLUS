@@ -22,22 +22,22 @@ enum SampleData {
             labels: .init(rest: "インターバル", restBody: "{n}分経過しました。次のセットへ。", prev: "前回", same: "→ 同じ", reps: "回",
                           startOnPhone: "iPhoneで記録を開始してください", warmup: "W", addSet: "セットを追加", rirQuestion: "あと何回できた?", next: "次"),
             exercises: [
-                .init(id: "a1", name: "ベンチプレス", weightLabel: "重量 kg", unit: "kg", step: 2.5, restAfter: true, sets: [
+                .init(id: "a1", name: "ベンチプレス", weightLabel: "重量 kg", unit: "kg", step: 1, restAfter: true, sets: [
                     row("40", "10", nil, prev: nil, warmup: true),
                     row("80", "8", 2, prev: ("80", "8", 1)),
                     row("80", "8", 1, prev: ("80", "7", 1)),
                     row("80", "7", nil, prev: ("77.5", "8", 0)),
                 ]),
-                .init(id: "a2", name: "インクラインダンベルプレス", weightLabel: "重量 kg/片手", unit: "kg", step: 2, restAfter: true, sets: [
+                .init(id: "a2", name: "インクラインダンベルプレス", weightLabel: "重量 kg/片手", unit: "kg", step: 1, restAfter: true, sets: [
                     row("26", "10", nil, prev: ("26", "10", 2)),
                     row("26", "10", nil, prev: ("26", "9", 1)),
                     row("26", "9", nil, prev: ("26", "8", 0)),
                 ]),
-                .init(id: "a3", name: "ディップス", weightLabel: "加重 kg", unit: "kg", step: 2.5, restAfter: true, sets: [
+                .init(id: "a3", name: "ディップス", weightLabel: "加重 kg", unit: "kg", step: 1, restAfter: true, sets: [
                     row("10", "8", nil, prev: ("10", "8", 2)),
                     row("10", "8", nil, prev: ("10", "7", 1)),
                 ]),
-                .init(id: "a4", name: "ケーブルプレスダウン", weightLabel: "重量 kg", unit: "kg", step: 2.5, restAfter: true, sets: [
+                .init(id: "a4", name: "ケーブルプレスダウン", weightLabel: "重量 kg", unit: "kg", step: 1, restAfter: true, sets: [
                     row("30", "12", nil, prev: ("30", "12", 2)),
                     row("30", "12", nil, prev: ("30", "11", 1)),
                 ]),

@@ -78,6 +78,15 @@ describe("buildWatchSnapshot", () => {
   });
 });
 
+describe("watchWeightStep", () => {
+  it("Watch の重量の刻みは種目によらず kg なら 1、lb なら 2.5", () => {
+    const { watchWeightStep } = load();
+    expect(watchWeightStep("kg")).toBe(1);
+    expect(watchWeightStep("lb")).toBe(2.5);
+    expect(watchWeightStep(undefined)).toBe(1);
+  });
+});
+
 describe("applyWatchOps", () => {
   const today = () => [
     { id: "e1", name: "ベンチプレス", sets: [

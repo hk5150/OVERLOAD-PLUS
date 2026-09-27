@@ -34,7 +34,7 @@ struct WatchSnapshot: Codable, Equatable {
         var name: String
         var weightLabel: String     // 重量 / 重量(片手) / 加重
         var unit: String            // kg / lb
-        var step: Double            // Digital Crown 1クリックの刻み(表示単位)
+        var step: Double            // −/+ 1回で動く重量(表示単位。kg なら 1、lb なら 2.5。src/domain/watch.js の watchWeightStep)
         var restAfter: Bool         // RIR を入れたら休憩を始めるか(スーパーセットの途中は false)
         var sets: [SetRow]
     }

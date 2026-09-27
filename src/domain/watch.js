@@ -18,6 +18,12 @@ const WATCH_SNAPSHOT_VERSION = 1;
 // Watch が一度に溜める op の数(1回のトレーニングのセット数)より十分大きければよい。
 const WATCH_APPLIED_KEEP = 100;
 
+// Watch の −/+ 1回で動く重量(表示単位)。種目ごとの刻み(バーベル 2.5kg など)ではなく一律にする。
+// 手首の小さいボタンでは細かく刻めるほうが合わせやすい、というユーザーの判断(2026-09-28)。
+// lb は 1lb だと押す回数が多すぎるので、プレートの最小単位の 2.5lb にする。
+const WATCH_WEIGHT_STEP = { kg: 1, lb: 2.5 };
+const watchWeightStep = (unit) => WATCH_WEIGHT_STEP[unit] || WATCH_WEIGHT_STEP.kg;
+
 const watchRir = (v) => (v === "" || v == null || isNaN(Number(v)) ? null : Number(v));
 
 // index.html から渡す情報で、Watch に送るスナップショットを作る純粋関数(テスト対象)。
@@ -161,6 +167,7 @@ function onWatchOps(handler) {
 }
 
 globalThis.WATCH_APPLIED_KEEP = WATCH_APPLIED_KEEP;
+globalThis.watchWeightStep = watchWeightStep;
 globalThis.buildWatchSnapshot = buildWatchSnapshot;
 globalThis.applyWatchOps = applyWatchOps;
 globalThis.syncWatchSnapshot = syncWatchSnapshot;

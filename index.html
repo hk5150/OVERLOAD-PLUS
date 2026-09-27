@@ -248,7 +248,7 @@ const DRAFT_KEY = "workout-draft-v1"; // 入力途中の記録(アプリが落�
 const PRE_IMPORT_BACKUP_KEY = "workout-log-v1-pre-import"; // バックアップ復元前のデータ退避(復元に失敗した場合の保険)
 // ヘッダーのバージョンバッジとバックアップのappVersionで共有する単一の定数。
 // sw.js の CACHE 定数とは tests/version.test.js が数字の一致を機械的に縛っている(CLAUDE.md参照)。
-const APP_VERSION = "v120";
+const APP_VERSION = "v121";
 // store(保存レイヤ)は src/domain/storage.js へ移設(テストのため)。
 // LIBSで<script src>読み込み済みなのでグローバルの store をそのまま参照できる。
 const uid = () => Math.random().toString(36).slice(2, 8);
@@ -1898,7 +1898,7 @@ function App() {
           weightLabel: ex.bwFactor > 0 ? t("set.weightAdded", { unit: uLabel() })
             : resolveIsDb(ex.name, ex.isDb) ? t("set.weightPerHand", { unit: uLabel() }) : t("set.weight", { unit: uLabel() }),
           unit: uLabel(),
-          step: wU(ex.increment ?? profile.defIncrement ?? 2.5) || 1,
+          step: watchWeightStep(uLabel()),
           restAfter: isLastInGroup(i),
           sets: ex.sets,
           prevSets: exerciseInsight(ex.name)?.sets || null,
@@ -1917,7 +1917,7 @@ function App() {
       syncWatchSnapshot(snap);
     }, 400);
     return () => clearTimeout(timer);
-  }, [loaded, today, restStartAt, todayDay, autoMenu, watchApplied, workouts, lang, unit, profile.defIncrement, customExercises, exerciseOverrides]);
+  }, [loaded, today, restStartAt, todayDay, autoMenu, watchApplied, workouts, lang, unit, customExercises, exerciseOverrides]);
 
   // カロリー(METs×体重×時間, 目安)
   const estimateKcal = (min) => Math.round(5.0 * profile.bodyweight * (min / 60));
