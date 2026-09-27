@@ -266,7 +266,7 @@ describe("Watch アプリのネイティブ設定", () => {
     expect(pad).toContain("DragGesture(minimumDistance: 0)");
     expect(pad).toContain("@GestureState private var pressed"); // 取り消されても押しっぱなしにならない
     const editor = views.slice(views.indexOf("private var editor: some View"), views.indexOf(".onAppear {", views.indexOf("private var editor: some View")));
-    expect(editor).not.toContain("ScrollView");
+    expect(editor).not.toMatch(/ScrollView\s*\{/); // コメントで名前を挙げるのは可
   });
 
   it("pbxproj が特定の SDK のパスに依存していない(Xcode の更新で参照が壊れる)", () => {
