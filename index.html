@@ -251,7 +251,7 @@ const WATCH_LAST_SAVED_KEY = "watch-last-saved-v1";
 const PRE_IMPORT_BACKUP_KEY = "workout-log-v1-pre-import"; // バックアップ復元前のデータ退避(復元に失敗した場合の保険)
 // ヘッダーのバージョンバッジとバックアップのappVersionで共有する単一の定数。
 // sw.js の CACHE 定数とは tests/version.test.js が数字の一致を機械的に縛っている(CLAUDE.md参照)。
-const APP_VERSION = "v122";
+const APP_VERSION = "v123";
 // store(保存レイヤ)は src/domain/storage.js へ移設(テストのため)。
 // LIBSで<script src>読み込み済みなのでグローバルの store をそのまま参照できる。
 const uid = () => Math.random().toString(36).slice(2, 8);
@@ -874,6 +874,11 @@ function App() {
   const [calMonth, setCalMonth] = useState(() => { const d = new Date(); return { y: d.getFullYear(), m: d.getMonth() }; });
   const [selectedDate, setSelectedDate] = useState(null); // "YYYY-M-D"
   const [editDay, setEditDay] = useState(null);
+  // Day編集で種目を探す検索語と、その場で作るカスタム種目の部位・器具。
+  // 記録画面の search / customDraft と共有すると、2つの画面の入力が混ざるので分ける。
+  const [daySearch, setDaySearch] = useState("");
+  const [dayDraft, setDayDraft] = useState({ muscle: "", eq: "" });
+  const scrollToDayRef = useRef(null); // 「＋ Dayを追加」の直後だけ、そのカードまでスクロールする
   const [pickingSplit, setPickingSplit] = useState(false); // trueで分割選択(プリセット/新規作成)画面を表示
   const [backupMsg, setBackupMsg] = useState("");
   const [lastBackupAt, setLastBackupAt] = useState(null); // 最後にバックアップした日時(ISO)
@@ -1646,6 +1651,33 @@ function App() {
     return allExercises.filter(notAdded).sort((a, b) => rank(a) - rank(b));
   }, [search, pickerMuscle, todayDay, recentNames, allExercises, today]);
 
+  // 分割タブのDay編集の候補。検索語があれば部位に関係なく全種目から、
+  // 無ければDayの部位で絞る(部位が未設定なら全種目)。どちらも最近使った順が先。
+  const editingDay = split && editDay != null ? split.days[editDay] : null;
+  const dayPickerList = useMemo(() => {
+    if (!editingDay) return [];
+    const q = daySearch.trim();
+    const list = q ? allExercises.filter(e => exMatches(e, q))
+      : editingDay.muscles.length ? allExercises.filter(e => muscleMatchesDay(e.m, editingDay)) : allExercises;
+    const rank = (e) => { const r = recentNames.indexOf(e.n); return r >= 0 ? r : 1000; };
+    return [...list].sort((a, b) => rank(a) - rank(b));
+  }, [editingDay, daySearch, recentNames, allExercises]);
+  // 別のDayを開いたら、前のDayで入れていた検索語とカスタム種目の設定は捨てる
+  useEffect(() => { setDaySearch(""); setDayDraft({ muscle: "", eq: "" }); }, [editDay]);
+  // 追加したDayのカードは一覧の一番下で画面の外になりやすい。「編集」を押したときまで
+  // スクロールすると画面が跳ねるので、「＋ Dayを追加」の直後だけにする。
+  // scrollIntoView + scroll-margin だと、iOSのステータスバーや計測中の上部バーの裏に入るので、
+  // scrollToCurrentEx と同じく chromeHeights() の分を引いて scrollTo する。
+  useEffect(() => {
+    const i = scrollToDayRef.current;
+    if (i == null) return;
+    scrollToDayRef.current = null;
+    const el = document.getElementById(`split-day-${i}`);
+    if (!el) return;
+    const top = el.getBoundingClientRect().top + window.scrollY - chromeHeights().top - 8;
+    window.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
+  }, [split]);
+
   // ---- 種目設定の引き継ぎ ----
   const lastConfig = (name) => {
     for (let i = workouts.length - 1; i >= 0; i--) {
@@ -2077,7 +2109,23 @@ function App() {
   const updDay = (i, patch) => updSplit({ days: split.days.map((d, j) => j === i ? { ...d, ...patch } : d) });
   const toggleDayMuscle = (i, m) => { const d = split.days[i]; updDay(i, { muscles: d.muscles.includes(m) ? d.muscles.filter(x => x !== m) : [...d.muscles, m] }); };
   const toggleDayExercise = (i, name) => { const d = split.days[i]; const ex = d.exercises || []; updDay(i, { exercises: ex.includes(name) ? ex.filter(x => x !== name) : [...ex, name] }); };
-  const addDay = () => updSplit({ days: [...split.days, { name: `Day ${split.days.length + 1}`, muscles: [] }] });
+  // Dayのカスタム種目を作って、そのDayに登録する。今日の記録には入れない。
+  // customExercises と split を1回の persist で書く(別々に書くと、後の方が古い値を元にして前の方を消す)。
+  // 形は addExercise のカスタム登録と同じ。recentNames はまだ記録していないので触らない。
+  const addDayCustomExercise = (i) => {
+    const n = daySearch.trim(); if (!n || findExercise(n) || (split.days[i].exercises || []).includes(n)) return;
+    const { muscle, eq } = dayDraft;
+    const nextCustom = [...customExercises, { n, m: muscle, eq, t: "C", db: eq === "ダンベル", bw: eq === "自重" ? 0.7 : 0, custom: true }];
+    const days = split.days.map((d, j) => j === i ? { ...d, exercises: [...(d.exercises || []), n] } : d);
+    persist({ customExercises: nextCustom, split: { ...split, days } });
+    setDaySearch(""); setDayDraft({ muscle: "", eq: "" });
+  };
+  const addDay = () => {
+    const i = split.days.length;
+    updSplit({ days: [...split.days, { name: `Day ${i + 1}`, muscles: [] }] });
+    setEditDay(i);
+    scrollToDayRef.current = i;
+  };
   const removeDay = (i) => { const days = split.days.filter((_, j) => j !== i); if (!days.length) { persist({ split: null }); setEditDay(null); return; } updSplit({ days, cursor: Math.min(split.cursor, days.length - 1) }); setEditDay(null); };
   // Dayの並べ替え(dir: -1=上へ, +1=下へ)。「今日」の位置がずれないようcursorも追従させる。
   const moveDay = (i, dir) => {
@@ -3930,7 +3978,7 @@ function App() {
                 const isNext = i === split.cursor % split.days.length; const editing = editDay === i;
                 const goToLog = isNext && !editing;
                 return (
-                  <div key={i} onClick={goToLog ? () => setView("log") : undefined}
+                  <div key={i} id={`split-day-${i}`} onClick={goToLog ? () => setView("log") : undefined}
                     style={{ background: C.surface, borderRadius: 14, padding: 14, marginBottom: 8, border: `1px solid ${isNext ? C.blue : C.border}`, cursor: goToLog ? "pointer" : "default" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, minWidth: 0 }}>
@@ -3982,20 +4030,47 @@ function App() {
                             ))}
                           </div>
                         )}
-                        <div style={{ maxHeight: 160, overflowY: "auto" }}>
-                          {EXERCISE_DB.filter(e => d.muscles.length === 0 || muscleMatchesDay(e.m, d)).map(e => {
+                        {/* 記録画面の種目ピッカーと同じく、新しい種目はEnterでは作らない
+                            (部位・器具を選ばないまま作られてしまうため、下のパネルから) */}
+                        <input value={daySearch} onChange={e => setDaySearch(e.target.value)} onFocus={selectOnFocus}
+                          // 別名(「ベンチプレス」など)は findExercise が正式名に解決するので、登録も正式名で
+                          // (入力した文字のまま登録すると、前回の記録と名前が一致しなくなる)
+                          onKeyDown={e => {
+                            if (e.key !== "Enter" || e.nativeEvent.isComposing) return;
+                            const hit = daySearch.trim() && findExercise(daySearch.trim());
+                            if (hit && !(d.exercises || []).includes(hit.n)) { toggleDayExercise(i, hit.n); setDaySearch(""); }
+                          }}
+                          placeholder={t("picker.searchPlaceholder")}
+                          style={{ width: "100%", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 12px", color: C.text, fontSize: 16, fontFamily: "inherit", marginBottom: 8 }} />
+                        <div style={{ maxHeight: 240, overflowY: "auto" }}>
+                          {dayPickerList.map(e => {
                             const on = (d.exercises || []).includes(e.n);
                             return (
                               <button key={e.n} onClick={() => toggleDayExercise(i, e.n)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, width: "100%", textAlign: "left", background: on ? C.surface2 : "transparent", border: `1px solid ${on ? C.blue : C.border}`, borderRadius: 8, padding: "8px 10px", marginBottom: 5, cursor: "pointer", color: C.text, fontSize: 13, fontFamily: "inherit" }}>
-                                <span style={{ minWidth: 0 }}>{on ? "✓ " : ""}{exName(e.n)}</span>
+                                <span style={{ minWidth: 0 }}>{on ? "✓ " : ""}{exName(e.n)}{recentNames.includes(e.n) && <span style={{ color: C.blue, fontSize: 11, marginLeft: 6 }}>{t("common.recent")}</span>}</span>
                                 <span style={{ color: C.muted, fontSize: 12, flexShrink: 0 }}>{muscleName(e.m)}{t("common.sep")}{eqName(e.eq)}</span>
                               </button>
                             );
                           })}
-                          {d.muscles.length > 0 && EXERCISE_DB.filter(e => muscleMatchesDay(e.m, d)).length === 0 && (
+                          {/* 検索で0件なら下の作成パネルが同じことを言うので、ここは部位で絞って0件のときだけ */}
+                          {dayPickerList.length === 0 && !daySearch.trim() && (
                             <div style={{ color: C.muted, fontSize: 13, textAlign: "center", padding: 8 }}>{t("split.noBuiltIn")}</div>
                           )}
                         </div>
+                        {daySearch.trim() && !findExercise(daySearch.trim()) && (
+                          <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 10, marginTop: 4 }}>
+                            <div style={{ fontSize: 13, color: C.muted, marginBottom: 8 }}>{t("picker.addCustom", { name: daySearch.trim() })}</div>
+                            <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+                              <select value={dayDraft.muscle} onChange={e => setDayDraft({ ...dayDraft, muscle: e.target.value })} style={{ flex: 1, minWidth: 0, background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: "6px 8px", fontSize: 16, fontFamily: "inherit" }}>
+                                <option value="">{t("picker.selectMuscle")}</option>{MUSCLES.map(m => <option key={m} value={m}>{muscleName(m)}</option>)}
+                              </select>
+                              <select value={dayDraft.eq} onChange={e => setDayDraft({ ...dayDraft, eq: e.target.value })} style={{ flex: 1, minWidth: 0, background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: "6px 8px", fontSize: 16, fontFamily: "inherit" }}>
+                                <option value="">{t("settings.other")}</option>{EQUIPMENT.map(q => <option key={q} value={q}>{eqName(q)}</option>)}
+                              </select>
+                            </div>
+                            <button onClick={() => addDayCustomExercise(i)} style={{ ...btn(C.red), width: "100%", padding: 10, fontSize: 14 }}>{t("picker.addWithConfig")}</button>
+                          </div>
+                        )}
                       </div>
                     ) : (d.exercises && d.exercises.length > 0) && (
                       <div style={{ marginTop: 8, fontSize: 13, color: C.muted }}>
