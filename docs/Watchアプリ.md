@@ -5,15 +5,15 @@ Watch でセットを入力するためのアプリ(v120〜)。
 
 ## 引き継ぎ(2026-09-28 時点。次のセッションはここから)
 
-**今やっていること: TestFlight 1.0 (6) のアップロード**
-- 中身: v121(Watch の重量の刻み 1kg)、ボタンの反応の改善(`5a6530c`)、v122(記録の開始で Watch を自動起動・ワークアウト記録、`91a5afa`)。実機は 1.0 (5) のまま
-- `project.pbxproj` の `CURRENT_PROJECT_VERSION` を 5 → 6(6箇所)に上げてある。**未コミット**。アップロードが成功したらコミットして push する
-- コマンドの `xcodebuild archive -allowProvisioningUpdates` は「No Accounts」で失敗する(Xcode にはサインイン済みなのに、CLI から使えない。Xcode 26 の Apple Accounts 画面になってから)。
-  Watch に HealthKit を足したので、新しいプロファイルの取得が要り、保存済みの署名では足りない。
-  **Xcode の GUI(Product → Archive → Organizer → Distribute App → App Store Connect)で出す**。ユーザーに手順を渡したところで中断
-- 1.0 (3) は審査中(再提出済み)。TestFlight 用のビルドは同じ 1.0 で上げてよい(審査中のビルドは差し替わらない)
+**1.0 (3) は審査を通過した。** 1.1 (6) を TestFlight にアップロード済み(2026-09-28、App Store Connect の処理待ち)。
+- 中身: v121(Watch の重量の刻み 1kg)、ボタンの反応の改善(`5a6530c`)、v122(記録の開始で Watch を自動起動・ワークアウト記録、`91a5afa`)、
+  v123(日の種目登録で検索・カスタム種目・最近使った順、`cf43aa2`)。実機は 1.0 (5) のまま
+- 承認済みの 1.0 には新しいビルドを足せない(「train version '1.0' is closed」で弾かれる)ので、`MARKETING_VERSION` を 1.1 に上げた。ビルド番号は 6
+- アップロードの手順: `xcodebuild archive … -allowProvisioningUpdates` → `xcodebuild -exportArchive`(`method=app-store-connect`、`destination=upload`)。
+  「No Accounts」や、画面の Archive の「Personal development teams … do not support」で失敗したときは、
+  Xcode → 設定 → Apple Accounts でサインアウトして、サインインし直すと両方直った(`defaults read com.apple.dt.Xcode IDEProvisioningTeamByIdentifier` が `Individual` になる)
 
-**実機で確かめること(1.0 (6) が入ったら)**
+**実機で確かめること(1.1 (6) が入ったら)**
 1. iPhone で記録を始めると Watch が自動で起動し、腕を下ろしても KURABELL の画面のまま保たれるか
    (純正「ワークアウト」を併用すると、あちらが優先される。KURABELL のワークアウトが止まり、iPhone が時刻だけ書く)
 2. 保存すると、フィットネスアプリに心拍・カロリー付きのワークアウトが1件だけ載るか
@@ -21,7 +21,8 @@ Watch でセットを入力するためのアプリ(v120〜)。
 4. −/+ と RIR ボタンの反応(3回押して3回動くか)、重量の刻みが 1kg か
 
 **残り**
-- Watch 用スクリーンショット、Watch 版の審査提出(1.0 の審査が通った後、次のバージョンとして。APPSTORE.md 末尾の「次のバージョン」の節で差し替える)
+- Watch 用スクリーンショット、1.1(Watch 版)の審査提出。APPSTORE.md 末尾の「次のバージョン」の節で審査メモ・説明文を差し替える
+- 1.0 の公開(手動リリースにしていれば、App Store Connect で「このバージョンをリリース」を押す)
 - `ios/App/.claude/` は reviewer のメモリが誤った場所に作られたもの。コミットしない
 - Apple Developer の登録名の訂正(北村肇 → 北村元)をサポートに申請済み(お問い合わせ番号 102976321000)
 
