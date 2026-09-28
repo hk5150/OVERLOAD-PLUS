@@ -31,6 +31,13 @@ final class WatchSessionManager: NSObject {
         WCSession.default.activate()
     }
 
+    // ペアの Watch があり、Watch アプリが入っているか。ヘルスケアの許可に Watch 用の種類を含めるかの判断に使う
+    // (Watch を持たない人に心拍数などの許可を求めない)。有効化の前は分からないので false
+    var hasWatchApp: Bool {
+        guard WCSession.isSupported(), WCSession.default.activationState == .activated else { return false }
+        return WCSession.default.isPaired && WCSession.default.isWatchAppInstalled
+    }
+
     // MARK: - iPhone → Watch
 
     func updateSnapshot(_ json: String) {

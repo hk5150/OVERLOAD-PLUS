@@ -29,7 +29,7 @@ public class HealthPlugin: CAPPlugin, CAPBridgedPlugin {
         guard manager.isAvailable else { call.reject("unavailable"); return }
         Task {
             do {
-                try await manager.requestAuthorization()
+                try await manager.requestAuthorization(includeWatch: WatchSessionManager.shared.hasWatchApp)
                 call.resolve(statusObject())
             } catch {
                 call.reject(error.localizedDescription)
@@ -89,6 +89,11 @@ public class HealthPlugin: CAPPlugin, CAPBridgedPlugin {
         guard manager.isAvailable else { call.resolve(["started": false]); return }
         Task {
             do {
+                // 連携をオンにしたのが Watch の種類を足す前(1.1 (6) まで)だった人や、後から Watch アプリを入れた人は、
+                // ここで初めてシートが出る(以後は何も出ない)。失敗しても起動は試す
+                if WatchSessionManager.shared.hasWatchApp {
+                    try? await manager.requestAuthorization(includeWatch: true)
+                }
                 try await manager.startWatchApp()
                 call.resolve(["started": true])
             } catch {

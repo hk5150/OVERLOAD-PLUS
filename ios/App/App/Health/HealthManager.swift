@@ -20,9 +20,23 @@ final class HealthManager {
     // iPhoneでは常にtrue。iPadOS 17未満などヘルスケアが無い端末ではfalse。
     var isAvailable: Bool { HKHealthStore.isHealthDataAvailable() }
 
+    // Watch アプリがワークアウトに使う種類(WorkoutManager.swift の requestAuthorization と揃える。テストで縛ってある)。
+    // Watch は startWatchApp で裏から起こされるので、権限シートを出せずにワークアウトが始まらない。
+    // 許可は iPhone のアプリと共有されるので、iPhone 側で先に求めておく(1.1 (6) の実機で踏んだ)。
+    // iPhone はこれらを書かない・使わない。許可を求めるだけ。
+    private let energyType = HKQuantityType.quantityType(forIdentifier: .activeEnergyBurned)!
+    private let heartRateType = HKQuantityType.quantityType(forIdentifier: .heartRate)!
+
     // 権限シートは種類ごとに一度しか出ない。2回目以降は何も表示せずに返る。
-    func requestAuthorization() async throws {
-        try await store.requestAuthorization(toShare: [workoutType, bodyMassType], read: [bodyMassType])
+    // includeWatch: Watch アプリが入っているときだけ、Watch 用の種類も求める
+    func requestAuthorization(includeWatch: Bool) async throws {
+        var share: Set<HKSampleType> = [workoutType, bodyMassType]
+        var read: Set<HKObjectType> = [bodyMassType]
+        if includeWatch {
+            share.insert(energyType)
+            read.formUnion([heartRateType, energyType])
+        }
+        try await store.requestAuthorization(toShare: share, read: read)
     }
 
     // 書き込みの権限だけは状態を取れる(読み込みの許否はHealthKitの仕様で知る方法が無い)。

@@ -33,9 +33,9 @@
 	<true/>
 	<!-- ヘルスケア連携の権限ダイアログの文言(英語。日本語は ja.lproj/InfoPlist.strings)。docs/ヘルスケア連携.md -->
 	<key>NSHealthShareUsageDescription</key>
-	<string>KURABELL reads your latest body weight from Health to calculate bodyweight exercises.</string>
+	<string>KURABELL reads your latest body weight from Health to calculate bodyweight exercises. If the app is on your Apple Watch, it also reads heart rate and active energy during the workout you record on the watch.</string>
 	<key>NSHealthUpdateUsageDescription</key>
-	<string>KURABELL saves your workouts and the body weight you enter to Health.</string>
+	<string>KURABELL saves your workouts and the body weight you enter to Health. Workouts recorded on Apple Watch include heart rate and active energy.</string>
 	<!-- 休憩タイマーのLive Activity(拡張RestActivity)。docs/休憩タイマー通知.md -->
 	<key>NSSupportsLiveActivities</key>
 	<true/>

@@ -3,17 +3,20 @@
 Watch でセットを入力するためのアプリ(v120〜)。
 経緯: 2026-08-23 には「Watch アプリは作らず、ローカル通知で代替する」としていた。v112 の Time Sensitive 通知と Live Activity を経て、1.0 の審査待ちの間に、記録の入力まで含めて作ることにした。
 
-## 引き継ぎ(2026-09-28 時点。次のセッションはここから)
+## 引き継ぎ(2026-09-29 時点。次のセッションはここから)
 
-**1.0 (3) は審査を通過した。** 1.1 (6) を TestFlight にアップロード済み(2026-09-28、App Store Connect の処理待ち)。
-- 中身: v121(Watch の重量の刻み 1kg)、ボタンの反応の改善(`5a6530c`)、v122(記録の開始で Watch を自動起動・ワークアウト記録、`91a5afa`)、
-  v123(日の種目登録で検索・カスタム種目・最近使った順、`cf43aa2`)。実機は 1.0 (5) のまま
-- 承認済みの 1.0 には新しいビルドを足せない(「train version '1.0' is closed」で弾かれる)ので、`MARKETING_VERSION` を 1.1 に上げた。ビルド番号は 6
+**1.0 (3) は審査を通過した。** TestFlight は 1.1 (7) をアップロード(2026-09-29)。
+- 1.1 (6): v121〜v123(Watch の 1kg 刻み、ボタンの反応、Watch の自動起動・ワークアウト記録、日の種目登録の検索など)。
+  承認済みの 1.0 には新しいビルドを足せない(「train version '1.0' is closed」)ので `MARKETING_VERSION` を 1.1 にした
+- **1.1 (6) の実機で、記録を始めても Watch が起動しなかった。** ヘルスケアの許可に心拍数・アクティブエネルギーが無く、
+  裏から起こされた Watch が権限シートを出せずに止まっていた。1.1 (7) で iPhone が Watch 用の種類も求めるようにした
+  (下の「設計 → ワークアウト」の流れ 2)。**iPhone と Watch で許可が共有される前提は、1.1 (7) の実機で確かめる**
 - アップロードの手順: `xcodebuild archive … -allowProvisioningUpdates` → `xcodebuild -exportArchive`(`method=app-store-connect`、`destination=upload`)。
   「No Accounts」や、画面の Archive の「Personal development teams … do not support」で失敗したときは、
   Xcode → 設定 → Apple Accounts でサインアウトして、サインインし直すと両方直った(`defaults read com.apple.dt.Xcode IDEProvisioningTeamByIdentifier` が `Individual` になる)
 
-**実機で確かめること(1.1 (6) が入ったら)**
+**実機で確かめること(1.1 (7) が入ったら)**
+0. 記録を始めたとき iPhone に心拍数・アクティブエネルギーの許可シートが出るか。許可した**その回**に Watch が起動するか、2回目からか(許可の同期が遅れると初回だけ失敗しうる。reviewer 指摘)
 1. iPhone で記録を始めると Watch が自動で起動し、腕を下ろしても KURABELL の画面のまま保たれるか
    (純正「ワークアウト」を併用すると、あちらが優先される。KURABELL のワークアウトが止まり、iPhone が時刻だけ書く)
 2. 保存すると、フィットネスアプリに心拍・カロリー付きのワークアウトが1件だけ載るか
@@ -138,7 +141,11 @@ iPhone から Watch アプリを起動できる公式の方法は `HKHealthStore
 1. iPhone の `ensureStarted`(startAt が null から値になる唯一の場所)で、`healthOn` なら `healthStartWatchWorkout()` を呼ぶ。
    下書きの復元は「開始」ではないので呼ばない
 2. Watch の `AppDelegate.handle(_ workoutConfiguration:)` → `WorkoutManager.start` で `HKWorkoutSession` と `HKLiveWorkoutBuilder` を作る。
-   権限(書き込み: ワークアウト・消費カロリー、読み取り: 心拍・消費カロリー)は初回だけ Watch で求める
+   権限(書き込み: ワークアウト・消費カロリー、読み取り: 心拍・消費カロリー)は **iPhone が先に求めておく**。
+   Watch は裏から起こされるので権限シートを出せず、未決定だとワークアウトが始まらない(1.1 (6) の実機で踏んだ。
+   シミュレータでは Watch に許可画面が出て通ったので気づかなかった)。許可は iPhone と Watch のアプリで共有される。
+   iPhone は Watch アプリが入っているとき(`WatchSessionManager.hasWatchApp`)だけ、連携のオン時と `startWatchWorkout` の直前に求める。
+   Watch 側の `requestAuthorization` の種類と iPhone 側を揃えることはテストで縛ってある
 3. 記録中のスナップショットの `recordStartAt` で、ワークアウトをその記録に対応付ける。
    op `{kind: "workout", status: "started", recordStartAt}` を iPhone に送り、iPhone は `watchWorkoutFor` として下書きに保存する
 4. iPhone の保存(`saveWorkout`)で、`watchWorkoutFor === startAt` なら iPhone はその場ではヘルスケアに書かない。
@@ -173,6 +180,7 @@ iPhone から Watch アプリを起動できる公式の方法は `HKHealthStore
 - 最後の種目を消して入れ直しても、Watch のワークアウトは続く
 - 保存すると Watch が `saved` を返し、iPhone の pending(`watch-health-pending-v1`)が空になる
 - iPhone で記録を開始すると Watch アプリが起動し、初回はヘルスケアの許可画面が出る(日本語の説明文)。許可するとセッションが running になる
+  (**実機ではこの許可画面が出ず、起動しなかった。** 上の「流れ」の 2 を参照)
 - iPhone に `watchWorkoutFor` が届き、記録の startAt と一致する
 - 保存すると Watch がワークアウトを Finished にし、iPhone はヘルスケアに書かない
 - 2回目以降は許可画面なしで始まる。記録を破棄すると Watch のワークアウトも Discarded になる

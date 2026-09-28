@@ -522,7 +522,43 @@ describe("ヘルスケア連携のネイティブ設定", () => {
   });
 
   // 推定値の消費カロリーをヘルスケアに書くと、Apple Watch等の実測値と混ざって合計を歪める。
-  it("HealthManagerは消費カロリーを書かない(activeEnergyBurnedを扱わない)", () => {
-    expect(read("ios/App/App/Health/HealthManager.swift")).not.toContain("activeEnergyBurned");
+  // 許可だけは Watch アプリのために求める(Watch は裏から起こされて権限シートを出せないため)。
+  // 許可を求める箇所以外で消費カロリーの型に触れていないことを確かめる。
+  it("HealthManagerは消費カロリーを書かない(許可を求めるだけ)", () => {
+    const src = read("ios/App/App/Health/HealthManager.swift");
+    const decl = /private let energyType = HKQuantityType\.quantityType\(forIdentifier: \.activeEnergyBurned\)!\n/;
+    const auth = /func requestAuthorization\(includeWatch: Bool\) async throws \{[\s\S]*?\n    \}\n/;
+    expect(src).toMatch(decl);
+    expect(src).toMatch(auth);
+    const rest = src.replace(decl, "").replace(auth, "");
+    for (const w of ["activeEnergyBurned", "energyType", "EnergyBurned", "kilocalorie"]) {
+      expect(rest, `${w} が許可以外の箇所にある`).not.toContain(w);
+    }
+  });
+
+  // Watch は startWatchApp で裏から起こされ、権限シートを出せない。Watch が求める種類が
+  // iPhone の requestAuthorization に無いと、ワークアウトが始まらない(1.1 (6) の実機で踏んだ)。
+  it("Watchが求めるヘルスケアの種類は、すべてiPhoneでも求めている", () => {
+    const watch = read("ios/App/KurabellWatch/WorkoutManager.swift");
+    const phone = read("ios/App/App/Health/HealthManager.swift");
+    const call = watch.match(/requestAuthorization\(toShare:([\s\S]*?)\)\s*\n/);
+    expect(call).not.toBeNull();
+    // Watch 側で型を変数に入れていれば、その定義まで辿る
+    const idents = new Set();
+    const collect = (text) => {
+      for (const m of text.matchAll(/\.(\w+)\)/g)) idents.add(m[1]);
+      if (/workoutType\(\)/.test(text)) idents.add("workoutType");
+    };
+    collect(call[1]);
+    for (const v of call[1].matchAll(/\b([a-z]\w*)\b/g)) {
+      const def = watch.match(new RegExp(`let ${v[1]} = ([^\\n]+)`));
+      if (def) collect(def[1]);
+    }
+    expect(idents.has("heartRate")).toBe(true);
+    expect(idents.has("activeEnergyBurned")).toBe(true);
+    for (const id of idents) {
+      if (id === "workoutType") { expect(phone).toMatch(/workoutType\(\)/); continue; }
+      expect(phone, `iPhone が ${id} の許可を求めていない`).toContain(`.${id})`);
+    }
   });
 });
