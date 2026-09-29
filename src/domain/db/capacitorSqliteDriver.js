@@ -45,12 +45,23 @@ function makeCapacitorSqliteDriver() {
   const plugin = capSqlitePlugin();
   if (!plugin) return null;
 
-  let opened = false;
-  async function ensureOpen() {
-    if (opened) return;
-    await plugin.createConnection({ database: DB_NAME, encrypted: false, mode: "no-encryption", version: 1, readonly: false });
-    await plugin.open({ database: DB_NAME });
-    opened = true;
+  // 開く処理は1本だけ走らせる(起動直後の読み込みと書き込みが同時に来ても、createConnectionを2回呼ばない)。
+  // 失敗したら捨てて、次の呼び出しでやり直す(1回の失敗でそのページの読み書きが全部止まらないように)。
+  let openPromise = null;
+  function ensureOpen() {
+    if (!openPromise) {
+      openPromise = (async () => {
+        // iOSがWebViewの描画プロセスを止めると、Capacitorはページを再読み込みする。JS側はここで作り直しになるが、
+        // ネイティブ側には前のページの接続が残っていて、createConnectionが「already exists」で失敗し、
+        // アプリを終了するまで読み書きが全部失敗していた(2026-09-29、実機で記録が失われた)。
+        // 残っている接続は先に閉じる。接続が無ければcloseConnectionは何もせずに返る(プラグイン6.0.2のSwiftで確認)。
+        await plugin.closeConnection({ database: DB_NAME, readonly: false });
+        await plugin.createConnection({ database: DB_NAME, encrypted: false, mode: "no-encryption", version: 1, readonly: false });
+        await plugin.open({ database: DB_NAME });
+      })();
+      openPromise.catch(() => { openPromise = null; });
+    }
+    return openPromise;
   }
 
   return {

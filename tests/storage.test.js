@@ -279,3 +279,63 @@ describe("store — ネイティブ(SQLiteが使える場合、workout-log-v1の
     expect(ws.calls).toEqual([]);
   });
 });
+
+/*
+ * 移行確認(ensureMigrated)の失敗を使い回さないことのテスト。
+ *
+ * なぜ要るか: 以前は移行の Promise を失敗ごと使い回していたので、SQLite に接続できなかった1回
+ * (2026-09-29 の実機不具合: ページ再読み込み後に createConnection が already exists で失敗)で、
+ * アプリを終了するまで workout-log-v1 の読み書きが全部失敗していた。
+ * ドライバ側の開き直し(tests/db/capacitorSqliteDriver.test.js)が直っても、ここで失敗を抱えたままだと
+ * 保存は止まったままになる。
+ *
+ * 移行を何度やり直しても二重にならないこと自体は tests/db/migration.test.js の範囲で、ここでは扱わない。
+ */
+describe("store — 移行の確認に失敗しても次の読み書きでやり直す(ここが崩れると1回の失敗で保存が全部止まる)", () => {
+  function flakyMigrationStore(failures) {
+    const ws = fakeWorkoutStore({ workouts: [{ date: "2026-09-29" }] });
+    let left = failures;
+    ws.migrateLegacyIfNeeded = async () => {
+      ws.calls.push("migrate");
+      if (left > 0) {
+        left -= 1;
+        throw new Error("Connection kurabellplus already exists");
+      }
+      return { migrated: false };
+    };
+    return ws;
+  }
+
+  function loadSqliteStore(ws) {
+    return loadStore({
+      localStorage: fakeLocalStorage(), preferences: fakePreferences().plugin, native: true,
+      makeCapacitorSqliteDriver: () => ({}), createWorkoutStore: () => ws,
+    });
+  }
+
+  it("1回目の移行確認が失敗したら、2回目のstore.getで移行を呼び直して履歴を返す", async () => {
+    const ws = flakyMigrationStore(1);
+    const store = loadSqliteStore(ws);
+    await expect(store.get("workout-log-v1")).rejects.toThrow("already exists");
+    const res = await store.get("workout-log-v1");
+    expect(JSON.parse(res.value).workouts).toEqual([{ date: "2026-09-29" }]);
+    expect(ws.calls.filter((c) => c === "migrate")).toHaveLength(2);
+  });
+
+  it("1回目の移行確認が失敗しても、次のstore.setで移行を呼び直して保存できる", async () => {
+    const ws = flakyMigrationStore(1);
+    const store = loadSqliteStore(ws);
+    await expect(store.get("workout-log-v1")).rejects.toThrow("already exists");
+    await store.set("workout-log-v1", JSON.stringify({ workouts: [{ date: "2026-09-30" }] }));
+    expect(ws.getState().workouts).toEqual([{ date: "2026-09-30" }]);
+  });
+
+  it("移行確認が一度成功したら、以降の読み書きでは呼び直さない", async () => {
+    const ws = flakyMigrationStore(0);
+    const store = loadSqliteStore(ws);
+    await store.get("workout-log-v1");
+    await store.set("workout-log-v1", JSON.stringify({ workouts: [] }));
+    await store.get("workout-log-v1");
+    expect(ws.calls.filter((c) => c === "migrate")).toHaveLength(1);
+  });
+});

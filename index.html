@@ -251,7 +251,7 @@ const WATCH_LAST_SAVED_KEY = "watch-last-saved-v1";
 const PRE_IMPORT_BACKUP_KEY = "workout-log-v1-pre-import"; // バックアップ復元前のデータ退避(復元に失敗した場合の保険)
 // ヘッダーのバージョンバッジとバックアップのappVersionで共有する単一の定数。
 // sw.js の CACHE 定数とは tests/version.test.js が数字の一致を機械的に縛っている(CLAUDE.md参照)。
-const APP_VERSION = "v123";
+const APP_VERSION = "v124";
 // store(保存レイヤ)は src/domain/storage.js へ移設(テストのため)。
 // LIBSで<script src>読み込み済みなのでグローバルの store をそのまま参照できる。
 const uid = () => Math.random().toString(36).slice(2, 8);
@@ -817,8 +817,14 @@ function App() {
   const [guideSeen, setGuideSeen] = useState(false); // 初回ガイドを見たか
   const [guideStep, setGuideStep] = useState(0);      // ガイドの現在ページ
   const guideModalRef = useRef(null);
+  // 保存済みの記録を読み込めなかった。このときメモリは空なので、書き込むとDBの記録を空で
+  // 上書きしてしまう(setAllはworkoutsを丸ごと入れ替える)。開き直すまで書き込まない。
+  // 初回ガイドの表示条件(すぐ下の useModalA11y)でも使うので、それより前に宣言する(TDZ)。
+  // persistはクロージャから呼ばれるので、判定はrefで行う(stateは表示用)。
+  const [loadFailed, setLoadFailed] = useState(false);
+  const loadFailedRef = useRef(false);
   const finishGuide = () => { persist({ guideSeen: true }); setGuideStep(0); setView("split"); };
-  useModalA11y(loaded && !guideSeen, finishGuide, guideModalRef);
+  useModalA11y(loaded && !guideSeen && !loadFailed, finishGuide, guideModalRef);
   // IAP(非消耗型・買い切りフル解除)。Web版はiapAvailable()が常にfalseを返すため
   // purchasedは事実上参照されず、試用制限自体が発動しない。詳細はdocs/IAP実装方針.mdを参照。
   const [purchased, setPurchased] = useState(false);
@@ -1012,6 +1018,8 @@ function App() {
       } catch (e) {
         // データが存在しない(res?.valueがfalsy)場合はここに来ない = 初回起動として無音のまま。
         // ここに来るのは「データはあるが読めない」場合なので、消えたように見えて実は残っていることを伝える。
+        loadFailedRef.current = true;
+        setLoadFailed(true);
         setError(t("err.loadFailed", { msg: e?.message || t("err.dataCorrupt") }));
       }
 
@@ -1080,7 +1088,9 @@ function App() {
     return () => sub?.remove();
   }, []);
 
-  const persist = async (patch) => {
+  // replaceAll: バックアップの復元とその取り消し。全項目を自前で持っているので、読み込みに失敗した後でも書いてよい
+  // (保存データ自体が壊れている場合、復元が唯一の直し方なので止めない)。
+  const persist = async (patch, { replaceAll = false } = {}) => {
     const next = {
       workouts: patch.workouts ?? workouts,
       split: patch.split === undefined ? split : patch.split,
@@ -1104,6 +1114,9 @@ function App() {
     // 画面上のstateは既に更新済み(楽観的更新)。書き込みが失敗しても巻き戻さない
     // (別の操作で上書きされた方が「保存できたと見せかけて実は消えていた」より安全なため)。
     // 代わりに保存状態を可視化し、失敗時は同じ内容でいつでも再試行できるようにする。
+    // 読み込みに失敗したまま書くと、空のメモリでDBを上書きする。画面の状態は上で更新する
+    // (操作が効かないように見えないように)が、書き込みはしない。エラー帯は読み込み失敗の文のまま残す。
+    if (loadFailedRef.current && !replaceAll) return false;
     setSaveStatus("saving");
     try {
       await store.set(STORAGE_KEY, JSON.stringify(next));
@@ -1191,6 +1204,7 @@ function App() {
   // 保存に失敗した後の再試行。楽観的更新で画面には既に反映されている現在のstateを、
   // そのまま改めて書き込む(patchを覚えておく必要がない)。
   const retrySave = async () => {
+    if (loadFailedRef.current) return; // persistと同じ理由(空のメモリでDBを上書きしない)
     const next = { workouts, split, profile, recentNames, customExercises, exerciseNotes, exerciseOverrides, lastBackupAt, guideSeen };
     setSaveStatus("saving");
     try {
@@ -2052,7 +2066,24 @@ function App() {
       const muscles = [...new Set(exercises.map(ex => ex.muscle).filter(Boolean))];
       setOfferSaveAsMenu({ exercises: exercises.map(ex => ex.name), muscles });
     }
-    await persist({ workouts: [...workouts, entry], split: nextSplit });
+    // 書き込めなかったら、入力中の記録・下書き・開始時刻はそのまま残す(2026-09-29に実機で、保存に失敗した
+    // 記録を画面から消して失わせた)。persistは画面の状態を先に進めるので、履歴と分割は保存前に戻す
+    // (戻さないと、もう一度「保存」を押したときに同じ記録が2件になる)。先に出した
+    // 「メニューとして保存しますか?」も、記録になっていないので取り下げる。
+    if (!(await persist({ workouts: [...workouts, entry], split: nextSplit }))) {
+      // 関数形式で、この保存で足した分だけを戻す(await中に他の操作で変わった分は残す)
+      setWorkouts(ws => ws.filter(w => w !== entry));
+      setSplit(s => (s === nextSplit ? split : s));
+      setOfferSaveAsMenu(null);
+      // 読み込みに失敗しているときは、そちらの文(開き直してください)を残す。
+      // 「再試行」は出さない。再試行が書くのは記録を戻した後の状態なので、成功して「保存済み」と出ても
+      // 記録は保存されていない(ユーザーが保存できたと思って閉じる)。この文は別の保存の成功でも消さない。
+      if (!loadFailedRef.current) setError(t("err.workoutSaveFailed"));
+      setSaveStatus("idle");
+      setSaving(false);
+      return;
+    }
+    clearErrorIf("err.workoutSaveFailed");
     // Watchがこの記録のワークアウト(心拍・カロリー付き)を記録していれば、ヘルスケアにはWatchが書く。
     // iPhoneは今は書かず、保存した時刻をWatchに渡す(Watchは終了時刻をこれに合わせて保存する)。
     // Watchの結果("saved"/"discarded")が返るまで pending に残し、保存できなかったら iPhone が書く(drain)。
@@ -2559,11 +2590,15 @@ function App() {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
+  // iOS版(Capacitor)では <a download> のダウンロードを何も処理しないので、ファイルは作られない。
+  // それなのに「書き出しました」と出していた(2026-09-29、書き出したつもりのバックアップが残っていなかった)。
+  // 共有シートで書き出せるようにするまでは、できないことを伝える。
+  const isNativeApp = () => !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
   const exportBackup = () => {
-    const isNative = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+    if (isNativeApp()) { setBackupMsg(t("backup.exportUnavailable")); return; }
     const payload = {
       app: "KURABELL Workout Log", formatVersion: CURRENT_BACKUP_FORMAT_VERSION, appVersion: APP_VERSION,
-      platform: isNative ? "ios" : "web", exportedAt: new Date().toISOString(),
+      platform: "web", exportedAt: new Date().toISOString(),
       workouts, split, profile, recentNames, customExercises, exerciseNotes, exerciseOverrides,
       lastBackupAt: new Date().toISOString(),
     };
@@ -2576,6 +2611,7 @@ function App() {
   };
 
   const exportCSV = () => {
+    if (isNativeApp()) { setBackupMsg(t("backup.exportUnavailable")); return; }
     const rows = [[t("csv.date"), t("csv.session"), t("csv.exercise"), t("csv.muscle"), t("csv.set"), t("csv.type"), t("csv.weight", { unit: uLabel() }), t("csv.reps"), t("csv.rir")]];
     workouts.forEach(w => {
       const d = new Date(w.date);
@@ -2599,11 +2635,19 @@ function App() {
       const ws = validateBackupPayload(p);
       if (!window.confirm(t("backup.confirmImport", { n: ws.length }))) return;
 
-      // 復元前に現在のデータをスナップショットとして退避(復元後に問題があった場合の保険)
-      try {
-        const cur = await store.get(STORAGE_KEY);
-        if (cur?.value) { await store.set(PRE_IMPORT_BACKUP_KEY, cur.value); setHasPreImportSnapshot(true); }
-      } catch { /* スナップショットに失敗しても復元自体は続行する */ }
+      // 復元前に現在のデータをスナップショットとして退避(復元後に問題があった場合の保険)。
+      // 今のデータを読めなければ復元しない。続けると、前の復元の古い控えが「元に戻す」に残ったまま、
+      // 戻せない復元になる(2026-09-29に実機で起きた)。保存先が空なら、前の復元の控えは消す
+      // (残すと「この復元の前」ではない古い状態が「元に戻す」に出る)。
+      // 控えを置けない(Web版で容量が足りない等)ときは、古い控えを消したうえで復元は続ける
+      // (保存データが壊れたWeb版では、復元が唯一の直し方なので止めない)。
+      const cur = await store.get(STORAGE_KEY);
+      let snapped = false;
+      if (cur?.value) {
+        try { await store.set(PRE_IMPORT_BACKUP_KEY, cur.value); snapped = true; } catch { /* 下で古い控えを消す */ }
+      }
+      setHasPreImportSnapshot(snapped);
+      if (!snapped) { try { await store.del(PRE_IMPORT_BACKUP_KEY); } catch { /* noop */ } }
 
       const next = {
         workouts: migrateWorkouts(ws),
@@ -2614,10 +2658,19 @@ function App() {
         exerciseNotes: p.exerciseNotes || {},
         exerciseOverrides: p.exerciseOverrides || {},
         lastBackupAt: new Date().toISOString(),
+        // 復元するのはこのアプリを使ってきた人なので、初回ガイドは出さない
+        // (読み込みに失敗していた場合、メモリのguideSeenはfalseのままで、復元の直後にガイドが出てしまう)
+        guideSeen: true,
       };
       setError(""); // persistより前に(書き込み失敗時のエラーを消さないため)
       // 失敗したら「復元しました」は出さない(エラー帯と再試行ボタンはpersistが出す)
-      if (!(await persist(next))) { setBackupMsg(""); return; }
+      if (!(await persist(next, { replaceAll: true }))) {
+        setBackupMsg("");
+        // 読み込み失敗中は再試行(retrySave)が書かないので、ボタンを出さずに開き直しを案内する
+        if (loadFailedRef.current) { setSaveStatus("idle"); setError(t("backup.importWriteFailed")); }
+        return;
+      }
+      loadFailedRef.current = false; setLoadFailed(false); // メモリと保存先が同じ内容になった
       setBackupMsg(t("backup.imported", { n: next.workouts.length }));
     } catch (e) {
       setBackupMsg("");
@@ -2627,6 +2680,9 @@ function App() {
 
   // バックアップ復元の直前の状態に戻す(importBackupが退避したスナップショットから)
   const restoreFromPreImportSnapshot = async () => {
+    // 読み込みに失敗している間は断る。画面が空なので失うものが無いように見えるが、保存先には読めていない
+    // 記録が残っていて、控えも取らずに置き換えてしまう(2026-09-29の実機では、残っていた控えは9/27の0件だった)。
+    if (loadFailedRef.current) return;
     try {
       const snap = await store.get(PRE_IMPORT_BACKUP_KEY);
       if (!snap?.value) { setHasPreImportSnapshot(false); return; }
@@ -2737,6 +2793,8 @@ function App() {
   // 記録が3件以上あり、①一度もバックアップしていない ②前回から30日以上経過 のいずれかで促す
   const backupNag = useMemo(() => {
     if (hideBackupNag || workouts.length < 3) return null;
+    // iOS版はまだファイルに書き出せないので、できないことを促さない(書き出しを実装したら外す)
+    if (isNativeApp()) return null;
     if (!lastBackupAt) return { days: null, text: t("log.neverBackedUp") };
     const days = Math.floor((Date.now() - new Date(lastBackupAt).getTime()) / 86400000);
     if (days >= 30) return { days, text: t("log.lastBackup", { n: days }) };
@@ -2909,7 +2967,8 @@ function App() {
       })()}
 
       {/* ===== 初回ガイド ===== */}
-      {loaded && !guideSeen && (() => {
+      {/* 読み込みに失敗したときは出さない(空に見えるのは記録が無いからではない) */}
+      {loaded && !guideSeen && !loadFailed && (() => {
         const steps = [
           {
             art: "hero", title: t("guide.welcome"),
@@ -4897,7 +4956,7 @@ function App() {
               {t("backup.csv")}
             </button>
 
-            {hasPreImportSnapshot && (
+            {hasPreImportSnapshot && !loadFailed && (
               <div style={{ marginTop: 10, padding: 10, borderRadius: 10, background: "#3A2224", border: `1px solid ${C.red}` }}>
                 <p style={{ color: "#F5B8B3", fontSize: 12, margin: "0 0 8px", lineHeight: 1.6 }}>
                   {t("backup.undoAvail")}

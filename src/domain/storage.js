@@ -60,12 +60,14 @@ async function legacyPrefsGet(key) {
   return lsGet(key);
 }
 
-// 移行はアプリ起動(モジュール読み込み)ごとに1回だけ試みる。失敗してもここでは再試行せず、
-// 次回起動時(=モジュールが再読み込みされた時)にまた1回だけ試みる
-// (「移行途中で失敗しても、次回起動時に再試行できる」を、1セッション内で無限リトライしない形で満たす)。
+// 移行の確認は1本だけ走らせ、成功したら使い回す。失敗したら捨てて、次の読み書きでやり直す。
+// 以前は失敗も使い回していたので、1回失敗するとアプリを終了するまで読み書きが全部失敗した
+// (接続できなかった1回で、そのページの保存が全部止まる。2026-09-29の実機の不具合と同じ形)。
+// 移行は1トランザクションで、成功するまでstatusはpendingのままなので、やり直しても二重にはならない。
 function ensureMigrated(ws) {
   if (!migrationPromise) {
     migrationPromise = ws.migrateLegacyIfNeeded(() => legacyPrefsGet(SQLITE_BACKED_KEY));
+    migrationPromise.catch(() => { migrationPromise = null; });
   }
   return migrationPromise;
 }
