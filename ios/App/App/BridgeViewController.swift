@@ -10,5 +10,6 @@ class BridgeViewController: CAPBridgeViewController {
         bridge?.registerPluginInstance(RestTimerPlugin())
         bridge?.registerPluginInstance(HealthPlugin())
         bridge?.registerPluginInstance(WatchPlugin())
+        bridge?.registerPluginInstance(FileExportPlugin())
     }
 }

@@ -188,6 +188,7 @@
     { key:'iap',        urls:['src/domain/iap.js'] },
     { key:'health',     urls:['src/domain/health.js'] },
     { key:'watch',      urls:['src/domain/watch.js'] },
+    { key:'fileExport', urls:['src/domain/fileExport.js'] },
     // iOS版のSQLite永続化層。Web版では何もしない(nativeSqliteDriver()がnullを返すだけ)。
     { key:'dbSchema',    urls:['src/domain/db/schema.js'] },
     { key:'dbMigration', urls:['src/domain/db/migration.js'] },
@@ -251,7 +252,7 @@ const WATCH_LAST_SAVED_KEY = "watch-last-saved-v1";
 const PRE_IMPORT_BACKUP_KEY = "workout-log-v1-pre-import"; // バックアップ復元前のデータ退避(復元に失敗した場合の保険)
 // ヘッダーのバージョンバッジとバックアップのappVersionで共有する単一の定数。
 // sw.js の CACHE 定数とは tests/version.test.js が数字の一致を機械的に縛っている(CLAUDE.md参照)。
-const APP_VERSION = "v124";
+const APP_VERSION = "v125";
 // store(保存レイヤ)は src/domain/storage.js へ移設(テストのため)。
 // LIBSで<script src>読み込み済みなのでグローバルの store をそのまま参照できる。
 const uid = () => Math.random().toString(36).slice(2, 8);
@@ -2590,28 +2591,41 @@ function App() {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
-  // iOS版(Capacitor)では <a download> のダウンロードを何も処理しないので、ファイルは作られない。
-  // それなのに「書き出しました」と出していた(2026-09-29、書き出したつもりのバックアップが残っていなかった)。
-  // 共有シートで書き出せるようにするまでは、できないことを伝える。
+  // iOS版(Capacitor)では <a download> のダウンロードを何も処理しないので、ファイルは作られない
+  // (2026-09-29、「書き出しました」と出ていたのに、書き出したつもりのバックアップが残っていなかった)。
+  // iOSでは共有シート(src/domain/fileExport.js)で渡す。プラグインの無い古いネイティブでは、できないことを伝える。
   const isNativeApp = () => !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
-  const exportBackup = () => {
-    if (isNativeApp()) { setBackupMsg(t("backup.exportUnavailable")); return; }
+  const canExportFile = () => !isNativeApp() || fileExportAvailable();
+  // Webはダウンロード、iOSは共有シート。戻り値: 渡し終えたら true、キャンセルは false、失敗は null
+  const exportTextFile = async (filename, text, type) => {
+    if (!isNativeApp()) { downloadFile(filename, text, type); return true; }
+    const r = await shareTextFile(filename, text);
+    return r ? r.completed : null;
+  };
+  const exportBackup = async () => {
+    if (!canExportFile()) { setBackupMsg(t("backup.exportUnavailable")); return; }
     const payload = {
       app: "KURABELL Workout Log", formatVersion: CURRENT_BACKUP_FORMAT_VERSION, appVersion: APP_VERSION,
-      platform: "web", exportedAt: new Date().toISOString(),
+      platform: isNativeApp() ? "ios" : "web", exportedAt: new Date().toISOString(),
       workouts, split, profile, recentNames, customExercises, exerciseNotes, exerciseOverrides,
       lastBackupAt: new Date().toISOString(),
     };
     const d = new Date();
     const stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
-    downloadFile(`kurabell-backup-${stamp}.json`, JSON.stringify(payload, null, 2));
-    persist({ lastBackupAt: new Date().toISOString() });
+    setBackupMsg("");
+    const done = await exportTextFile(`kurabell-backup-${stamp}.json`, JSON.stringify(payload, null, 2), "application/json");
+    // 共有シートを閉じただけなら、書き出したことにしない(催促も日時もそのまま)
+    if (done === false) return;
+    if (done == null) { setBackupMsg(t("backup.exportFailed")); return; }
+    // 共有シートを開いている間(数分のこともある)に他の保存が進んでいることがあるので、最新のpersistで書く
+    // (描画時点のpersistだと、その間に変わった体重などを古い値で書き戻す。persistRefのコメント参照)
+    persistRef.current({ lastBackupAt: new Date().toISOString() });
     setHideBackupNag(true);
     setBackupMsg(t("backup.exported", { n: workouts.length }));
   };
 
-  const exportCSV = () => {
-    if (isNativeApp()) { setBackupMsg(t("backup.exportUnavailable")); return; }
+  const exportCSV = async () => {
+    if (!canExportFile()) { setBackupMsg(t("backup.exportUnavailable")); return; }
     const rows = [[t("csv.date"), t("csv.session"), t("csv.exercise"), t("csv.muscle"), t("csv.set"), t("csv.type"), t("csv.weight", { unit: uLabel() }), t("csv.reps"), t("csv.rir")]];
     workouts.forEach(w => {
       const d = new Date(w.date);
@@ -2621,8 +2635,10 @@ function App() {
       }));
     });
     const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
-    downloadFile(`kurabell-log-${Date.now()}.csv`, "\uFEFF" + csv, "text/csv");
-    setBackupMsg(t("backup.csvExported"));
+    setBackupMsg("");
+    const done = await exportTextFile(`kurabell-log-${Date.now()}.csv`, "\uFEFF" + csv, "text/csv");
+    if (done === false) return;
+    setBackupMsg(done == null ? t("backup.exportFailed") : t("backup.csvExported"));
   };
 
   const importBackup = async (file) => {
@@ -2793,8 +2809,8 @@ function App() {
   // 記録が3件以上あり、①一度もバックアップしていない ②前回から30日以上経過 のいずれかで促す
   const backupNag = useMemo(() => {
     if (hideBackupNag || workouts.length < 3) return null;
-    // iOS版はまだファイルに書き出せないので、できないことを促さない(書き出しを実装したら外す)
-    if (isNativeApp()) return null;
+    // 書き出せない環境(共有シートのプラグインが無い古いiOS版)では、できないことを促さない
+    if (!canExportFile()) return null;
     if (!lastBackupAt) return { days: null, text: t("log.neverBackedUp") };
     const days = Math.floor((Date.now() - new Date(lastBackupAt).getTime()) / 86400000);
     if (days >= 30) return { days, text: t("log.lastBackup", { n: days }) };
