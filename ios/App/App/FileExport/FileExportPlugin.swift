@@ -28,23 +28,22 @@ public class FileExportPlugin: CAPPlugin, CAPBridgedPlugin {
             return
         }
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(filename)
-        do {
-            try Data(text.utf8).write(to: url, options: .atomic)
-        } catch {
-            call.reject("write failed: \(error.localizedDescription)")
-            return
-        }
 
         DispatchQueue.main.async { [weak self] in
             guard let presenter = self?.bridge?.viewController else {
-                try? FileManager.default.removeItem(at: url)
                 call.reject("no view controller")
                 return
             }
-            // 共有シートがまだ出ている(ボタンの連打)ときに重ねて出すと、UIKitは表示せず完了も返さないので断る
+            // 共有シートがまだ出ている(ボタンの連打)ときに重ねて出すと、UIKitは表示せず完了も返さないので断る。
+            // 書き込みより前に判定する(同じ名前で書くと、出ているシートが渡そうとしているファイルを壊す)。
             guard presenter.presentedViewController == nil else {
-                try? FileManager.default.removeItem(at: url)
                 call.reject("busy")
+                return
+            }
+            do {
+                try Data(text.utf8).write(to: url, options: .atomic)
+            } catch {
+                call.reject("write failed: \(error.localizedDescription)")
                 return
             }
             let sheet = UIActivityViewController(activityItems: [url], applicationActivities: nil)

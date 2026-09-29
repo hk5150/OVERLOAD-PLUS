@@ -432,7 +432,7 @@ const STRINGS = {
   "backup.undoAvail":  { ja: "バックアップ復元より前のデータが端末に残っています。間違えて復元してしまった場合は、ここから戻せます。", en: "The data from before your last restore is still on this device. If you restored by mistake, you can roll it back here." },
   "backup.undo":       { ja: "↩ 復元前の状態に戻す",   en: "↩ Roll back the restore" },
   "backup.warn":       { ja: "※復元すると現在のデータはすべて置き換わります。復元前に念のため書き出しておくと安全です。", en: "Restoring replaces everything you have now. Export a backup first to be safe." },
-  "backup.exportUnavailable": { ja: "iOS版では、まだファイルに書き出せません。記録は端末に保存されています。", en: "The iOS app can't export files yet. Your records are saved on this device." },
+  "backup.exportUnavailable": { ja: "この環境ではファイルに書き出せません。記録は端末に保存されています。", en: "Files can't be exported in this environment. Your records are saved on this device." },
   "backup.exportFailed": { ja: "書き出せませんでした。もう一度お試しください。", en: "Couldn't export the file. Please try again." },
   "backup.importWriteFailed": { ja: "復元した内容を保存できませんでした。アプリを完全に終了して開き直してから、もう一度復元してください。", en: "Couldn't save the restored data. Quit the app completely, open it again, and restore once more." },
   "backup.exported":   { ja: "バックアップを書き出しました(記録 {n}件)。", en: "Backup exported ({n} workouts)." },

@@ -252,7 +252,7 @@ const WATCH_LAST_SAVED_KEY = "watch-last-saved-v1";
 const PRE_IMPORT_BACKUP_KEY = "workout-log-v1-pre-import"; // バックアップ復元前のデータ退避(復元に失敗した場合の保険)
 // ヘッダーのバージョンバッジとバックアップのappVersionで共有する単一の定数。
 // sw.js の CACHE 定数とは tests/version.test.js が数字の一致を機械的に縛っている(CLAUDE.md参照)。
-const APP_VERSION = "v125";
+const APP_VERSION = "v126";
 // store(保存レイヤ)は src/domain/storage.js へ移設(テストのため)。
 // LIBSで<script src>読み込み済みなのでグローバルの store をそのまま参照できる。
 const uid = () => Math.random().toString(36).slice(2, 8);
@@ -1901,7 +1901,7 @@ function App() {
     const ex = today.find(e => e.id === id);
     setToday(t => t.filter(e => e.id !== id));
     if (ex) updateSplitDayExercise(ex.name, null);
-    if (today.every(e => e.id === id)) clearErrorIf("log.noValidSets"); // 最後の種目を消した
+    if (today.every(e => e.id === id)) clearErrorIf("log.noValidSets", "err.workoutSaveFailed"); // 最後の種目を消した(入力はもう残っていない)
   };
   // 種目の並べ替え(dir: -1=上へ, +1=下へ)
   // 種目の差し替え(セット内容は維持したまま種目だけ変更)
@@ -2596,11 +2596,18 @@ function App() {
   // iOSでは共有シート(src/domain/fileExport.js)で渡す。プラグインの無い古いネイティブでは、できないことを伝える。
   const isNativeApp = () => !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
   const canExportFile = () => !isNativeApp() || fileExportAvailable();
-  // Webはダウンロード、iOSは共有シート。戻り値: 渡し終えたら true、キャンセルは false、失敗は null
+  // Webはダウンロード、iOSは共有シート。戻り値: 渡し終えたら true、キャンセルは false、失敗は null。
+  // 共有シートが出ている間の2回目(連打や、JSONの後にCSV)は受け付けない(キャンセル扱い)。
+  // 同じ日のバックアップは同じファイル名なので、重ねて呼ぶと1回目が渡そうとしているファイルが消える。
+  const exportingRef = useRef(false);
   const exportTextFile = async (filename, text, type) => {
     if (!isNativeApp()) { downloadFile(filename, text, type); return true; }
-    const r = await shareTextFile(filename, text);
-    return r ? r.completed : null;
+    if (exportingRef.current) return false;
+    exportingRef.current = true;
+    try {
+      const r = await shareTextFile(filename, text);
+      return r ? r.completed : null;
+    } finally { exportingRef.current = false; }
   };
   const exportBackup = async () => {
     if (!canExportFile()) { setBackupMsg(t("backup.exportUnavailable")); return; }
@@ -3222,7 +3229,7 @@ function App() {
                 if (!window.confirm(t("log.discardDraft"))) return;
                 setToday([]); setStartAt(null); setElapsed(0); stopRest(); setDraftRestored(false);
                 watchWorkoutForRef.current = null;
-                clearErrorIf("log.noValidSets");
+                clearErrorIf("log.noValidSets", "err.workoutSaveFailed"); // 破棄したので「入力した内容は残っています」も消す
                 try { await store.del(DRAFT_KEY); localStorage.removeItem(DRAFT_KEY); } catch { /* noop */ }
               }} style={{ ...btn("transparent", C.muted), padding: "6px 10px", fontSize: 13 }}>{t("log.discard")}</button>
             </div>

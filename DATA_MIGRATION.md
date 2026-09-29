@@ -134,6 +134,14 @@ index.html側の `persist()` は元々 `saveStatus` を "saving"/"saved"/エラ�
     開くことを確認
 - ✅ `npx cap sync ios`: `@capacitor-community/sqlite@6.0.2` が正しく認識され、CocoaPodsの
   `pod install` が成功することを確認("Found 2 Capacitor plugins for ios" のログを確認)。
+- ✅ **WebViewの再読み込み後の再接続**(2026-09-30、v124): iOSがWebViewの描画プロセスを止めると
+  Capacitorがページを読み直すが、ネイティブ側にはSQLiteの接続が残る。`createConnection`が
+  「Connection kurabellplus already exists」で失敗し、アプリを終了するまで読み書きが全部失敗した
+  (2026-09-29の実機で記録が失われた)。`capacitorSqliteDriver.js`は`createConnection`の前に
+  `closeConnection`を呼ぶ。**プラグイン(6.0.2)の`closeConnection`は接続が無ければ何もせず返す**
+  ことに依存しているので、プラグインを更新するときはここが変わっていないか確認すること
+  (変わると起動時の読み込みが毎回失敗し、全保存が止まる)。再現はシミュレータでアプリの
+  `WebKit.WebContent`を`kill -9`する。
 - ⚠️ **未検証**: 実際のTestFlight配布経由でのアップデート(今回はシミュレータ上で
   Preferencesを直接書き換える形で模擬)。機内モード相当のオフライン動作
   (シミュレータはホストMacのネットワークを共有しており、Macごとネットワークを切ると
