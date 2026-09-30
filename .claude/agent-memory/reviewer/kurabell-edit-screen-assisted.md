@@ -1,6 +1,6 @@
 ---
 name: kurabell-edit-screen-assisted
-description: 履歴の編集画面の補助(assisted)。v129でdraftに保持、v130で今日画面と同じ3状態切替(nextSetType)とeditAddSetの補助引き継ぎに揃えた
+description: 履歴の編集画面の補助(assisted)。v129でdraftに保持、v130で3状態切替nextSetTypeに集約、v131でvolume.jsへ移設しテスト化
 metadata:
   type: project
 ---
@@ -18,4 +18,5 @@ v130(未コミット差分をレビュー、2026-10-01)で、切替を `#appsrc`
 
 **How to apply:** セット種別に触る差分では、nextSetType を経由しているか(独自の三項演算子を書き足していないか)、
 追加・複製経路(addSet / editAddSet / watch.js の sets.push)で warmup:false と assisted の扱いが揃っているかを見る。
-nextSetType は #appsrc 内なのでユニットテストは無い。[[kurabell-1rm-filter-divergence]]
+v131 で nextSetType は src/domain/volume.js へ移設(globalThis公開)、tests/volume.test.js にテストあり。
+今日画面も setToday の更新関数内で nextSetType(x) を呼ぶ(編集画面の editSetType と同形)。[[kurabell-1rm-filter-divergence]]
