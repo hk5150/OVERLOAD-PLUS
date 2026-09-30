@@ -430,3 +430,20 @@ HealthKit: off by default. When the user turns on "Connect to Apple Health" in t
 
 「データの収集なし」のまま(Watch の心拍数・消費カロリーも端末の外に送らないため)。
 
+
+### 1.1 (ビルド10) — 2026-09-30 23:24 に審査へ提出
+
+Claude in Chrome で App Store Connect を操作して入力した(北村さんがサインイン、「審査へ提出」の前に確認)。
+
+- **ビルド**: 1.1 (10)(v127。Apple Watch アプリを含む)
+- **文面**: この文書の「1.1(Apple Watch 版)の掲載情報」のとおり(日本語・English (U.S.))。
+  キーワードは日本語の「アップルウォッチ」が上限に収まらず、`,watch` だけ足した(残り文字数はバイト数に近い数え方)
+- **スクリーンショット**: iPhone 6.9インチは v3 の 01〜06(2枚目が Apple Watch。**料金の 07 は 1.0 と同じ判断で外した**)。
+  Apple Watch は日本語が実機の3枚、英語はシミュレータの3枚(`~/Desktop/KURABELL-appstore-screenshots/watch-en/`、
+  `-KurabellSample -KurabellLang en` に `-KurabellOpen a1 -KurabellEdit 3` / `-KurabellOpen a1` / `-KurabellRest 1`)
+- **審査メモ**: 冒頭の「9/27 に画面収録を送った」を外し、HEALTHKIT の段落を 1.1 版に差し替え(3,391 文字)
+- **リリース**: 承認後に自動、段階的リリースなし、既存の評価を維持(1.0 と同じ)
+- 入力の罠: 長い欄は `form_input` では反映されない(クリック → 全選択 → 貼り付けで入る)。
+  1.1 を作ると 1.0 の画像が「6.9インチを 6.5インチに流用」の形で引き継がれ、バージョンのページの削除ボタンは無効。
+  メディアマネージャーの 6.9インチの枠で「すべてを削除」してから1枚ずつ入れる。英語は「日本語の画像を流用中」になるので「編集」を押してから入れる。
+  1枚ずつ入れれば順番どおりに並ぶ
