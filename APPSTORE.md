@@ -10,8 +10,9 @@
   冒頭は得られるものを書き、「〜なし」の列挙は後ろにまとめる
 - **課金条件は説明文の冒頭3行に入れる**(「続きを読む」の前に見える範囲)。Guideline 3.1.1 の開示要件も兼ねる
 - **価格は書かない。** App内課金の価格はストアが自動で表示する。説明文に書くと価格改定のたびに審査が要る
-- **「Apple Watch対応」とは書かない。** Watchアプリは無い(ロック中の通知がWatchに転送されるだけ)。
-  Guideline 2.3(メタデータの正確性)に触れる
+- **「Apple Watch対応」は 1.1 から書く。** 1.0 には Watch アプリが無く(ロック中の通知が転送されるだけ)、
+  書くと Guideline 2.3(メタデータの正確性)に触れるので書かなかった。1.1 で Watch アプリが入る。
+  1.1 で差し替える文面は末尾の「1.1(Apple Watch 版)の掲載情報」
 
 ## 基本情報
 
@@ -310,26 +311,120 @@ App Store Connect の Apple ID は 6816090624、SKU は `kurabell-ios-001`。ア
   Xcode がチームを無料の Personal Team として覚えたまま(`defaults read com.apple.dt.Xcode IDEProvisioningTeamByIdentifier`)。
   サインインし直すと Individual に直ったが、今度は「capability USERNOTIFICATIONS_TIMESENSITIVE could not be determined」で失敗。
   **コマンドの `xcodebuild -allowProvisioningUpdates` は通る**ので、実機への開発版はコマンドで入れるのが確実
-- ヘルスケアの権限シートで「許可しない」を選ぶと「Could not connect to Apple Health.」と出る(収録から切り落とした)。次のアップデートで直す
+- ヘルスケアの権限シートで「許可しない」を選ぶと「Could not connect to Apple Health.」と出る(収録から切り落とした)。1.1 で修正(v127、docs/ヘルスケア連携.md)
 - スクリーンショットの6枚目(文字だけの料金説明)は Guideline 2.3.3 の注意に当たりうるので削除し、日英5枚にした
 - 返信後、バージョンのページで「**審査内容を更新**」→ 提出物の画面で「App Review に再提出」の順に押す必要があった
   (メタデータを変えた後は、再提出ボタンがグレーのまま)。新しいビルド(1.0 (5))があると確認が出るが、そのまま「提出」で 1.0 (3) のまま出せる
 
 ---
 
-## 次のバージョン(Apple Watch 版)で差し替えるもの
+## 1.1(Apple Watch 版)の掲載情報
 
-1.0 の審査中に書いた。**1.0 の審査メモ・説明文は 1.0 の動作どおりなので、今は変えない。** Watch 版を提出するときに、下の内容で差し替える。
+1.0 の審査中に書き始め、2026-09-29 に 1.1 用にまとめた。**1.0 の説明文は 1.0 の動作どおりなので、1.1 の提出まで変えない。**
+App Store Connect で「+ バージョン」→ 1.1 を作り、下の内容で差し替える。変えない欄(アプリ名・サブタイトル・料金・安心の節など)は 1.0 のまま。
 
-### 審査メモ(英語)のヘルスケアの段落
+**実機で確かめてから出す主張** → **2026-09-30、TestFlight 1.1 (10) の実機で確認済み**(docs/Watchアプリ.md):
+「心拍数と消費カロリー付き」「アクティビティのリングに反映」「アプリで記録を削除するとヘルスケアからも削除」のいずれも動いた。下の文面はそのまま使う。
+
+### このバージョンの最新情報(What's New)
+
+日本語:
+```
+・Apple Watch に対応しました。iPhone で記録を始めると Watch の KURABELL が自動で開き、セットごとに前回の重量・回数・余力を見ながら手元で入力できます。入力すると休憩タイマーが始まり、次のセットの重量×回数も表示されます
+・ヘルスケア連携をオンにしていると、Watch で記録したワークアウトに心拍数と消費カロリーが付きます
+・分割タブで Day に種目を登録するとき、検索・カスタム種目・最近使った順の並びが使えるようになりました。見つからない種目は、その場でカスタム種目として作れます
+・バックアップと CSV を、共有シートから「ファイル」や AirDrop に書き出せるようになりました
+・アプリを裏に回してから戻ると保存できなくなることがある不具合と、保存に失敗すると入力中の記録が消える不具合を直しました。バックアップの復元まわりも直しています
+```
+
+English:
+```
+• Apple Watch app: start a workout on iPhone and KURABELL opens on your watch. Log each set with your last weight, reps and RIR right beside it. Logging a set starts the rest timer, which also shows the next set.
+• With Apple Health on, workouts recorded on the watch include heart rate and active energy.
+• Adding exercises to a Day in the Split tab now has search, your custom exercises, and recently used exercises first. Can't find one? Create it as a custom exercise right there.
+• Export your backup and CSV through the share sheet to Files or AirDrop.
+• Fixed a bug where saving could fail after the app had been in the background, and a bug where a failed save discarded the workout you were logging. Also fixed issues around restoring from a backup.
+```
+
+### プロモーションテキスト(審査不要。1.1 の公開に合わせて差し替える)
+
+日本語:
+```
+Apple Watch に対応。iPhone で記録を始めると Watch が自動で開き、前回の重量・回数・余力を見ながら手元でセットを入力できます。最初の10回は全機能無料、あとは一度の購入でずっと使えます。サブスクなし・広告なし・アカウント登録なし。
+```
+
+English:
+```
+Now on Apple Watch: start on iPhone and your watch opens with your last weight, reps and RIR on every set. First 10 workouts free, then one purchase. No subscription.
+```
+
+### キーワード
+
+日本語(86文字): 末尾に「アップルウォッチ,watch」を足す。
+```
+筋トレ,ベンチプレス,スクワット,漸進性過負荷,RIR,1RM,自己ベスト,買い切り,オフライン,休憩タイマー,ワークアウト,トレーニング日記,アップルウォッチ,watch
+```
+
+English(99文字): 末尾に「watch」を足す(「apple watch」だと100文字を超える。「apple」は単独では検索語として弱い)。
+```
+gym,lifting,strength,training,tracker,rir,1rm,progressive overload,barbell,offline,rest timer,watch
+```
+
+### 概要(Description)の差し替え
+
+サブタイトルは 1.0 のまま(「ジムで前回超え。サブスクなし」/ `Beat your last session`)。Watch は説明文とスクリーンショットの**2番目**で見せる
+(一番の売りの前回比較は1番目のまま。2026-09-29 に決定)。
+
+1行目を次に置き換える(課金条件が「続きを読む」の前に収まるよう、行は増やさない)。
+
+日本語: `前回の重量・回数・余力が、セットごとに横に並ぶ。iPhone でも、Apple Watch でも。`
+English: `Your last weight, reps and RIR — right there on every set row, on iPhone and Apple Watch.`
+
+「■ 前回の自分と、セットごとに勝負」「■ Beat your last session, set by set」の直後(2番目の節)に、次の節を足す。
+
+日本語:
+```
+■ Apple Watch で、スマホを出さずに記録
+iPhone で記録を始めると、Apple Watch の KURABELL が自動で開きます。セットごとに前回の重量・回数・余力が並び、重量と回数は −/+ ボタン、余力はワンタップで入力。入力すると休憩タイマーが全画面で始まり、次のセットの重量×回数も表示されます。ヘルスケア連携をオンにしていれば、心拍数と消費カロリー付きのワークアウトとして記録され、アクティビティのリングにも反映されます。
+※ Apple Watch 版を使うには iPhone 版が必要です
+```
+
+English:
+```
+■ Log from your wrist with Apple Watch
+Start a workout on iPhone and KURABELL opens on your Apple Watch. Every set shows your last weight, reps and RIR. Set weight and reps with the −/+ buttons and RIR with a single tap. Logging a set starts a full-screen rest timer that also shows the next set. With Apple Health on, the watch records the workout with heart rate and active energy, so it counts toward your Activity rings.
+* The Apple Watch app requires the iPhone app.
+```
+
+「■ ヘルスケアと連携」「■ Works with Apple Health」の末尾に1文足す。
+
+日本語: `Apple Watch で記録したワークアウトには、心拍数と消費カロリーが付きます。`
+English: `Workouts recorded on Apple Watch include heart rate and active energy.`
+
+### スクリーンショット
+
+- **Apple Watch 用の枠が別にある**(Watch アプリを含むビルドを選ぶと、バージョンのページに Apple Watch の欄が出る)。1枚以上が必須。
+  Watch の実機・シミュレータの画面をそのまま使う(Series 10/11 の 46mm なら 416×496)。
+  **2026-09-30 に実機(Series 10)で3枚撮影済み**: `~/Desktop/KURABELL-appstore-screenshots/watch/`
+  (`watch-1-input.png` セット入力、`watch-2-sets-rest.png` 休憩タイマー付きのセット一覧、`watch-3-sets.png` セット一覧)。
+  並び順は 1 → 2 → 3(入力画面が売り)
+- iPhone の6.9インチの枠にも、**iPhone と Watch を並べた1枚を2枚目に**足す(検索結果に出るのは先頭3枚)。
+  見出し案: 「手元の Apple Watch で、そのまま記録」/ `Log from your wrist`。今の2〜5枚目は1枚ずつ後ろへ
+  (6枚になる。上限は10枚)。Watch の画面は実機のスクリーンショット(サイドボタン+Digital Crown の同時押し)を合成に使う
+
+### 審査メモ(App Review Information のメモ欄)
+
+1.0 のメモの「ヘルスケア」の段落を、下の段落で置き換える。ほかの段落は 1.0 のまま。
+
+#### 英語
 
 HealthKit: off by default. When the user turns on "Connect to Apple Health" in the Settings tab, the app asks for permission and then (1) saves each workout the user logs as Traditional Strength Training with its start and end times only (no calories), (2) reads the latest body weight to calculate bodyweight exercises, and (3) saves the body weight the user enters in Settings. If the companion Apple Watch app is installed, starting a workout on iPhone launches the watch app with HKHealthStore.startWatchApp and starts a strength-training HKWorkoutSession; the watch reads heart rate and active energy and saves that workout (with heart rate and active energy) to Health, and the iPhone does not write a second copy. Because the watch app is launched in the background and cannot show the Health permission sheet, the iPhone app asks for the watch app's permissions (heart rate and active energy) on its behalf, only when the watch app is installed; the iPhone app itself does not read or write them. Deleting a workout in the app also deletes the workout written to Health. Health data stays on the device; it is never sent to a server or used for advertising.
 
-### 審査メモ(日本語)
+#### 日本語
 
 ヘルスケア(HealthKit)連携: 既定はオフです。設定タブの「ヘルスケアと連携」をオンにすると権限を求め、(1)記録したワークアウトを「従来型筋力トレーニング」として開始・終了時刻のみ書き込み、(2)自重種目の計算のため最新の体重を読み込み、(3)設定で入力した体重を書き込みます。Apple Watch 版が入っている場合は、iPhone で記録を始めると HKHealthStore.startWatchApp で Watch アプリを起動して筋トレの HKWorkoutSession を始め、Watch が心拍数と消費カロリーを読み込んで、それらを含むワークアウトとしてヘルスケアに保存します(iPhone からは同じワークアウトを書き込みません)。Watch アプリは裏で起動されて権限の画面を出せないため、Watch アプリが入っている場合に限り、iPhone のアプリが Watch 用の権限(心拍数・消費カロリー)を代わりに求めます。iPhone のアプリ自身はそれらを読み書きしません。アプリで記録を削除すると、ヘルスケアのワークアウトも削除します。ヘルスケアのデータは端末内だけで扱い、外部への送信や広告目的の利用はしません。
 
-### 説明文の「ヘルスケアと連携」「Works with Apple Health」
+### App Privacy
 
-Watch の記録(自動起動・心拍・消費カロリー・リング)を1文足す。App Privacy は「データを収集しない」のまま(端末の外に送らないため)。
+「データの収集なし」のまま(Watch の心拍数・消費カロリーも端末の外に送らないため)。
 
