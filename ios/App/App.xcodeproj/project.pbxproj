@@ -38,6 +38,7 @@
 		905EFE9B01A85DAE37F9FF12 /* RestActivityLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80CFB1A042027EBA9941D491 /* RestActivityLiveActivity.swift */; };
 		90B2AFA841F38E689BBA405F /* RestTimerAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = D14AD22BEF97714C080BC66B /* RestTimerAttributes.swift */; };
 		92DD79B0AF33B524EDBD82DF /* RestTimerManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8D03ED677AFB8D417D4C04 /* RestTimerManager.swift */; };
+		A1C0FFEE0000000000000001 /* ReviewPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0FFEE0000000000000002 /* ReviewPlugin.swift */; };
 		97B5C5E5BF762C4E73654717 /* FileExportPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3AC98AA671B43BC376094494 /* FileExportPlugin.swift */; };
 		A084ECDBA7D38E1E42DFC39D /* Pods_App.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AF277DCFFFF123FFC6DF26C7 /* Pods_App.framework */; };
 		A7BEFDF1DA9DFA458C845B50 /* RestTimerPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B4E3951E4E87DE894080880 /* RestTimerPlugin.swift */; };
@@ -99,6 +100,7 @@
 		2FAD9762203C412B000D30F8 /* config.xml */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = config.xml; sourceTree = "<group>"; };
 		30BD14DAAAE86D5CC41D0A7A /* RestActivity.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = RestActivity.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		34A0471B1932971EEE4ECFED /* App.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = App.entitlements; sourceTree = "<group>"; };
+		A1C0FFEE0000000000000002 /* ReviewPlugin.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ReviewPlugin.swift; sourceTree = "<group>"; };
 		3AC98AA671B43BC376094494 /* FileExportPlugin.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FileExportPlugin.swift; sourceTree = "<group>"; };
 		3B4E3951E4E87DE894080880 /* RestTimerPlugin.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RestTimerPlugin.swift; sourceTree = "<group>"; };
 		3D61DE85C919951FA06883D9 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -205,6 +207,15 @@
 			path = FileExport;
 			sourceTree = "<group>";
 		};
+		A1C0FFEE0000000000000003 /* Review */ = {
+			isa = PBXGroup;
+			children = (
+				A1C0FFEE0000000000000002 /* ReviewPlugin.swift */,
+			);
+			name = Review;
+			path = Review;
+			sourceTree = "<group>";
+		};
 		504EC2FB1FED79650016851F = {
 			isa = PBXGroup;
 			children = (
@@ -247,6 +258,7 @@
 				5783F33A39803DE5BA4657C6 /* InfoPlist.strings */,
 				13504BC9F0135BED63764DB7 /* Watch */,
 				31E90B79F4749677EB339105 /* FileExport */,
+				A1C0FFEE0000000000000003 /* Review */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -534,6 +546,7 @@
 				ABF8CD030A9B517246F8FB4F /* WatchSessionManager.swift in Sources */,
 				3568666FA01BED71A1C9E2E2 /* WatchPlugin.swift in Sources */,
 				97B5C5E5BF762C4E73654717 /* FileExportPlugin.swift in Sources */,
+				A1C0FFEE0000000000000001 /* ReviewPlugin.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

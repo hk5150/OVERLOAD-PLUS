@@ -1,6 +1,6 @@
 // KURABELL+ Service Worker
 // アプリ本体をキャッシュし、オフラインでも起動できるようにする。ライブラリもすべてローカル同梱(CDN不使用)。
-const CACHE = "kurabell-v131";
+const CACHE = "kurabell-v132";
 
 // ネットワーク優先フェッチのタイムアウト(電波が弱い環境でハングし続けるのを防ぐ)
 const NETWORK_TIMEOUT_MS = 4000;
@@ -33,6 +33,7 @@ const APP_ASSETS = [
   "./src/domain/health.js",
   "./src/domain/watch.js",
   "./src/domain/fileExport.js",
+  "./src/domain/review.js",
   "./src/domain/db/schema.js",
   "./src/domain/db/migration.js",
   "./src/domain/db/workoutStore.js",

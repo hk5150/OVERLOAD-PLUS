@@ -189,6 +189,7 @@
     { key:'health',     urls:['src/domain/health.js'] },
     { key:'watch',      urls:['src/domain/watch.js'] },
     { key:'fileExport', urls:['src/domain/fileExport.js'] },
+    { key:'review',     urls:['src/domain/review.js'] },
     // iOS版のSQLite永続化層。Web版では何もしない(nativeSqliteDriver()がnullを返すだけ)。
     { key:'dbSchema',    urls:['src/domain/db/schema.js'] },
     { key:'dbMigration', urls:['src/domain/db/migration.js'] },
@@ -255,7 +256,7 @@ const WATCH_LAST_SAVED_KEY = "watch-last-saved-v1";
 const PRE_IMPORT_BACKUP_KEY = "workout-log-v1-pre-import"; // バックアップ復元前のデータ退避(復元に失敗した場合の保険)
 // ヘッダーのバージョンバッジとバックアップのappVersionで共有する単一の定数。
 // sw.js の CACHE 定数とは tests/version.test.js が数字の一致を機械的に縛っている(CLAUDE.md参照)。
-const APP_VERSION = "v131";
+const APP_VERSION = "v132";
 // store(保存レイヤ)は src/domain/storage.js へ移設(テストのため)。
 // LIBSで<script src>読み込み済みなのでグローバルの store をそのまま参照できる。
 const uid = () => Math.random().toString(36).slice(2, 8);
@@ -2072,6 +2073,12 @@ function App() {
       setSaving(false);
       return;
     }
+    // 評価ダイアログを頼むかの材料。記録画面の「YOU WIN!」と同じ条件(前回までのベストがある種目で推定1RMを超えた)。
+    // prMapは保存前の履歴から作られているので、persistより前に出しておく。
+    const beatPrevious = today.some(ex => {
+      const best = prMap[ex.name]?.best1RM || 0;
+      return best > 0 && liveBest1RM(ex) > best + 0.01;
+    });
     const totalVolume = exercises.reduce((a, ex) => a + exVolume(ex), 0);
     const entry = {
       date: new Date(end).toISOString(), session: todayDay ? todayDay.name : undefined,
@@ -2127,6 +2134,17 @@ function App() {
     setDraftRestored(false);
     try { await store.del(DRAFT_KEY); localStorage.removeItem(DRAFT_KEY); } catch { /* noop */ }
     setView("history");
+    // 保存が済んで履歴画面に移ってから頼む(記録の途中やペイウォールの上には出さない)。
+    // 出すかどうかはiOSが決める。依頼した日時だけ残して、次は120日あける(src/domain/review.js)。
+    if (beatPrevious) {
+      try {
+        const lastRequestedAt = (await store.get(REVIEW_REQUESTED_KEY))?.value;
+        if (shouldRequestReview({ beatPrevious, workoutsCount: workouts.length + 1, lastRequestedAt, now: Date.now() })
+            && await requestAppReview()) {
+          await store.set(REVIEW_REQUESTED_KEY, new Date().toISOString());
+        }
+      } catch { /* noop */ }
+    }
   };
 
   // YouTubeで種目のやり方動画を検索(APIキー不要・新しいタブで開く)
