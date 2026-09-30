@@ -24,7 +24,9 @@ Watch でセットを入力するためのアプリ(v120〜)。
   「No Accounts」や、画面の Archive の「Personal development teams … do not support」で失敗したときは、
   Xcode → 設定 → Apple Accounts でサインアウトして、サインインし直すと両方直った(`defaults read com.apple.dt.Xcode IDEProvisioningTeamByIdentifier` が `Individual` になる)
 
-**実機で確かめること(1.1 (7) が入ったら)**
+**実機で確かめること(1.1 (7) が入ったら)** → **2026-09-30、TestFlight 1.1 (10)(iPhone 15 Pro Max + Watch Series 10)で 0〜4 とも問題なし(北村さん確認)。**
+あわせて、書き出し →「"ファイル"に保存」、ヘルスケアの権限で「許可しない」(赤い「接続できませんでした」は出ない)、
+裏に回してから戻って保存、も問題なし。掲載文の主張(Watch の自動起動・心拍と消費カロリー・削除の連動)はそのまま使える。
 0. 記録を始めたとき iPhone に心拍数・アクティブエネルギーの許可シートが出るか。許可した**その回**に Watch が起動するか、2回目からか(許可の同期が遅れると初回だけ失敗しうる。reviewer 指摘)
 1. iPhone で記録を始めると Watch が自動で起動し、腕を下ろしても KURABELL の画面のまま保たれるか
    (純正「ワークアウト」を併用すると、あちらが優先される。KURABELL のワークアウトが止まり、iPhone が時刻だけ書く)
