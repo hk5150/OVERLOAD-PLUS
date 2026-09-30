@@ -252,7 +252,7 @@ const WATCH_LAST_SAVED_KEY = "watch-last-saved-v1";
 const PRE_IMPORT_BACKUP_KEY = "workout-log-v1-pre-import"; // バックアップ復元前のデータ退避(復元に失敗した場合の保険)
 // ヘッダーのバージョンバッジとバックアップのappVersionで共有する単一の定数。
 // sw.js の CACHE 定数とは tests/version.test.js が数字の一致を機械的に縛っている(CLAUDE.md参照)。
-const APP_VERSION = "v127";
+const APP_VERSION = "v128";
 // store(保存レイヤ)は src/domain/storage.js へ移設(テストのため)。
 // LIBSで<script src>読み込み済みなのでグローバルの store をそのまま参照できる。
 const uid = () => Math.random().toString(36).slice(2, 8);
@@ -1873,7 +1873,15 @@ function App() {
     setSearch(""); setCustomDraft({ muscle: "", eq: "" }); setInsertAt(null);
   };
   const updEx = (id, patch) => setToday(t => t.map(ex => ex.id === id ? { ...ex, ...patch } : ex));
-  const updateSet = (id, i, field, value) => setToday(t => t.map(ex => ex.id !== id ? ex : { ...ex, sets: ex.sets.map((s, j) => j === i ? { ...s, [field]: value } : s) }));
+  // 範囲外の値は打てないようにする(復元と同じ範囲。重量は表示単位からkgに直して比べる)。
+  // "." のような打ちかけの値は通す(保存時に num() で0になる)。
+  const setInputAllowed = (field, v) => {
+    if (!(field in SET_VALUE_LIMITS) || v === "" || v == null) return true;
+    const x = parseFloat(v);
+    if (!Number.isFinite(x)) return true;
+    return isSetValueInRange(field, field === "weight" ? fromU(v) : x);
+  };
+  const updateSet = (id, i, field, value) => setInputAllowed(field, value) && setToday(t => t.map(ex => ex.id !== id ? ex : { ...ex, sets: ex.sets.map((s, j) => j === i ? { ...s, [field]: value } : s) }));
   // 前のセットの重量・回数をこのセットにコピー
   const copyFromPrev = (id, i) => setToday(t => t.map(ex => {
     if (ex.id !== id || i === 0) return ex;
@@ -2238,6 +2246,7 @@ function App() {
   const cancelEditWorkout = () => setEditWorkout(null);
 
   const editSet = (exIdx, setIdx, field, value) => {
+    if (!setInputAllowed(field, value)) return;
     setEditWorkout(ew => ({
       ...ew,
       draft: {
@@ -2662,8 +2671,9 @@ function App() {
       const p = JSON.parse(text);
       // 壊れたデータ・数値異常・未知の将来フォーマットで上書きしないよう、
       // 確認ダイアログより前に検証する(ここで例外が出れば現在のデータは一切変更されない)。
-      const ws = validateBackupPayload(p);
-      if (!window.confirm(t("backup.confirmImport", { n: ws.length }))) return;
+      const { workouts: ws, cleared } = validateBackupPayload(p);
+      const clearedNote = cleared > 0 ? t("backup.willClear", { c: cleared }) + "\n\n" : "";
+      if (!window.confirm(clearedNote + t("backup.confirmImport", { n: ws.length }))) return;
 
       // 復元前に現在のデータをスナップショットとして退避(復元後に問題があった場合の保険)。
       // 今のデータを読めなければ復元しない。続けると、前の復元の古い控えが「元に戻す」に残ったまま、
@@ -2701,7 +2711,7 @@ function App() {
         return;
       }
       loadFailedRef.current = false; setLoadFailed(false); // メモリと保存先が同じ内容になった
-      setBackupMsg(t("backup.imported", { n: next.workouts.length }));
+      setBackupMsg(t("backup.imported", { n: next.workouts.length }) + (cleared > 0 ? t("backup.cleared", { c: cleared }) : ""));
     } catch (e) {
       setBackupMsg("");
       setError(t("backup.importFailed", { msg: e?.message || t("backup.checkFile") }));
@@ -2717,8 +2727,9 @@ function App() {
       const snap = await store.get(PRE_IMPORT_BACKUP_KEY);
       if (!snap?.value) { setHasPreImportSnapshot(false); return; }
       const p = JSON.parse(snap.value);
-      const ws = validateBackupPayload(p);
-      if (!window.confirm(t("backup.confirmUndo", { n: ws.length }))) return;
+      const { workouts: ws, cleared } = validateBackupPayload(p);
+      const clearedNote = cleared > 0 ? t("backup.willClear", { c: cleared }) + "\n\n" : "";
+      if (!window.confirm(clearedNote + t("backup.confirmUndo", { n: ws.length }))) return;
       const next = {
         workouts: migrateWorkouts(ws),
         split: migrateSplit(p.split),
@@ -2735,7 +2746,7 @@ function App() {
       if (!(await persist(next))) { setBackupMsg(""); return; }
       await store.del(PRE_IMPORT_BACKUP_KEY);
       setHasPreImportSnapshot(false);
-      setBackupMsg(t("backup.undone", { n: next.workouts.length }));
+      setBackupMsg(t("backup.undone", { n: next.workouts.length }) + (cleared > 0 ? t("backup.cleared", { c: cleared }) : ""));
     } catch (e) {
       setError(t("backup.undoFailed", { msg: e?.message || t("backup.checkData") }));
     }

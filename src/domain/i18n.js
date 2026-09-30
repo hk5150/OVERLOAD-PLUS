@@ -439,6 +439,8 @@ const STRINGS = {
   "backup.csvExported": { ja: "CSVを書き出しました(Excel等で開けます)。", en: "CSV exported (opens in Excel and similar)." },
   "backup.confirmImport": { ja: "バックアップを復元します(記録 {n}件)。\n現在のデータはすべて置き換わります。よろしいですか?", en: "Restore this backup ({n} workouts)?\nEverything you have now will be replaced." },
   "backup.imported":   { ja: "復元しました(記録 {n}件)。", en: "Restored ({n} workouts)." },
+  "backup.willClear":  { ja: "記録の中に範囲外の値が{c}か所あります。重量・回数は0に、余力(RIR)は未入力にして戻します。", en: "{c} values in these workouts are out of range. Weight and reps will be set to 0, and reps in reserve will be left blank." },
+  "backup.cleared":    { ja: "範囲外の値 {c}か所は0または未入力にしました。", en: " {c} out-of-range values were set to 0 or left blank." },
   "backup.importFailed": { ja: "復元に失敗しました({msg})。", en: "Restore failed ({msg})." },
   "backup.checkFile":  { ja: "ファイルを確認してください", en: "please check the file" },
   "backup.confirmUndo": { ja: "バックアップ復元より前の状態(記録 {n}件)に戻します。\n現在のデータは置き換わります。よろしいですか?", en: "Roll back to the state before the restore ({n} workouts)?\nYour current data will be replaced." },

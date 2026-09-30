@@ -67,7 +67,7 @@ function buildWatchSnapshot({ now, exercises = [], restStartAt = null, dayName =
               text: `${p.assisted ? labels.assisted : ""}${fmtW(p.weight)}${ex.unit}×${p.reps}${p.rir != null ? ` RIR${p.rir}` : ""}`,
               weight: String(fmtW(p.weight)),
               reps: String(p.reps),
-              rir: p.rir != null ? p.rir : null,
+              rir: watchRir(p.rir),
             } : null,
           };
         }),

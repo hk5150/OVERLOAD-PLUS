@@ -51,6 +51,15 @@ describe("buildWatchSnapshot", () => {
     expect(rows[2].rir).toBeNull(); // 未入力は「まだやっていない」であって0ではない
   });
 
+  it("前回の rir が空文字でも Watch には null で送る(Swift 側は Int? なので文字列だとデコードごと失敗する)", () => {
+    const { buildWatchSnapshot } = load();
+    const snap = buildWatchSnapshot({
+      now: 1, labels: LABELS, fmtW,
+      exercises: [bench([{ weight: "80", reps: "8", rir: "", warmup: false }], [{ weight: 80, reps: 8, rir: "" }])],
+    });
+    expect(snap.exercises[0].sets[0].prev.rir).toBeNull();
+  });
+
   it("前回の補助付きセットは補助の印を付ける", () => {
     const { buildWatchSnapshot } = load();
     const snap = buildWatchSnapshot({

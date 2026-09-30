@@ -125,8 +125,9 @@ App Store Connectでの提出直前に、上から順に確認する。チェッ
 
 - [ ] JSON書き出し(`formatVersion`/`appVersion`/`platform`/`exportedAt` を含む)、
   CSV書き出しに対応(詳細は[DATA_MIGRATION.md](DATA_MIGRATION.md)参照)
-- [ ] 復元時に壊れたJSON・異常な数値・未知の将来`formatVersion`を拒否する
-  (`src/domain/backupValidation.js` の `validateBackupPayload()`)
+- [ ] 復元時に壊れたJSON・未知の将来`formatVersion`を拒否する。セットの範囲外の値(回数1000・重量2000kg超など)は
+  拒否せず保存時と同じ形(重量・回数は0、RIRは未入力)にして戻し、件数を知らせる。入力欄でも同じ範囲を超える値は打てない
+  (`src/domain/backupValidation.js` の `validateBackupPayload()` / `SET_VALUE_LIMITS`、v128)
 - [ ] 復元前に現在データを自動退避し、失敗時にロールバックできる
   (`index.html` の `importBackup`/`restoreFromPreImportSnapshot`)
 

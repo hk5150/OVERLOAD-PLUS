@@ -1,7 +1,6 @@
 // 保存データ(通常の起動読み込み・バックアップ復元とも)の構造検証。
 // index.htmlの#appsrcから<script src>で素のグローバルスクリプトとして読み込まれる
 // (importやexportは使わない、ビルド不要の原則を維持するため)。
-// ロジックは元のindex.html内の定義から一切変更していない(移設のみ)。
 
 // 旧形式は配列そのもの、新形式は { workouts: [...] } のオブジェクト。
 function extractWorkoutsArray(p) {
@@ -39,35 +38,48 @@ function assertKnownFormatVersion(p) {
   }
 }
 
+// セットの値として受け付ける範囲(保存単位。重量はkg)。入力欄と復元の両方がこれを使う。
+// 以前は入力に上限がなく、1010回のような記録を保存できるのに、復元ではバックアップ全体を
+// 拒否していた。今は入力欄で範囲外を打てないようにし、復元では範囲外の値だけ置き換えて戻す
+// (保存済みの記録に範囲外の値が1つあるだけで、バックアップ全体が戻せなくならないように)。
+const SET_VALUE_LIMITS = { weight: [0, 2000], reps: [0, 1000], rir: [-10, 30] };
+
+function isSetValueInRange(field, v) {
+  const [lo, hi] = SET_VALUE_LIMITS[field];
+  const x = Number(v);
+  return Number.isFinite(x) && x >= lo && x <= hi;
+}
+
 // 復元時だけ行う、値そのものの妥当性チェック。起動時の通常読み込みでは行わない
 // (num()による丸め込みは保存経路が別途担当しており、validateWorkoutsShapeを厳しくすると
 // 既存の「文字列の重量も形状としては許容する」という挙動と衝突するため、別関数として分離する)。
-function validateBackupNumericSanity(ws) {
-  ws.forEach((w, i) => {
-    (w.exercises || []).forEach((ex, j) => {
-      (ex.sets || []).forEach((s, k) => {
-        const where = `${i + 1}件目・${j + 1}種目目・${k + 1}セット目`;
-        if (s.weight != null && s.weight !== "") {
-          const weight = Number(s.weight);
-          if (!Number.isFinite(weight) || weight < 0 || weight > 2000) {
-            throw new Error(`${where}の重量が異常な値です`);
-          }
+// 範囲外・数値でない値を置き換えた新しい配列を返す。元の配列は書き換えない。
+// 置き換え先は保存時(saveWorkout)と同じ形にする: 重量・回数は 0、RIR はキーごと消す(未実施)。
+// "" を入れてはいけない。保存済みの記録は `s.rir != null` で実施済みを判定する箇所が多く、
+// rir: "" が「前回 60×8 RIR」の空表示や偽の「RIR+2」を出し、Watch へ送る前回の値
+// (Swift の Int?)のデコードごと失敗させる(v128 のレビューで見つかった)。
+function clearOutOfRangeSetValues(ws) {
+  let cleared = 0;
+  const workouts = ws.map(w => ({
+    ...w,
+    exercises: w.exercises.map(ex => ({
+      ...ex,
+      sets: ex.sets.map(s => {
+        if (!s || typeof s !== "object") return s;
+        let out = s;
+        for (const field of Object.keys(SET_VALUE_LIMITS)) {
+          const v = s[field];
+          if (v == null || v === "" || isSetValueInRange(field, v)) continue;
+          if (out === s) out = { ...s };
+          if (field === "rir") delete out.rir;
+          else out[field] = 0;
+          cleared++;
         }
-        if (s.reps != null && s.reps !== "") {
-          const reps = Number(s.reps);
-          if (!Number.isFinite(reps) || reps < 0 || reps > 1000) {
-            throw new Error(`${where}の回数が異常な値です`);
-          }
-        }
-        if (s.rir != null && s.rir !== "") {
-          const rir = Number(s.rir);
-          if (!Number.isFinite(rir) || rir < -10 || rir > 30) {
-            throw new Error(`${where}のRIRが異常な値です`);
-          }
-        }
-      });
-    });
-  });
+        return out;
+      }),
+    })),
+  }));
+  return { workouts, cleared };
 }
 
 function isValidDateString(v) {
@@ -112,19 +124,21 @@ function validateBackupTopLevelShape(p) {
 }
 
 // バックアップ復元(importBackup/restoreFromPreImportSnapshot)の入口で呼ぶ、まとめの検証。
-// 何か1つでも問題があれば例外を投げる。呼び出し側は、この関数が例外を投げなかった場合にのみ
+// 構造・日付などに問題があれば例外を投げる。呼び出し側は、この関数が例外を投げなかった場合にのみ
 // 現在のデータを置き換えること(検証前に置き換えなければ、失敗時に現在データはそのまま残る)。
+// セットの範囲外の値は例外にせず置き換え、その数を cleared で返す(呼び出し側が利用者に伝える)。
 function validateBackupPayload(p) {
   const ws = extractWorkoutsArray(p);
   validateWorkoutsShape(ws);
   assertKnownFormatVersion(p);
-  validateBackupNumericSanity(ws);
   validateBackupDates(ws);
   validateBackupTopLevelShape(p);
-  return ws;
+  return clearOutOfRangeSetValues(ws);
 }
 
 globalThis.extractWorkoutsArray = extractWorkoutsArray;
 globalThis.validateWorkoutsShape = validateWorkoutsShape;
 globalThis.CURRENT_BACKUP_FORMAT_VERSION = CURRENT_BACKUP_FORMAT_VERSION;
 globalThis.validateBackupPayload = validateBackupPayload;
+globalThis.SET_VALUE_LIMITS = SET_VALUE_LIMITS;
+globalThis.isSetValueInRange = isSetValueInRange;

@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { loadDomainModule } from "./helpers/loadDomain.js";
 
-const { extractWorkoutsArray, validateWorkoutsShape, validateBackupPayload, CURRENT_BACKUP_FORMAT_VERSION } = loadDomainModule("src/domain/backupValidation.js");
+const { extractWorkoutsArray, validateWorkoutsShape, validateBackupPayload, isSetValueInRange, CURRENT_BACKUP_FORMAT_VERSION } = loadDomainModule("src/domain/backupValidation.js");
 
 const validWorkout = (overrides = {}) => ({
   date: "2026-08-01T00:00:00.000Z",
@@ -111,9 +111,11 @@ const validBackup = (overrides = {}) => ({
 });
 
 describe("validateBackupPayload — 正常系", () => {
-  it("現行フォーマットのバックアップは通り、workouts配列を返す", () => {
-    const ws = validateBackupPayload(validBackup());
-    expect(ws).toHaveLength(1);
+  it("現行フォーマットのバックアップは通り、workouts配列と置き換えた数(0)を返す", () => {
+    const { workouts, cleared } = validateBackupPayload(validBackup());
+    expect(workouts).toHaveLength(1);
+    expect(workouts[0].exercises[0].sets[0]).toEqual({ weight: 60, reps: 8, warmup: false, rir: 1 });
+    expect(cleared).toBe(0);
   });
 
   it("formatVersion未記載の旧バックアップも通す(導入前の形式として許容)", () => {
@@ -132,26 +134,6 @@ describe("validateBackupPayload — 破損・異常値の拒否", () => {
     expect(() => validateBackupPayload(undefined)).toThrow();
   });
 
-  it("重量が異常な値(負数)は拒否する", () => {
-    const p = validBackup({ workouts: [validWorkout({ exercises: [{ name: "懸垂", sets: [{ weight: -5, reps: 8, warmup: false }] }] })] });
-    expect(() => validateBackupPayload(p)).toThrow(/重量が異常/);
-  });
-
-  it("重量が異常な値(現実的でないほど巨大)は拒否する", () => {
-    const p = validBackup({ workouts: [validWorkout({ exercises: [{ name: "懸垂", sets: [{ weight: 999999, reps: 8, warmup: false }] }] })] });
-    expect(() => validateBackupPayload(p)).toThrow(/重量が異常/);
-  });
-
-  it("回数が異常な値(負数)は拒否する", () => {
-    const p = validBackup({ workouts: [validWorkout({ exercises: [{ name: "懸垂", sets: [{ weight: 60, reps: -1, warmup: false }] }] })] });
-    expect(() => validateBackupPayload(p)).toThrow(/回数が異常/);
-  });
-
-  it("RIRが異常な値は拒否する", () => {
-    const p = validBackup({ workouts: [validWorkout({ exercises: [{ name: "懸垂", sets: [{ weight: 60, reps: 8, warmup: false, rir: 999 }] }] })] });
-    expect(() => validateBackupPayload(p)).toThrow(/RIRが異常/);
-  });
-
   it("日付が解釈できない記録は拒否する", () => {
     const p = validBackup({ workouts: [validWorkout({ date: "not-a-date" })] });
     expect(() => validateBackupPayload(p)).toThrow(/日付を解釈できません/);
@@ -165,6 +147,80 @@ describe("validateBackupPayload — 破損・異常値の拒否", () => {
   it("customExercisesの形式が不正(配列でない)なら拒否する", () => {
     const p = validBackup({ customExercises: "broken" });
     expect(() => validateBackupPayload(p)).toThrow(/customExercisesの形式が不正/);
+  });
+});
+
+describe("validateBackupPayload — 範囲外のセットの値は置き換えて通す", () => {
+  // 以前は範囲外の値が1つでもあるとバックアップ全体を拒否していたが、入力欄に上限がなかったため
+  // 保存できた記録(1010回など)を含むバックアップが戻せなかった。値だけ置き換えて残りを戻す。
+  // 置き換え先は保存時と同じ形(重量・回数は0、RIRはキーなし)。rir: "" は下流で「実施済み」に見える。
+  const setsOf = (r) => r.workouts[0].exercises[0].sets;
+  const withSets = (sets) => validBackup({ workouts: [validWorkout({ exercises: [{ name: "懸垂", sets }] })] });
+
+  it("回数1010は0にし、同じセットの他の値は残す", () => {
+    const r = validateBackupPayload(withSets([{ weight: 60, reps: 1010, warmup: false, rir: 1 }]));
+    expect(setsOf(r)[0]).toEqual({ weight: 60, reps: 0, warmup: false, rir: 1 });
+    expect(r.cleared).toBe(1);
+  });
+
+  it("負の重量・巨大な重量・負の回数・数値でない値は0にし、その数を数える", () => {
+    const r = validateBackupPayload(withSets([
+      { weight: -5, reps: 8, rir: 1 },
+      { weight: 999999, reps: -1, rir: 1 },
+      { weight: "abc", reps: 8, rir: 1 },
+    ]));
+    expect(setsOf(r).map(s => [s.weight, s.reps, s.rir])).toEqual([
+      [0, 8, 1],
+      [0, 0, 1],
+      [0, 8, 1],
+    ]);
+    expect(r.cleared).toBe(4);
+  });
+
+  it("範囲外のRIRはキーごと消す(保存時の「未実施」と同じ形。空文字は残さない)", () => {
+    const r = validateBackupPayload(withSets([{ weight: 60, reps: 8, warmup: false, rir: 999 }]));
+    expect(setsOf(r)[0]).toEqual({ weight: 60, reps: 8, warmup: false });
+    expect("rir" in setsOf(r)[0]).toBe(false);
+    expect(r.cleared).toBe(1);
+  });
+
+  it("境界値(重量2000・回数1000・RIR -10と30・0)は残す", () => {
+    const r = validateBackupPayload(withSets([
+      { weight: 2000, reps: 1000, rir: 30 },
+      { weight: 0, reps: 0, rir: -10 },
+    ]));
+    expect(setsOf(r).map(s => [s.weight, s.reps, s.rir])).toEqual([[2000, 1000, 30], [0, 0, -10]]);
+    expect(r.cleared).toBe(0);
+  });
+
+  it("未入力(空文字・null・キーなし)は数えない", () => {
+    const r = validateBackupPayload(withSets([{ weight: "", reps: null, warmup: true }]));
+    expect(setsOf(r)[0]).toEqual({ weight: "", reps: null, warmup: true });
+    expect(r.cleared).toBe(0);
+  });
+
+  it("元のデータは書き換えない", () => {
+    const p = withSets([{ weight: 60, reps: 1010, rir: 1 }]);
+    validateBackupPayload(p);
+    expect(p.workouts[0].exercises[0].sets[0].reps).toBe(1010);
+  });
+});
+
+describe("isSetValueInRange(入力欄と復元で共通の範囲)", () => {
+  it("範囲の内側と境界は受け付ける", () => {
+    expect(isSetValueInRange("weight", 2000)).toBe(true);
+    expect(isSetValueInRange("weight", "62.5")).toBe(true);
+    expect(isSetValueInRange("reps", 1000)).toBe(true);
+    expect(isSetValueInRange("reps", 0)).toBe(true);
+    expect(isSetValueInRange("rir", -10)).toBe(true);
+  });
+
+  it("範囲外と数値でない値は受け付けない", () => {
+    expect(isSetValueInRange("weight", 2000.5)).toBe(false);
+    expect(isSetValueInRange("reps", 1001)).toBe(false);
+    expect(isSetValueInRange("reps", -1)).toBe(false);
+    expect(isSetValueInRange("rir", 31)).toBe(false);
+    expect(isSetValueInRange("reps", "abc")).toBe(false);
   });
 });
 
