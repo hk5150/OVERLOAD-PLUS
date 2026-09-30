@@ -447,3 +447,22 @@ Claude in Chrome で App Store Connect を操作して入力した(北村さん�
   1.1 を作ると 1.0 の画像が「6.9インチを 6.5インチに流用」の形で引き継がれ、バージョンのページの削除ボタンは無効。
   メディアマネージャーの 6.9インチの枠で「すべてを削除」してから1枚ずつ入れる。英語は「日本語の画像を流用中」になるので「編集」を押してから入れる。
   1枚ずつ入れれば順番どおりに並ぶ
+
+## キャンペーンリンク(流入元の計測)
+
+アプリにSDKを入れていないので、どこから来た人がダウンロードしたかは、リンクの `ct` で分けて
+App Store Connect「アナリティクス → 獲得 → キャンペーン」で見る。
+プロバイダトークン `pt=129352960` は開発者アカウント固有(App Store Connectの「キャンペーンリンクを作成」で確認、2026-10-01)。
+`ct` を変えるだけで新しい経路を作れ、App Store Connect 側への登録は要らない(英数字・40文字以内)。
+
+| 経路 | リンク |
+|---|---|
+| X | `https://apps.apple.com/app/apple-store/id6816090624?pt=129352960&ct=x&mt=8` |
+| Reddit | `https://apps.apple.com/app/apple-store/id6816090624?pt=129352960&ct=reddit&mt=8` |
+| Zenn | `https://apps.apple.com/app/apple-store/id6816090624?pt=129352960&ct=zenn&mt=8` |
+| note | `https://apps.apple.com/app/apple-store/id6816090624?pt=129352960&ct=note&mt=8` |
+| Instagram | `https://apps.apple.com/app/apple-store/id6816090624?pt=129352960&ct=instagram&mt=8` |
+| GitHub Pages(Web版・サポートページ) | `https://apps.apple.com/app/apple-store/id6816090624?pt=129352960&ct=web&mt=8` |
+
+- 数字が出るのは、そのリンク経由で**5つ以上の異なるApple Account**がインストールしてから(それ未満は「十分なデータがありません」)
+- 計測されるのはSafari等でリンクを開いてApp Storeに移った場合。App Store内の検索から来た人は「App Storeの検索」に数えられる
