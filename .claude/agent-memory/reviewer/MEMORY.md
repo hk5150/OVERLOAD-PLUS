@@ -14,4 +14,4 @@
 - [WatchのHK許可をiPhoneが代行](kurabell-watch-hk-auth-proxy.md) — 1.1(7): iPhone/Watchのrequestの型を揃える・審査メモ/docsの追随・iPhone単体にも心拍シート
 - [iOS書き出しの共有シート](kurabell-share-sheet-export.md) — v125: completionWithItemsHandlerの複数回呼び出し・Copyでcompleted・await後の古いpersist
 - [保存済みrirの空文字](kurabell-stored-rir-empty-string.md) — 保存済みの未実施はrirキー無し。rir:""は s.rir!=null 箇所とWatchのPrev.rir(Int?)デコードを壊す(v128)
-- [編集画面と補助の印](kurabell-edit-screen-assisted.md) — 編集画面は補助を表示/切替しない。v129でassisted保持+WをONでassistedを外す。3状態UIは未実装
+- [編集画面と補助の印](kurabell-edit-screen-assisted.md) — v129でassisted保持、v130でnextSetTypeに集約し編集画面も3状態・editAddSetも補助引き継ぎ
