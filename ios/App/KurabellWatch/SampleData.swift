@@ -11,6 +11,8 @@ enum SampleData {
     }
 
     static func snapshot(now: Date) -> WatchSnapshot {
+        // -KurabellLang en で英語の固定データ(英語ストア用のスクリーンショット。文言は index.html の i18n と同じ、単位は lb)
+        if launchValue("-KurabellLang") == "en" { return snapshotEn(now: now) }
         let ms = now.timeIntervalSince1970 * 1000
         func row(_ w: String, _ r: String, _ rir: Int?, prev: (String, String, Int?)?, warmup: Bool = false) -> WatchSnapshot.SetRow {
             .init(weight: w, reps: r, rir: rir, warmup: warmup,
@@ -40,6 +42,43 @@ enum SampleData {
                 .init(id: "a4", name: "ケーブルプレスダウン", weightLabel: "重量 kg", unit: "kg", step: 1, restAfter: true, sets: [
                     row("30", "12", nil, prev: ("30", "12", 2)),
                     row("30", "12", nil, prev: ("30", "11", 1)),
+                ]),
+            ],
+            menu: [],
+            applied: []
+        )
+    }
+
+    static func snapshotEn(now: Date) -> WatchSnapshot {
+        let ms = now.timeIntervalSince1970 * 1000
+        func row(_ w: String, _ r: String, _ rir: Int?, prev: (String, String, Int?)?, warmup: Bool = false) -> WatchSnapshot.SetRow {
+            .init(weight: w, reps: r, rir: rir, warmup: warmup,
+                  prev: prev.map { .init(text: "\($0.0)lb×\($0.1)" + ($0.2.map { " RIR\($0)" } ?? ""),
+                                         weight: $0.0, reps: $0.1, rir: $0.2) })
+        }
+        return WatchSnapshot(
+            v: 1, sentAt: ms, state: .active, restStartAt: ms - 47_000, dayName: "Push",
+            labels: .init(rest: "Rest", restBody: "{n} min elapsed. Time for your next set.", prev: "Last", same: "→ same", reps: "Reps",
+                          startOnPhone: "Start a workout on your iPhone to log sets here", warmup: "W", addSet: "Add set", rirQuestion: "Reps left?", next: "Next"),
+            exercises: [
+                .init(id: "a1", name: "Bench Press", weightLabel: "Weight lb", unit: "lb", step: 2.5, restAfter: true, sets: [
+                    row("95", "10", nil, prev: nil, warmup: true),
+                    row("155", "8", 2, prev: ("155", "8", 1)),
+                    row("155", "8", 1, prev: ("155", "7", 1)),
+                    row("155", "7", nil, prev: ("150", "8", 0)),
+                ]),
+                .init(id: "a2", name: "Incline Dumbbell Press", weightLabel: "Weight lb/hand", unit: "lb", step: 2.5, restAfter: true, sets: [
+                    row("55", "10", nil, prev: ("55", "10", 2)),
+                    row("55", "10", nil, prev: ("55", "9", 1)),
+                    row("55", "9", nil, prev: ("55", "8", 0)),
+                ]),
+                .init(id: "a3", name: "Dips", weightLabel: "Added lb", unit: "lb", step: 2.5, restAfter: true, sets: [
+                    row("25", "8", nil, prev: ("25", "8", 2)),
+                    row("25", "8", nil, prev: ("25", "7", 1)),
+                ]),
+                .init(id: "a4", name: "Cable Pressdown", weightLabel: "Weight lb", unit: "lb", step: 2.5, restAfter: true, sets: [
+                    row("65", "12", nil, prev: ("65", "12", 2)),
+                    row("65", "12", nil, prev: ("65", "11", 1)),
                 ]),
             ],
             menu: [],

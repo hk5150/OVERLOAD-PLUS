@@ -214,7 +214,7 @@ iPhone から Watch アプリを起動できる公式の方法は `HKHealthStore
 3. ビルドする
    - iPhone: `npm run ios:sync` の後、App スキームを iOS Simulator 向けにビルドする。Watch アプリも埋め込まれる
    - Watch: KurabellWatch スキームを watchOS Simulator 向けに別途ビルドし、`simctl install` する
-4. 画面だけ確認する場合: 起動引数 `-KurabellSample` で固定データを表示する(同期しない)
+4. 画面だけ確認する場合: 起動引数 `-KurabellSample` で固定データを表示する(同期しない)。`-KurabellLang en` を足すと英語・lb の固定データ(英語ストアのスクリーンショット用)
    - `-KurabellOpen a1`: 種目画面から始める
    - `-KurabellEdit 3`: 入力画面から始める
    - `-KurabellRest 1`: 一覧からタイマー画面を開いた状態で始める

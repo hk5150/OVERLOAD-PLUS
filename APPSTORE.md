@@ -408,9 +408,11 @@ English: `Workouts recorded on Apple Watch include heart rate and active energy.
   **2026-09-30 に実機(Series 10)で3枚撮影済み**: `~/Desktop/KURABELL-appstore-screenshots/watch/`
   (`watch-1-input.png` セット入力、`watch-2-sets-rest.png` 休憩タイマー付きのセット一覧、`watch-3-sets.png` セット一覧)。
   並び順は 1 → 2 → 3(入力画面が売り)
-- iPhone の6.9インチの枠にも、**iPhone と Watch を並べた1枚を2枚目に**足す(検索結果に出るのは先頭3枚)。
-  見出し案: 「手元の Apple Watch で、そのまま記録」/ `Log from your wrist`。今の2〜5枚目は1枚ずつ後ろへ
-  (6枚になる。上限は10枚)。Watch の画面は実機のスクリーンショット(サイドボタン+Digital Crown の同時押し)を合成に使う
+- iPhone の6.9インチの枠にも、**iPhone と Watch を並べた1枚を2枚目に**足した(検索結果に出るのは先頭3枚)。
+  **2026-09-30 に作成: `~/Desktop/KURABELL-appstore-screenshots/v3/{ja,en}/` 1320×2868 各7枚**
+  (`02-apple-watch.png` が新規。見出し「Apple Watch で、そのまま記録」/ `Log from your wrist`。v2 の2〜6枚目は 03〜07 に)。
+  日本語の Watch 画面は実機(Series 10)のスクリーンショット、英語は Watch シミュレータを `-KurabellSample -KurabellLang en -KurabellOpen a1 -KurabellEdit 3`
+  で起動して撮った(`SampleData.snapshotEn`、単位 lb)。合成は `.playwright-mcp/store/compose.html?lang=..&n=2`
 
 ### 審査メモ(App Review Information のメモ欄)
 
