@@ -19,6 +19,13 @@ v117レビュー(2026-09-25)で見た穴:
   「失敗時は persist 自身が err.saveFailed を出すので呼び出し元は setError しない・成功メッセージだけ抑える」形になっているかを見る
 - retrySave の setError("") は無条件のまま(clearErrorIf ではない)。成功時に無関係なエラーも消す(既存)
 
+v124レビュー(2026-09-30、SQLite再接続・loadFailed)で見た穴 → コミット 8576784 で対処済み(横断レビューで確認):
+- persist は loadFailedRef が立つと **state は更新してから** false を返す(replaceAll の復元だけ書く)。画面は動くが保存されない
+- saveWorkout 失敗時は workouts/split を関数形式で巻き戻し、saveStatus="idle" にして再試行ボタンを出さず err.workoutSaveFailed を出す。
+  この文言は persist 成功の clearErrorIf では消えず、次の saveWorkout 成功でだけ消える(下書き破棄では消えない)
+- restoreFromPreImportSnapshot は loadFailedRef で早期 return。復元(importBackup)は guideSeen:true を next に含める
+- retrySave の setError("") は無条件のまま
+
 **Why:** エラーの「種類」を持たずに文字列1枠で運用しているため、消す側が何を消しているか判別できない。
 
 **How to apply:** setError("") を足す差分では、その時点で帯に出ている可能性がある他のエラーと saveStatus を列挙し、

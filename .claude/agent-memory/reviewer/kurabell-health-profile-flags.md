@@ -16,6 +16,11 @@ v116(2026-09-24レビュー時点で未コミット)でiOS版にHealthKit連携�
   ネイティブ応答が来ると古いクロージャでworkoutsを書き戻す(clearAll・importBackupが該当)
 - 体重欄にフォーカスしたまま背景→復帰すると、pullが値を差し替え、blurで同じ値をヘルスケアへ書き戻す
 
+v127(2026-09-30): 実機(iOS 26.6.1)では権限シートの「許可しない」で `HKHealthStore.requestAuthorization` が throw する
+(シミュレータでは throw せず denied が返る)。プラグインは reject をやめて `statusObject()+error` で resolve、
+`toggleHealth` は workout/bodyMass のどちらかが authorized/denied なら「決まった」としてオン、両方 notDetermined なら
+オンにせず無言。読み込み権限の状態は HealthKit が返さないので、share 型を含まない要求にするとこの判定は常に「未決」になる。
+
 **Why:** 「refで最新を見る」「healthBwAtで書き戻し防止」は主要経路では正しいが、復元・全削除・フォーカス中という脇道で崩れる。
 
 **How to apply:** profileに端末固有の項目を足す差分では復元経路での扱いを確認する。persistRef系を増やす差分では
