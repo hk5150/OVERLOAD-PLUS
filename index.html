@@ -252,10 +252,15 @@ const WATCH_LAST_SAVED_KEY = "watch-last-saved-v1";
 const PRE_IMPORT_BACKUP_KEY = "workout-log-v1-pre-import"; // バックアップ復元前のデータ退避(復元に失敗した場合の保険)
 // ヘッダーのバージョンバッジとバックアップのappVersionで共有する単一の定数。
 // sw.js の CACHE 定数とは tests/version.test.js が数字の一致を機械的に縛っている(CLAUDE.md参照)。
-const APP_VERSION = "v129";
+const APP_VERSION = "v130";
 // store(保存レイヤ)は src/domain/storage.js へ移設(テストのため)。
 // LIBSで<script src>読み込み済みなのでグローバルの store をそのまま参照できる。
 const uid = () => Math.random().toString(36).slice(2, 8);
+// セット種別の切替: 通常 → ウォームアップ(W) → 補助あり(補) → 通常。Wと補助は排他。
+// 今日の画面と履歴の編集画面の両方から呼ぶ(片方だけ変えると、両方立ったセットが保存されうる)
+const nextSetType = (s) => (!s.warmup && !s.assisted) ? { warmup: true, assisted: false }
+  : s.warmup ? { warmup: false, assisted: true }
+  : { warmup: false, assisted: false };
 const num = (v) => { const n = parseFloat(v); return isNaN(n) ? 0 : n; };
 const DEFAULT_REPS = 10; // 種目追加時の初期回数
 const fmtDate = (iso) => { const d = new Date(iso); return `${d.getMonth() + 1}/${d.getDate()} (${weekdayLabel(d.getDay())})`; };
@@ -2238,7 +2243,7 @@ function App() {
           sets: ex.sets.map(s => ({
             weight: wStr(s.weight), reps: String(s.reps),
             rir: s.rir != null ? s.rir : "", warmup: !!s.warmup,
-            // 編集画面に補助の切替は無いが、落とすと保存時に印が消えて自己ベスト・1RMに混ざる
+            // 落とすと保存時に補助の印が消えて自己ベスト・1RMに混ざる(v129で修正)
             ...(s.assisted ? { assisted: true } : {}),
           })),
         })),
@@ -2255,6 +2260,18 @@ function App() {
         ...ew.draft,
         exercises: ew.draft.exercises.map((ex, i) => i !== exIdx ? ex : {
           ...ex, sets: ex.sets.map((s, j) => j !== setIdx ? s : { ...s, [field]: value }),
+        }),
+      },
+    }));
+  };
+  // セット種別(warmup / assisted)は2フィールドを同時に変えるので editSet とは分ける
+  const editSetType = (exIdx, setIdx) => {
+    setEditWorkout(ew => ({
+      ...ew,
+      draft: {
+        ...ew.draft,
+        exercises: ew.draft.exercises.map((ex, i) => i !== exIdx ? ex : {
+          ...ex, sets: ex.sets.map((s, j) => j !== setIdx ? s : { ...s, ...nextSetType(s) }),
         }),
       },
     }));
@@ -2296,7 +2313,8 @@ function App() {
         exercises: ew.draft.exercises.map((ex, i) => {
           if (i !== exIdx) return ex;
           const last = ex.sets[ex.sets.length - 1] || { weight: "0", reps: "0" };
-          return { ...ex, sets: [...ex.sets, { weight: last.weight, reps: last.reps, rir: "", warmup: false }] };
+          // 今日の画面の addSet と同じく、補助は直前の行から引き継ぐ
+          return { ...ex, sets: [...ex.sets, { weight: last.weight, reps: last.reps, rir: "", warmup: false, ...(last.assisted ? { assisted: true } : {}) }] };
         }),
       },
     }));
@@ -3804,10 +3822,7 @@ function App() {
                 <div key={i} style={{ marginBottom: 8, opacity: done ? 1 : 0.55 }}>
                   <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                     <button onClick={() => {
-                      // 通常 → ウォームアップ(W) → 補助あり(補) → 通常 の順で切替
-                      const next = (!s.warmup && !s.assisted) ? { warmup: true, assisted: false }
-                        : s.warmup ? { warmup: false, assisted: true }
-                        : { warmup: false, assisted: false };
+                      const next = nextSetType(s);
                       setToday(t => t.map(e => e.id !== ex.id ? e : {
                         ...e, sets: e.sets.map((x, j) => j === i ? { ...x, ...next } : x),
                       }));
@@ -4550,15 +4565,14 @@ function App() {
                       </div>
                       {ex.sets.map((s, setIdx) => (
                         <div key={setIdx} style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 6 }}>
-                          <button onClick={() => {
-                            // 今日の画面と同じくWと補助は排他。両方立つと、次の日に直前行を複製したセットが見えないまま補助扱いになる
-                            editSet(exIdx, setIdx, "warmup", !s.warmup);
-                            if (!s.warmup) editSet(exIdx, setIdx, "assisted", false);
-                          }}
-                            aria-label={t("set.warmupToggle")} className="tapArea"
+                          <button onClick={() => editSetType(exIdx, setIdx)}
+                            title={t("set.typeToggle")}
+                            aria-label={t("set.typeAria", { n: setIdx + 1 })} className="tapArea"
                             style={{ width: 22, height: 22, borderRadius: 6, flexShrink: 0, cursor: "pointer", fontSize: 11, fontWeight: 800, fontFamily: "inherit",
-                              border: `1px solid ${s.warmup ? C.yellow : C.border}`, background: s.warmup ? C.yellow : "transparent", color: s.warmup ? "#141517" : C.muted }}>
-                            {s.warmup ? "W" : setIdx + 1}
+                              border: `1px solid ${s.warmup ? C.yellow : s.assisted ? C.blue : C.border}`,
+                              background: s.warmup ? C.yellow : s.assisted ? C.blue : "transparent",
+                              color: s.warmup ? "#141517" : s.assisted ? "#fff" : C.muted }}>
+                            {s.warmup ? "W" : s.assisted ? t("set.assistedShort") : setIdx + 1}
                           </button>
                           <NumInput inputMode="decimal" value={s.weight}
                             onChange={e => editSet(exIdx, setIdx, "weight", e.target.value)} aria-label={t("set.weightPlain")}

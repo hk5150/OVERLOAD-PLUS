@@ -217,7 +217,6 @@ const STRINGS = {
   "set.copyPrev":      { ja: "前のセットの重量・回数をコピー", en: "Copy weight and reps from the previous set" },
   "set.copyPrevShort": { ja: "前のセットをコピー",     en: "Copy previous set" },
   "set.removeAria":    { ja: "セット{n}を削除",        en: "Delete set {n}" },
-  "set.warmupToggle":  { ja: "ウォームアップ切替",     en: "Toggle warm-up" },
   "set.removeSet":     { ja: "セットを削除",           en: "Delete set" },
 
   // ---- 種目の詳細設定(⚙) ----
