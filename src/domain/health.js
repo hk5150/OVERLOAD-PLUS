@@ -35,11 +35,23 @@ async function healthSupported() {
 }
 
 // 権限を求める(シートは初回だけ出る)。戻り値は書き込み権限の状態
-// { workout, bodyMass }(それぞれ "authorized" / "denied" / "notDetermined")。失敗したらnull。
+// { workout, bodyMass }(それぞれ "authorized" / "denied" / "notDetermined")。
+// ネイティブ側で HealthKit が失敗を返したときも状態は返り、error に文が入る(実機では「許可しない」で
+// 失敗が返る。断られたのを接続失敗として出さないため)。プラグインが使えないときだけ null。
 async function healthRequestAuthorization() {
   const plugin = capHealthPlugin();
   if (!plugin) return null;
   try { return await plugin.requestAuthorization(); } catch { return null; }
+}
+
+// 権限シートで何かが決まったか(純粋関数)。書き込み(share)の状態で判断する。読み込みの許否は
+// HealthKit が返さないので、読み込みだけを求める形に変えるとこの判定は常に「未決」になる。
+// どれかが denied なら拒否(オンにして案内文)、どれかが authorized なら許可、どれも決まっていなければ
+// シートを閉じただけ(オンにしない)。実機では「許可しない」で HealthKit が失敗を返すため、失敗ではなく状態で見る。
+function healthAuthDecided(st) {
+  if (!st || typeof st !== "object") return false;
+  const decided = (v) => v === "authorized" || v === "denied";
+  return decided(st.workout) || decided(st.bodyMass);
 }
 
 async function healthAuthorizationStatus() {
@@ -160,6 +172,7 @@ function healthWeightToWrite(before, after) {
 globalThis.healthAvailable = healthAvailable;
 globalThis.healthSupported = healthSupported;
 globalThis.healthRequestAuthorization = healthRequestAuthorization;
+globalThis.healthAuthDecided = healthAuthDecided;
 globalThis.healthAuthorizationStatus = healthAuthorizationStatus;
 globalThis.healthWorkoutKey = healthWorkoutKey;
 globalThis.HEALTH_MAX_WORKOUT_MS = HEALTH_MAX_WORKOUT_MS;

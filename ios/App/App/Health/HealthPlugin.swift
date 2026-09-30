@@ -32,7 +32,12 @@ public class HealthPlugin: CAPPlugin, CAPBridgedPlugin {
                 try await manager.requestAuthorization(includeWatch: WatchSessionManager.shared.hasWatchApp)
                 call.resolve(statusObject())
             } catch {
-                call.reject(error.localizedDescription)
+                // 実機(iOS 26.6)では権限シートで「許可しない」を選ぶとここに来る(シミュレータでは来ない)。
+                // 断られたのは失敗ではないので reject せず、いまの権限の状態にエラー文を添えて返す。
+                // JS側は状態(denied / notDetermined)で案内を出し分ける(docs/ヘルスケア連携.md)。
+                var obj = statusObject()
+                obj["error"] = error.localizedDescription
+                call.resolve(obj)
             }
         }
     }

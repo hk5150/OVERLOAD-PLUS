@@ -239,6 +239,79 @@ describe("healthSupported / 権限", () => {
     await expect(m.healthRequestAuthorization()).resolves.toBeNull();
     await expect(m.healthAuthorizationStatus()).resolves.toBeNull();
   });
+
+  // 実機では権限シートで「許可しない」を選ぶと HealthKit が失敗を返す。ネイティブ側はそのとき
+  // 状態(denied)と error を一緒に返すので、JS側で error を見て null に潰すと「断った」が
+  // 「接続できませんでした」に化ける。error 付きでも応答をそのまま返すことを縛る。
+  it("権限の要求でネイティブがerror付きの状態を返しても、nullに潰さずそのまま返す", async () => {
+    const result = { workout: "denied", bodyMass: "denied", error: "Authorization not determined" };
+    const { globals } = fakeHealthPlugin({ requestAuthorizationResult: result });
+    expect(await load(globals).healthRequestAuthorization()).toEqual(result);
+  });
+});
+
+// 権限シートの結果で接続をオンにするかを決める判定。ここが崩れると、「許可しない」を選んだのに
+// 接続失敗の文言が出る(以前の挙動)か、シートを閉じただけなのに接続がオンになる。
+describe("healthAuthDecided(権限シートで何かが決まったか)", () => {
+  const { healthAuthDecided } = load();
+
+  it("両方authorizedならtrue", () => {
+    expect(healthAuthDecided({ workout: "authorized", bodyMass: "authorized" })).toBe(true);
+  });
+
+  it("両方deniedならtrue(拒否も「決まった」)", () => {
+    expect(healthAuthDecided({ workout: "denied", bodyMass: "denied" })).toBe(true);
+  });
+
+  it("片方だけauthorizedまたはdeniedで、もう片方がnotDeterminedでもtrue", () => {
+    expect(healthAuthDecided({ workout: "authorized", bodyMass: "notDetermined" })).toBe(true);
+    expect(healthAuthDecided({ workout: "notDetermined", bodyMass: "authorized" })).toBe(true);
+    expect(healthAuthDecided({ workout: "denied", bodyMass: "notDetermined" })).toBe(true);
+    expect(healthAuthDecided({ workout: "notDetermined", bodyMass: "denied" })).toBe(true);
+  });
+
+  it("片方だけあって、もう片方のキーが欠けていてもtrue", () => {
+    expect(healthAuthDecided({ workout: "authorized" })).toBe(true);
+    expect(healthAuthDecided({ bodyMass: "denied" })).toBe(true);
+  });
+
+  it("両方notDeterminedならfalse(シートを閉じただけ)", () => {
+    expect(healthAuthDecided({ workout: "notDetermined", bodyMass: "notDetermined" })).toBe(false);
+  });
+
+  it("両方のキーが欠けている・空オブジェクトならfalse", () => {
+    expect(healthAuthDecided({})).toBe(false);
+    expect(healthAuthDecided({ workout: undefined, bodyMass: null })).toBe(false);
+  });
+
+  it("null・undefined・オブジェクトでない値は例外にならずfalse", () => {
+    expect(healthAuthDecided(null)).toBe(false);
+    expect(healthAuthDecided(undefined)).toBe(false);
+    expect(healthAuthDecided("authorized")).toBe(false);
+    expect(healthAuthDecided(0)).toBe(false);
+    expect(healthAuthDecided(true)).toBe(false);
+  });
+
+  it("errorキーが付いていても判定に影響しない(deniedならtrue、notDeterminedならfalse)", () => {
+    expect(healthAuthDecided({ workout: "denied", bodyMass: "denied", error: "Authorization not determined" })).toBe(true);
+    expect(healthAuthDecided({ workout: "notDetermined", bodyMass: "notDetermined", error: "native failed" })).toBe(false);
+    expect(healthAuthDecided({ error: "native failed" })).toBe(false);
+  });
+
+  it("未知の文字列やそれらしい別表記はfalse(authorized/deniedの完全一致だけを見る)", () => {
+    for (const v of ["unknown", "sharingAuthorized", "AUTHORIZED", "Denied", "authorized ", "", 1, true]) {
+      expect(healthAuthDecided({ workout: v, bodyMass: v })).toBe(false);
+    }
+  });
+
+  it("healthRequestAuthorizationの戻り値をそのまま渡せる(error付きのdeniedはtrue、失敗のnullはfalse)", async () => {
+    const denied = { workout: "denied", bodyMass: "denied", error: "Authorization not determined" };
+    const m = load(fakeHealthPlugin({ requestAuthorizationResult: denied }).globals);
+    expect(m.healthAuthDecided(await m.healthRequestAuthorization())).toBe(true);
+
+    const failed = load(fakeHealthPlugin({ fails: true }).globals);
+    expect(failed.healthAuthDecided(await failed.healthRequestAuthorization())).toBe(false);
+  });
 });
 
 describe("healthWorkoutRange(実態と違う長さのワークアウトを書かない)", () => {

@@ -252,7 +252,7 @@ const WATCH_LAST_SAVED_KEY = "watch-last-saved-v1";
 const PRE_IMPORT_BACKUP_KEY = "workout-log-v1-pre-import"; // バックアップ復元前のデータ退避(復元に失敗した場合の保険)
 // ヘッダーのバージョンバッジとバックアップのappVersionで共有する単一の定数。
 // sw.js の CACHE 定数とは tests/version.test.js が数字の一致を機械的に縛っている(CLAUDE.md参照)。
-const APP_VERSION = "v126";
+const APP_VERSION = "v127";
 // store(保存レイヤ)は src/domain/storage.js へ移設(テストのため)。
 // LIBSで<script src>読み込み済みなのでグローバルの store をそのまま参照できる。
 const uid = () => Math.random().toString(36).slice(2, 8);
@@ -1184,6 +1184,13 @@ function App() {
     const st = await healthRequestAuthorization();
     if (!st) { setHealthError(t("settings.health.failed")); return; }
     setHealthStatus(st);
+    // 実機では「許可しない」で HealthKit が失敗を返す(2026-09-27、iOS 26.6.1)。以前はこれを
+    // 「接続できませんでした」と出していた。断られたかどうかは権限の状態で判断する:
+    // どれかが denied なら拒否(オンにして案内文を出す)、どれも決まっていなければシートを閉じただけ
+    // (オンにせず何も出さない。もう一度スイッチを押せばシートが出る)。
+    // 実機で失敗が返ったときに、どの状態だったかを後から確かめられるよう、状態も一緒に出す
+    if (st.error) console.warn("Health requestAuthorization:", st.error, st.workout, st.bodyMass);
+    if (!healthAuthDecided(st)) return; // src/domain/health.js(share の状態で判断)
     // オンになるとeffectが体重を読み込む
     await persistRef.current({ profile: { ...profileRef.current, healthOn: true } });
   };
