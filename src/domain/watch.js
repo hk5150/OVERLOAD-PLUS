@@ -134,6 +134,14 @@ function watchWorkoutFromOps(ops) {
   return found ? found.recordStartAt : null;
 }
 
+// Watch が記録 recordStartAt のワークアウトを途中でやめたか(純粋関数)。
+// "discarded" は、ほかのワークアウトアプリに替えた・システムに止められた・保存に失敗した、のどれか。
+// iPhone は Watch が記録している間だけ休憩の Live Activity を止めているので、やめたら出す側に戻す。
+function watchWorkoutStopped(ops, recordStartAt) {
+  if (!Number.isFinite(recordStartAt)) return false;
+  return (ops || []).some(op => op && op.kind === "workout" && op.status === "discarded" && op.recordStartAt === recordStartAt);
+}
+
 // Watch に任せたヘルスケアの書き込みを、Watch の結果で締める(純粋関数)。
 // iPhone は、Watch がワークアウトを記録している回は保存時にヘルスケアへ書かず、pending に積む。
 // - Watch が "saved" を返した → pending から外す(Watch が書いた)
@@ -226,6 +234,7 @@ globalThis.watchWeightStep = watchWeightStep;
 globalThis.buildWatchSnapshot = buildWatchSnapshot;
 globalThis.applyWatchOps = applyWatchOps;
 globalThis.watchWorkoutFromOps = watchWorkoutFromOps;
+globalThis.watchWorkoutStopped = watchWorkoutStopped;
 globalThis.settleWatchHealth = settleWatchHealth;
 globalThis.WATCH_HEALTH_CONFIRM_MS = WATCH_HEALTH_CONFIRM_MS;
 globalThis.syncWatchSnapshot = syncWatchSnapshot;

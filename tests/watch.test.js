@@ -113,6 +113,23 @@ describe("Watch のワークアウトとの対応付け", () => {
     expect(watchWorkoutFromOps([{ opId: "d", kind: "workout", status: "failed", recordStartAt: 300, at: 3 }])).toBeNull();
   });
 
+  it("watchWorkoutStopped はその記録の破棄の知らせだけを拾う", () => {
+    const { watchWorkoutStopped } = load();
+    const discarded = (r) => ({ opId: "x" + r, kind: "workout", status: "discarded", recordStartAt: r, at: 1 });
+    expect(watchWorkoutStopped([discarded(100)], 100)).toBe(true);
+    // 前の記録の破棄(遅れて届いた)では、今の記録を止めたことにしない
+    expect(watchWorkoutStopped([discarded(50)], 100)).toBe(false);
+    // 開始・保存の知らせ、セットの操作は破棄ではない
+    expect(watchWorkoutStopped([
+      { opId: "s", kind: "workout", status: "started", recordStartAt: 100, at: 1 },
+      { opId: "v", kind: "workout", status: "saved", recordStartAt: 100, at: 2 },
+      { opId: "a", kind: "set", exId: "e1", setIndex: 0, at: 3 },
+    ], 100)).toBe(false);
+    // 記録していない(startAt が null)
+    expect(watchWorkoutStopped([discarded(100)], null)).toBe(false);
+    expect(watchWorkoutStopped(undefined, 100)).toBe(false);
+  });
+
   it("applyWatchOps はワークアウトの知らせで行を触らず、合流済みにだけ数える", () => {
     const { applyWatchOps } = load();
     const t = [{ id: "e1", name: "x", sets: [{ weight: "80", reps: "8", rir: "", warmup: false }] }];

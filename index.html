@@ -204,7 +204,7 @@
     { key:'health',     urls:['src/domain/health.js'],
       globals:['healthAvailable','healthSupported','healthRequestAuthorization','healthAuthDecided','healthAuthorizationStatus','healthWorkoutKey','HEALTH_MAX_WORKOUT_MS','healthWorkoutRange','healthSaveWorkout','healthDeleteWorkout','healthStartWatchWorkout','healthLatestBodyMass','healthSaveBodyMass','pickHealthWeight','healthWeightToWrite'] },
     { key:'watch',      urls:['src/domain/watch.js'],
-      globals:['WATCH_APPLIED_KEEP','watchWeightStep','buildWatchSnapshot','applyWatchOps','watchWorkoutFromOps','settleWatchHealth','WATCH_HEALTH_CONFIRM_MS','syncWatchSnapshot','peekWatchOps','ackWatchOps','onWatchOps'] },
+      globals:['WATCH_APPLIED_KEEP','watchWeightStep','buildWatchSnapshot','applyWatchOps','watchWorkoutFromOps','watchWorkoutStopped','settleWatchHealth','WATCH_HEALTH_CONFIRM_MS','syncWatchSnapshot','peekWatchOps','ackWatchOps','onWatchOps'] },
     { key:'fileExport', urls:['src/domain/fileExport.js'],
       globals:['fileExportAvailable','shareTextFile'] },
     { key:'review',     urls:['src/domain/review.js'],
@@ -310,7 +310,7 @@ const WATCH_LAST_SAVED_KEY = "watch-last-saved-v1";
 const PRE_IMPORT_BACKUP_KEY = "workout-log-v1-pre-import"; // バックアップ復元前のデータ退避(復元に失敗した場合の保険)
 // ヘッダーのバージョンバッジとバックアップのappVersionで共有する単一の定数。
 // sw.js の CACHE 定数とは tests/version.test.js が数字の一致を機械的に縛っている(CLAUDE.md参照)。
-const APP_VERSION = "v133";
+const APP_VERSION = "v134";
 // store(保存レイヤ)は src/domain/storage.js へ移設(テストのため)。
 // LIBSで<script src>読み込み済みなのでグローバルの store をそのまま参照できる。
 const uid = () => Math.random().toString(36).slice(2, 8);
@@ -990,6 +990,10 @@ function App() {
   // Watchがワークアウト(心拍・カロリー)を記録している記録の startAt(ms)。この記録を保存するときは
   // Watchがヘルスケアに書くので、iPhoneからは書かない(二重防止。下書きにも保存)。
   const watchWorkoutForRef = useRef(null);
+  // 同じ値の state 版。休憩の Live Activity を止める判定(下の effect)に使う。
+  // Watch がワークアウトを記録している間に iPhone の Live Activity を出すと、watchOS がそれを Watch にも出して
+  // KURABELL の画面を隠す(1.1 の実機で踏んだ)。refは保存時の判定に使うので、そちらはそのまま残す
+  const [watchLiveFor, setWatchLiveFor] = useState(null);
   // 直近に保存した記録 { key, startAt, endAt }。Watchはこれを見て自分のワークアウトを保存するか破棄するか決める。
   // 保存直後にアプリが終了されても届くよう、store にも残す(WATCH_LAST_SAVED_KEY)
   const [watchLastSaved, setWatchLastSaved] = useState(null);
@@ -1101,7 +1105,7 @@ function App() {
             if (draft.startAt) setStartAt(draft.startAt);
             if (draft.restStartAt) setRestStartAt(draft.restStartAt);
             if (draft.restFromWatch) restFromWatchRef.current = draft.restFromWatch;
-            if (draft.watchWorkoutFor) watchWorkoutForRef.current = draft.watchWorkoutFor;
+            if (draft.watchWorkoutFor) { watchWorkoutForRef.current = draft.watchWorkoutFor; setWatchLiveFor(draft.watchWorkoutFor); }
             if (Array.isArray(draft.watchApplied)) {
               watchAppliedRef.current = draft.watchApplied;
               setWatchApplied(draft.watchApplied);
@@ -1437,10 +1441,12 @@ function App() {
   // Web版では何もしない。通知の許可・soundOnとは独立(Live Activityは許可が別枠で、常にオン)。
   // loaded後の初回で前回の残骸も片付く(下書きから同じ値が戻れば何もせず、無ければ終了)。
   // 前面復帰(visibilitychange)では呼ばない: ロック画面でスワイプして消した表示を復活させないため。
+  // Watch がこの記録のワークアウトを記録している間は出さない(Watch の画面を隠すため。休憩は Watch 側が表示・通知する)。
+  const watchLive = watchLiveFor != null && watchLiveFor === startAt;
   useEffect(() => {
     if (!loaded) return;
-    runNotify(() => syncRestActivity(restStartAt, Date.now(), t("rest.title")));
-  }, [loaded, restStartAt, lang]);
+    runNotify(() => syncRestActivity(watchLive ? null : restStartAt, Date.now(), t("rest.title")));
+  }, [loaded, restStartAt, lang, watchLive]);
 
   // ---- Apple Watchで入力されたセットを合流させる(src/domain/watch.js、docs/Watchアプリ.md) ----
   // 操作はネイティブのキューに溜まっている(iPhoneのアプリが裏で寝ている間も)。起動時・前面復帰時・
@@ -1466,7 +1472,11 @@ function App() {
       const r = applyWatchOps(todayRef.current, fresh);
       // 今の記録の知らせだけ採用する(遅れて届いた前の記録の知らせで上書きしない)
       const wk = watchWorkoutFromOps(fresh);
-      if (wk != null && wk === startAtRef.current) watchWorkoutForRef.current = wk;
+      if (wk != null && wk === startAtRef.current) { watchWorkoutForRef.current = wk; setWatchLiveFor(wk); }
+      // Watch が途中でワークアウトをやめた(ほかのアプリに替えた等)ら、Watch はこの記録にもう何も返さない。
+      // ref も降ろす: 保存時は iPhone がすぐヘルスケアに書き、下書きの復元で抑止が戻らない(discarded は最後の状態)。
+      // 休憩の Live Activity は出す側に戻る
+      if (watchWorkoutStopped(fresh, startAtRef.current)) { watchWorkoutForRef.current = null; setWatchLiveFor(null); }
       setToday(t => applyWatchOps(t, fresh).today);
       if (r.applied.length > 0) {
         const ids = [...watchAppliedRef.current, ...r.applied].slice(-WATCH_APPLIED_KEEP * 2);
@@ -2174,6 +2184,8 @@ function App() {
     const lastSaved = handToWatch ? { key: healthWorkoutKey(entry), ...range } : null;
     setWatchLastSaved(lastSaved);
     watchWorkoutForRef.current = null;
+    // watchLiveFor はここでは降ろさない。startAt が null になれば watchLive は false になる。ここで降ろすと、
+    // 下の await の間の render で startAt・restStartAt が残ったまま抑止だけ外れ、Live Activity が一瞬出る
     try { await store.set(WATCH_LAST_SAVED_KEY, JSON.stringify(lastSaved)); } catch { /* noop */ }
     if (handToWatch) {
       watchHealthPendingRef.current = [...watchHealthPendingRef.current,
@@ -3336,7 +3348,7 @@ function App() {
               <button onClick={async () => {
                 if (!window.confirm(t("log.discardDraft"))) return;
                 setToday([]); setStartAt(null); setElapsed(0); stopRest(); setDraftRestored(false);
-                watchWorkoutForRef.current = null;
+                watchWorkoutForRef.current = null; setWatchLiveFor(null);
                 clearErrorIf("log.noValidSets", "err.workoutSaveFailed"); // 破棄したので「入力した内容は残っています」も消す
                 try { await store.del(DRAFT_KEY); localStorage.removeItem(DRAFT_KEY); } catch { /* noop */ }
               }} style={{ ...btn("transparent", C.muted), padding: "6px 10px", fontSize: 13 }}>{t("log.discard")}</button>

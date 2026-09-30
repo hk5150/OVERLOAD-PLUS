@@ -9,6 +9,7 @@ Watch でセットを入力するためのアプリ(v120〜)。
 提出の内容と App Store Connect の入力の罠は `APPSTORE.md` の提出記録。コードは全部 push 済み(`d95f721`)。
 
 **次のセッションでやること(優先順)**
+0. **v134(Watch の記録中は休憩の Live Activity を出さない)は未コミット・未アップロードなら続きから。** 実機で、iPhone でセットを入力しても Watch の KURABELL が隠れないか確かめる(下の「休憩」)
 1. 審査結果のメールを見る。差し戻しなら内容に沿って対応(1.0 のときは新規アカウント向けの 2.1 Information Needed だった)
 2. 承認されたら、実機の App Store で 1.1 が出ることと、Watch アプリが App Store 版で入ることを確認
 3. 残課題(コード変更が要る): `www/` の minify、`swapExercise` のテスト、初回訪問時のスクリプト混在(低優先)。
@@ -128,6 +129,14 @@ Watch で −/+ を押していない値は、iPhone で入力されたままの
   - **iPhone 側の通知は予約しない**(`restFromWatchRef`)。予約すると、ロック中の iPhone の通知が Watch に転送され、手首に二重に届くため。この値は下書きにも保存する(OS にアプリを終了されて再起動したときに、抑止が外れないように)。
 - Watch は自分で始めた休憩の開始時刻を覚えておく。その op が iPhone で確認された後に、iPhone 側で休憩が止まった・新しい休憩が始まったら、Watch の通知を取り消す。
 - iPhone で始めた休憩の通知は、これまでどおり iPhone が出す(ロック中は Watch に転送される)。
+- **Watch がこの記録のワークアウトを記録している間は、iPhone の休憩の Live Activity を出さない**(v134)。
+  出すと watchOS がそれを Watch のスマートスタックにも自動で出し、KURABELL の画面を隠す
+  (1.1 の実機で「トレーニング中に Watch のアプリが消えた」。ワークアウトは裏で続いていた)。
+  - 判定は `watchLiveFor`(`watchWorkoutForRef` の state 版)と `startAt` の一致。Watch の `started` で立ち、保存・破棄で降りる。下書きからも戻す
+  - Watch が途中でワークアウトをやめた(`discarded`、`watchWorkoutStopped`)ら、出す側に戻す。`watchWorkoutForRef` も降ろすので、
+    保存時は iPhone がすぐヘルスケアに書き、下書きの復元でも抑止は戻らない(Watch は discarded の後に同じ記録で started を送らない)
+  - 保存では `watchLiveFor` を降ろさない(`startAt` が null になれば外れる)。`await` の前に降ろすと、間の render で Live Activity が一瞬出る(reviewer 重大1)
+  - 代わりに、この間は iPhone のロック画面・Dynamic Island に休憩の経過が出ない。iPhone の1分ごとの通知と Watch の休憩画面・通知は残る
 
 ### 入力は −/+ ボタン(Digital Crown は使わない)
 
