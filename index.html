@@ -216,6 +216,9 @@
       if (typeof ReactDOM === 'undefined')  throw new Error('ReactDOM' + BT.missing);
       if (typeof Recharts === 'undefined')  throw new Error('Recharts' + BT.missing);
       if (typeof Babel === 'undefined')     throw new Error('Babel' + BT.missing);
+      // ボタンを押したときにしか参照されないので、古い volume.js が HTTP キャッシュから出ると
+      // 起動は通ってしまい、押した時点でエラー画面になる。起動時に落として再読み込みの経路に乗せる
+      if (typeof nextSetType === 'undefined') throw new Error('src/domain/volume.js' + BT.missing);
 
       bootMsg(BT.prep);
       var src = document.getElementById('appsrc').textContent;
@@ -252,15 +255,10 @@ const WATCH_LAST_SAVED_KEY = "watch-last-saved-v1";
 const PRE_IMPORT_BACKUP_KEY = "workout-log-v1-pre-import"; // バックアップ復元前のデータ退避(復元に失敗した場合の保険)
 // ヘッダーのバージョンバッジとバックアップのappVersionで共有する単一の定数。
 // sw.js の CACHE 定数とは tests/version.test.js が数字の一致を機械的に縛っている(CLAUDE.md参照)。
-const APP_VERSION = "v130";
+const APP_VERSION = "v131";
 // store(保存レイヤ)は src/domain/storage.js へ移設(テストのため)。
 // LIBSで<script src>読み込み済みなのでグローバルの store をそのまま参照できる。
 const uid = () => Math.random().toString(36).slice(2, 8);
-// セット種別の切替: 通常 → ウォームアップ(W) → 補助あり(補) → 通常。Wと補助は排他。
-// 今日の画面と履歴の編集画面の両方から呼ぶ(片方だけ変えると、両方立ったセットが保存されうる)
-const nextSetType = (s) => (!s.warmup && !s.assisted) ? { warmup: true, assisted: false }
-  : s.warmup ? { warmup: false, assisted: true }
-  : { warmup: false, assisted: false };
 const num = (v) => { const n = parseFloat(v); return isNaN(n) ? 0 : n; };
 const DEFAULT_REPS = 10; // 種目追加時の初期回数
 const fmtDate = (iso) => { const d = new Date(iso); return `${d.getMonth() + 1}/${d.getDate()} (${weekdayLabel(d.getDay())})`; };
@@ -3822,9 +3820,9 @@ function App() {
                 <div key={i} style={{ marginBottom: 8, opacity: done ? 1 : 0.55 }}>
                   <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                     <button onClick={() => {
-                      const next = nextSetType(s);
+                      // 切替は src/domain/volume.js の nextSetType(履歴の編集画面と共通)
                       setToday(t => t.map(e => e.id !== ex.id ? e : {
-                        ...e, sets: e.sets.map((x, j) => j === i ? { ...x, ...next } : x),
+                        ...e, sets: e.sets.map((x, j) => j === i ? { ...x, ...nextSetType(x) } : x),
                       }));
                     }}
                       title={t("set.typeToggle")}

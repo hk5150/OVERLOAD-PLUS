@@ -15,6 +15,16 @@ function workingSets(ex) {
   return (ex.sets || []).filter(s => !s.warmup);
 }
 
+// セット種別の切替: 通常 → ウォームアップ(W) → 補助あり(補) → 通常。Wと補助は排他。
+// 今日の画面と履歴の編集画面の両方から呼ぶ(片方だけ変えると、両方立ったセットが保存されうる。
+// 両方立つと、直前の行を複製する addSet / applyWatchOps で見えない補助セットができる)。
+// 集計側の約束事(workingSets 等が W・補助をどう扱うか)と対になるのでここに置く。
+function nextSetType(s) {
+  if (!s.warmup && !s.assisted) return { warmup: true, assisted: false };
+  if (s.warmup) return { warmup: false, assisted: true };
+  return { warmup: false, assisted: false };
+}
+
 // 集計用ボリューム: 実効重量 × 回数 × 可動域係数(1RM/PR/判定には係数を掛けない)
 function setVolume(ex, s, bodyweight, deps) {
   const { effWeight, resolveIsDb, resolveRom } = deps;
@@ -28,3 +38,4 @@ function exVolume(ex, bodyweight, deps) {
 globalThis.workingSets = workingSets;
 globalThis.setVolume = setVolume;
 globalThis.exVolume = exVolume;
+globalThis.nextSetType = nextSetType;

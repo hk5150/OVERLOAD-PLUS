@@ -109,3 +109,97 @@ describe("exVolume (1種目分の合計ボリューム)", () => {
     expect(exVolume(e, 70, deps)).toBe(0);
   });
 });
+
+// nextSetType: セット種別ボタン(通常 → W → 補 → 通常)の巡回。
+// 今日の記録画面と履歴の編集画面の両方から `{ ...s, ...nextSetType(s) }` で当てる。
+// #appsrc 内にあった頃はテストが無く、両画面で別々に書かれていたため、片方だけ変えると
+// warmup と assisted が両方立ったセットが保存されうる状態だった。両方立ったセットは
+// addSet / applyWatchOps が直前の行を複製するときに「見えない補助セット」として増殖する。
+// ここでは種別の遷移だけを縛る。ボタンの表示(W / 補 の文字)や、集計側が W・補助を
+// どう扱うか(上の workingSets / exVolume)は対象外。
+const { nextSetType } = loadDomainModule("src/domain/volume.js");
+
+// 保存データでは補助でないセットは assisted キー自体を持たない
+const normalSet = (overrides = {}) => ({ weight: 60, reps: 8, rir: 2, warmup: false, ...overrides });
+const warmupSet = (overrides = {}) => normalSet({ warmup: true, ...overrides });
+const assistedSet = (overrides = {}) => normalSet({ assisted: true, ...overrides });
+const apply = (s) => ({ ...s, ...nextSetType(s) });
+const typeOf = (s) => ({ warmup: !!s.warmup, assisted: !!s.assisted });
+
+describe("nextSetType(Wと補助が両方立つと、行の複製で見えない補助セットが増える)", () => {
+  it("通常の次はウォームアップ", () => {
+    expect(nextSetType(normalSet({ assisted: false }))).toEqual({ warmup: true, assisted: false });
+  });
+
+  it("ウォームアップの次は補助あり", () => {
+    expect(nextSetType(warmupSet())).toEqual({ warmup: false, assisted: true });
+  });
+
+  it("補助ありの次は通常", () => {
+    expect(nextSetType(assistedSet())).toEqual({ warmup: false, assisted: false });
+  });
+
+  it("assistedキーが無いセットは通常として扱い、次はウォームアップ", () => {
+    const s = normalSet();
+    expect("assisted" in s).toBe(false);
+    expect(nextSetType(s)).toEqual({ warmup: true, assisted: false });
+  });
+
+  it("過去データでWと補助が両方立っているセットは、W扱いで補助ありへ進む", () => {
+    expect(nextSetType(normalSet({ warmup: true, assisted: true }))).toEqual({ warmup: false, assisted: true });
+  });
+
+  it("戻り値はwarmupとassistedの2フィールドだけで、重量・回数・RIRを上書きしない", () => {
+    for (const s of [normalSet(), warmupSet(), assistedSet(), normalSet({ warmup: true, assisted: true })]) {
+      expect(Object.keys(nextSetType(s)).sort()).toEqual(["assisted", "warmup"]);
+      const next = apply(s);
+      expect(next.weight).toBe(60);
+      expect(next.reps).toBe(8);
+      expect(next.rir).toBe(2);
+    }
+  });
+
+  it("どの入力からでも、戻り値でwarmupとassistedが両方trueになることは無い", () => {
+    const values = [true, false, undefined];
+    for (const warmup of values) {
+      for (const assisted of values) {
+        const s = { weight: 60, reps: 8 };
+        if (warmup !== undefined) s.warmup = warmup;
+        if (assisted !== undefined) s.assisted = assisted;
+        const r = nextSetType(s);
+        expect(r.warmup && r.assisted).toBe(false);
+      }
+    }
+  });
+
+  it("通常・W・補のどこから始めても、3回適用すると元の種別に戻る", () => {
+    for (const s of [normalSet(), normalSet({ assisted: false }), warmupSet(), assistedSet()]) {
+      expect(typeOf(apply(apply(apply(s))))).toEqual(typeOf(s));
+    }
+  });
+
+  it("両方立った過去データも、1回切り替えた後は通常→W→補の巡回に乗る", () => {
+    const first = apply(normalSet({ warmup: true, assisted: true }));
+    const seen = [first, apply(first), apply(apply(first))].map(typeOf);
+    expect(seen).toEqual([
+      { warmup: false, assisted: true },
+      { warmup: false, assisted: false },
+      { warmup: true, assisted: false },
+    ]);
+  });
+
+  it("引数のセットを変更しない", () => {
+    for (const s of [normalSet(), warmupSet(), assistedSet(), normalSet({ warmup: true, assisted: true })]) {
+      const before = structuredClone(s);
+      Object.freeze(s);
+      nextSetType(s);
+      expect(s).toEqual(before);
+    }
+  });
+
+  it("戻り値は毎回新しいオブジェクトで、呼び出し間で共有されない", () => {
+    const a = nextSetType(normalSet());
+    const b = nextSetType(normalSet());
+    expect(a).not.toBe(b);
+  });
+});
