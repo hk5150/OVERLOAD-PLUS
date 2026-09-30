@@ -489,6 +489,7 @@ const STRINGS = {
   "csv.reps":          { ja: "回数",                   en: "Reps" },
   "csv.rir":           { ja: "あと何回",               en: "Reps left" },
   "csv.working":       { ja: "ワーキング",             en: "Working" },
+  "csv.assisted":      { ja: "補助",                   en: "Assisted" },
 
   // ---- 下部タブ ----
   "tab.split":         { ja: "分割",                   en: "Split" },

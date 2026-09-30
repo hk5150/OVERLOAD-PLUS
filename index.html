@@ -120,12 +120,14 @@
     loading:'読み込み中…', libs:'ライブラリを読み込み中…', prep:'アプリを準備中…', retry:'再読み込み',
     onError:'起動時にエラーが発生しました', cantStart:'起動できませんでした',
     noSource:'全ての配信元から読み込めません: ', missing:' を読み込めませんでした',
+    stale:' が古い版のままです。少し待ってから再読み込みしてください。',
     hint:'\n\n※ vendor/ フォルダを index.html と同じ階層に配置し、file:// ではなく http(s):// 経由で開いてください。',
     rotateTitle:'画面を縦にしてください', rotateMsg:'KURABELL Workout Log は縦画面での利用を想定しています。'
   } : {
     loading:'Loading…', libs:'Loading libraries…', prep:'Preparing the app…', retry:'Reload',
     onError:'An error occurred while starting', cantStart:'Could not start',
     noSource:'Could not load from any source: ', missing:' failed to load',
+    stale:' is still an old version. Wait a moment and reload.',
     hint:'\n\nPlace the vendor/ folder next to index.html and open the page over http(s):// rather than file://.',
     rotateTitle:'Please rotate to portrait', rotateMsg:'KURABELL Workout Log is designed for portrait orientation.'
   };
@@ -176,25 +178,46 @@
     { key:'recharts', urls:['vendor/recharts.js'] },
     { key:'babel',    urls:['vendor/babel.min.js'] },
     // ドメインロジック(純粋関数)。テストで使い回すため#appsrcの外へ切り出したもの。
-    { key:'i18n',       urls:['src/domain/i18n.js'] },
-    { key:'units',      urls:['src/domain/units.js'] },
-    { key:'oneRm',      urls:['src/domain/oneRm.js'] },
-    { key:'storage',    urls:['src/domain/storage.js'] },
-    { key:'backupValidation', urls:['src/domain/backupValidation.js'] },
-    { key:'volume',     urls:['src/domain/volume.js'] },
-    { key:'coefficients', urls:['src/domain/coefficients.js'] },
-    { key:'insight',    urls:['src/domain/insight.js'] },
-    { key:'restNotifications', urls:['src/domain/restNotifications.js'] },
-    { key:'iap',        urls:['src/domain/iap.js'] },
-    { key:'health',     urls:['src/domain/health.js'] },
-    { key:'watch',      urls:['src/domain/watch.js'] },
-    { key:'fileExport', urls:['src/domain/fileExport.js'] },
-    { key:'review',     urls:['src/domain/review.js'] },
+    // globals はそのファイルが globalThis に公開する名前。読み込み後に全部あるかを確かめる
+    // (SWが制御していないとき、古い版がHTTPキャッシュから出ると、新しい関数が無いまま起動して
+    // 押した時点で落ちるため)。ファイル側と一致しているかは tests/boot-globals.test.js が縛る。
+    { key:'i18n',       urls:['src/domain/i18n.js'],
+      globals:['SUPPORTED_LANGS','resolveLang','getLang','setLang','STRINGS','I18N','t','EX_NAMES_EN','MUSCLE_NAMES_EN','EQ_NAMES_EN','SPLIT_NAMES_EN','DAY_NAMES_EN','WEEKDAYS','exName','muscleName','eqName','splitName','dayName','weekdayLabel','exSearchText','exMatches'] },
+    { key:'units',      urls:['src/domain/units.js'],
+      globals:['LB_PER_KG','SUPPORTED_UNITS','resolveUnit','getUnit','setUnit','uLabel','kgToLb','lbToKg','toU','fromU','wU','wStr','convWeightStr','incU'] },
+    { key:'oneRm',      urls:['src/domain/oneRm.js'],
+      globals:['est1RM','effWeight','dayBest1RM'] },
+    { key:'storage',    urls:['src/domain/storage.js'],
+      globals:['store'] },
+    { key:'backupValidation', urls:['src/domain/backupValidation.js'],
+      globals:['extractWorkoutsArray','validateWorkoutsShape','CURRENT_BACKUP_FORMAT_VERSION','validateBackupPayload','SET_VALUE_LIMITS','isSetValueInRange'] },
+    { key:'volume',     urls:['src/domain/volume.js'],
+      globals:['workingSets','setVolume','exVolume','nextSetType'] },
+    { key:'coefficients', urls:['src/domain/coefficients.js'],
+      globals:['resolveCoefficients'] },
+    { key:'insight',    urls:['src/domain/insight.js'],
+      globals:['exerciseInsight','topSetOf'] },
+    { key:'restNotifications', urls:['src/domain/restNotifications.js'],
+      globals:['REST_NOTIFY_MINUTES','buildRestNotifications','restNotificationsAvailable','ensureRestNotificationPermission','checkRestNotificationPermission','scheduleRestNotifications','cancelRestNotifications','clearDeliveredRestNotifications','toNativeRestNotifications','REST_ACTIVITY_STALE_MINUTES','buildRestActivityState','syncRestActivity'] },
+    { key:'iap',        urls:['src/domain/iap.js'],
+      globals:['TRIAL_WORKOUT_LIMIT','IAP_PRODUCT_ID','iapAvailable','isTrialLimitReached','refreshPurchaseState','readCachedPurchaseFlag','fetchUnlockProduct','purchaseUnlock','restorePurchase','onEntitlementsChanged'] },
+    { key:'health',     urls:['src/domain/health.js'],
+      globals:['healthAvailable','healthSupported','healthRequestAuthorization','healthAuthDecided','healthAuthorizationStatus','healthWorkoutKey','HEALTH_MAX_WORKOUT_MS','healthWorkoutRange','healthSaveWorkout','healthDeleteWorkout','healthStartWatchWorkout','healthLatestBodyMass','healthSaveBodyMass','pickHealthWeight','healthWeightToWrite'] },
+    { key:'watch',      urls:['src/domain/watch.js'],
+      globals:['WATCH_APPLIED_KEEP','watchWeightStep','buildWatchSnapshot','applyWatchOps','watchWorkoutFromOps','settleWatchHealth','WATCH_HEALTH_CONFIRM_MS','syncWatchSnapshot','peekWatchOps','ackWatchOps','onWatchOps'] },
+    { key:'fileExport', urls:['src/domain/fileExport.js'],
+      globals:['fileExportAvailable','shareTextFile'] },
+    { key:'review',     urls:['src/domain/review.js'],
+      globals:['REVIEW_REQUESTED_KEY','shouldRequestReview','requestAppReview'] },
     // iOS版のSQLite永続化層。Web版では何もしない(nativeSqliteDriver()がnullを返すだけ)。
-    { key:'dbSchema',    urls:['src/domain/db/schema.js'] },
-    { key:'dbMigration', urls:['src/domain/db/migration.js'] },
-    { key:'dbWorkoutStore', urls:['src/domain/db/workoutStore.js'] },
-    { key:'dbCapacitorSqliteDriver', urls:['src/domain/db/capacitorSqliteDriver.js'] }
+    { key:'dbSchema',    urls:['src/domain/db/schema.js'],
+      globals:['SCHEMA_VERSION','SCHEMA_STATEMENTS'] },
+    { key:'dbMigration', urls:['src/domain/db/migration.js'],
+      globals:['legacyBlobToState','buildWorkoutsReplaceStatements','buildCustomExercisesReplaceStatements','buildSettingsUpsertStatements','buildFullReplaceStatements','rowsToState'] },
+    { key:'dbWorkoutStore', urls:['src/domain/db/workoutStore.js'],
+      globals:['createWorkoutStore'] },
+    { key:'dbCapacitorSqliteDriver', urls:['src/domain/db/capacitorSqliteDriver.js'],
+      globals:['makeCapacitorSqliteDriver','normalizeRows'] }
   ];
 
   function loadOne(urls, i){
@@ -208,18 +231,44 @@
     });
   }
 
+  // LIBS のドメインファイルを {cache:'reload'} で取り直して HTTP キャッシュを新しくする。
+  // 本文まで読み切らないと、直後の再読み込みで書きかけのキャッシュが捨てられることがある。
+  // 全部取れたら true、1つでも失敗・時間切れなら false。
+  function refreshDomainCache(timeoutMs){
+    var ctrl = typeof AbortController === 'function' ? new AbortController() : null;
+    var timer = setTimeout(function(){ if (ctrl) ctrl.abort(); }, timeoutMs);
+    var jobs = LIBS.filter(function(l){ return l.globals; }).map(function(l){
+      return fetch(l.urls[0], { cache: 'reload', signal: ctrl ? ctrl.signal : undefined })
+        .then(function(r){ if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); });
+    });
+    var all = Promise.all(jobs).then(function(){ return true; }, function(){ return false; });
+    var limit = new Promise(function(res){ setTimeout(function(){ res(false); }, timeoutMs + 100); });
+    return Promise.race([all, limit]).then(function(ok){ clearTimeout(timer); return ok; });
+  }
+
   (async function(){
     try {
       bootMsg(BT.libs);
-      for (var k=0; k<LIBS.length; k++) { await loadOne(LIBS[k].urls, 0); }
+      for (var k=0; k<LIBS.length; k++) {
+        await loadOne(LIBS[k].urls, 0);
+        var gs = LIBS[k].globals || [];
+        for (var g=0; g<gs.length; g++) {
+          if (typeof globalThis[gs[g]] !== 'undefined') continue;
+          // 読み込めたが中身が古い(HTTPキャッシュ)。通常の再読み込みではサブリソースを再検証しない
+          // ブラウザがあるので、ドメインファイルを全部取り直せたときだけ1回自動で読み込み直す。
+          // 古いのが1つとは限らない(前回の訪問で全部同時にキャッシュされている)ので全部取る。
+          // 電波が弱いと固まるので4秒で諦める(sw.js の NETWORK_TIMEOUT_MS と同じ)
+          var staleErr = new Error(LIBS[k].urls[0] + BT.stale);
+          staleErr.refreshed = await refreshDomainCache(4000);
+          staleErr.stale = true;
+          throw staleErr;
+        }
+      }
 
       if (typeof React === 'undefined')     throw new Error('React' + BT.missing);
       if (typeof ReactDOM === 'undefined')  throw new Error('ReactDOM' + BT.missing);
       if (typeof Recharts === 'undefined')  throw new Error('Recharts' + BT.missing);
       if (typeof Babel === 'undefined')     throw new Error('Babel' + BT.missing);
-      // ボタンを押したときにしか参照されないので、古い volume.js が HTTP キャッシュから出ると
-      // 起動は通ってしまい、押した時点でエラー画面になる。起動時に落として再読み込みの経路に乗せる
-      if (typeof nextSetType === 'undefined') throw new Error('src/domain/volume.js' + BT.missing);
 
       bootMsg(BT.prep);
       var src = document.getElementById('appsrc').textContent;
@@ -227,6 +276,11 @@
       // 実行
       (0, eval)(out);
     } catch (e) {
+      if (e && e.stale) {
+        if (e.refreshed && window.__reloadOnceForUpdate()) return;
+        bootFail(BT.cantStart, e.message); // ファイルの置き場所の案内(hint)は的外れなので付けない
+        return;
+      }
       bootFail(BT.cantStart, (e && e.message ? e.message : String(e)) + BT.hint);
     }
   })();
@@ -256,7 +310,7 @@ const WATCH_LAST_SAVED_KEY = "watch-last-saved-v1";
 const PRE_IMPORT_BACKUP_KEY = "workout-log-v1-pre-import"; // バックアップ復元前のデータ退避(復元に失敗した場合の保険)
 // ヘッダーのバージョンバッジとバックアップのappVersionで共有する単一の定数。
 // sw.js の CACHE 定数とは tests/version.test.js が数字の一致を機械的に縛っている(CLAUDE.md参照)。
-const APP_VERSION = "v132";
+const APP_VERSION = "v133";
 // store(保存レイヤ)は src/domain/storage.js へ移設(テストのため)。
 // LIBSで<script src>読み込み済みなのでグローバルの store をそのまま参照できる。
 const uid = () => Math.random().toString(36).slice(2, 8);
@@ -2690,7 +2744,7 @@ function App() {
       const d = new Date(w.date);
       const date = `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`;
       w.exercises.forEach(ex => ex.sets.forEach((s, i) => {
-        rows.push([date, dayName(w.session || ""), exName(ex.name), muscleName(ex.muscle || ""), i + 1, s.warmup ? "W" : t("csv.working"), wU(s.weight), s.reps, s.rir ?? ""]);
+        rows.push([date, dayName(w.session || ""), exName(ex.name), muscleName(ex.muscle || ""), i + 1, s.warmup ? "W" : s.assisted ? t("csv.assisted") : t("csv.working"), wU(s.weight), s.reps, s.rir ?? ""]);
       }));
     });
     const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
@@ -4588,7 +4642,8 @@ function App() {
                               border: `1px solid ${s.warmup ? C.yellow : s.assisted ? C.blue : C.border}`,
                               background: s.warmup ? C.yellow : s.assisted ? C.blue : "transparent",
                               color: s.warmup ? "#141517" : s.assisted ? "#fff" : C.muted }}>
-                            {s.warmup ? "W" : s.assisted ? t("set.assistedShort") : setIdx + 1}
+                            {/* 今日の画面と同じく W を数えない通し番号 */}
+                            {s.warmup ? "W" : s.assisted ? t("set.assistedShort") : ex.sets.slice(0, setIdx + 1).filter(x => !x.warmup).length}
                           </button>
                           <NumInput inputMode="decimal" value={s.weight}
                             onChange={e => editSet(exIdx, setIdx, "weight", e.target.value)} aria-label={t("set.weightPlain")}
