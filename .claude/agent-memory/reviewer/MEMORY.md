@@ -15,3 +15,4 @@
 - [iOS書き出しの共有シート](kurabell-share-sheet-export.md) — v125: completionWithItemsHandlerの複数回呼び出し・Copyでcompleted・await後の古いpersist
 - [保存済みrirの空文字](kurabell-stored-rir-empty-string.md) — 保存済みの未実施はrirキー無し。rir:""は s.rir!=null 箇所とWatchのPrev.rir(Int?)デコードを壊す(v128)
 - [編集画面と補助の印](kurabell-edit-screen-assisted.md) — v129でassisted保持、v130でnextSetTypeに集約、v131でvolume.jsへ移設・テスト化
+- [LIBSのglobals起動検査](kurabell-boot-globals-check.md) — v133: Web版だけで効く。公開名の増減はglobalsとセット。誤検知の前提と再読み込みがキャッシュを破らない件
