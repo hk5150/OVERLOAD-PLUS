@@ -20,6 +20,19 @@ iOS 26.5 のシミュレータでは再現しない(検査は iOS 27 の実行�
 (`UIMainStoryboardFile` は外した。`Main.storyboard` のファイルは残っているが未使用)。
 シミュレータ(26.5、Release、既存アプリの上に上書き)で起動・設定画面のプラグイン表示まで確認。**iOS 27 の実機で起動するかは (12) の TestFlight で確かめる。**
 
+**1.1.1 (12) はアーカイブ済み・アップロード待ち**(2026-10-01 午前)。`xcodebuild -exportArchive` が
+「Failed to Use Accounts(App Store Connect access for LJR5Q5TU54 is required)」で止まった(Xcode の Apple Account のセッション切れ。前にも起きた)。
+帰宅後にやること(どちらか):
+- **Xcode → 設定 → Apple Accounts でサインアウト→サインイン** してから、次を実行(または Xcode → Window → Organizer で
+  「KURABELL 1.1.1 (12)」を選んで Distribute App → App Store Connect → Upload):
+  `xcodebuild -exportArchive -archivePath "$HOME/Library/Developer/Xcode/Archives/2026-10-01/KURABELL 1.1.1 (12).xcarchive" -exportOptionsPlist ios/ExportOptions.plist -exportPath /tmp/kurabell-export-12 -allowProvisioningUpdates`
+- または App Store Connect の API キー `kurabell-upload2`(キー ID `FDQ5SP8S2F`、Issuer ID は App Store Connect の「統合」に表示)の `.p8` を **Mac のブラウザで**落とし、
+  上のコマンドに `-authenticationKeyPath <p8> -authenticationKeyID FDQ5SP8S2F -authenticationKeyIssuerID <Issuer ID>` を足す。
+  **iPhone の Safari ではダウンロードが2回とも「エラーが発生しました」になり、1回目のキー(`kurabell-upload`)はファイルが残らないまま使用済みになった**(取り消すこと)。
+  `.p8` はリポジトリに入れない。
+- 待つ間は TestFlight の「以前のビルド」から 1.1 (10) を入れ直せば使える(1.1 (10) は Xcode 26 でビルドしたので iOS 27 でも落ちない。
+  Xcode 27 に入れ替わったのは 10/1 0:34、1.1 (10) のアップロードは 9/30 9:15。App Store の利用者は影響を受けない)
+
 (以下は 1.1 提出時点のメモ)
 提出の内容と App Store Connect の入力の罠は `APPSTORE.md` の提出記録。コードは全部 push 済み(`d95f721`)。
 
