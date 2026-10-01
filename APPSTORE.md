@@ -57,7 +57,7 @@
 気に入ったら一度の購入でずっと使えます。サブスクリプションはありません。
 
 ■ 前回の自分と、セットごとに勝負
-ベンチプレスの2セット目を入力するとき、その横には前回の2セット目「70×9 RIR1」が出ています。重量・回数・余力(RIR=あと何回できたか)を前回と並べて比べられるので、今日どこで上乗せするかがその場で決まります。推定1RMが前回を超えると「YOU WIN!」でお知らせ。
+ベンチプレスの2セット目を入力するとき、その横には前回の2セット目「70×9 RIR1」が出ています。重量・回数・余力(RIR=あと何回できたか)を前回と並べて比べられるので、今日どこで上乗せするかがその場で決まります。推定1RMが自己ベストを超えると、その場で緑の印と「1RM更新」のバッジでお知らせ。
 
 ■ 今日やることは、もう並んでいる
 全身・上下・Push/Pull/Legs・5分割・カスタムから分割を選ぶと、ローテーションに合わせて「今日のメニュー」を前回の記録から用意します。ジムに着いたらタップ1回で記録開始。同じ重量が3回続いたら「そろそろ上げどき」とお知らせします。次の重量を決めるのは、アプリではなくあなたです。
@@ -137,7 +137,7 @@ Your first 10 workouts are free, with every feature included.
 Like it? Unlock the full app with a single purchase. No subscription.
 
 ■ Beat your last session, set by set
-When you log your second set of bench, your last second set — "155×9 RIR1" — is sitting right next to it. Weight, reps and RIR (reps in reserve) side by side, so you know exactly where to push today. Beat your estimated 1RM and you get a "YOU WIN!".
+When you log your second set of bench, your last second set — "155×9 RIR1" — is sitting right next to it. Weight, reps and RIR (reps in reserve) side by side, so you know exactly where to push today. Beat your best estimated 1RM and it lights up green with a "1RM" badge, right on the set.
 
 ■ Today's plan is already waiting
 Pick a split — full body, upper/lower, push/pull/legs, 5-day or your own — and each day's menu is built from your last session of that day. One tap at the gym and you're logging. Stuck at the same weight three sessions running? You'll get a nudge. The next weight is still your call, not the app's.
@@ -187,7 +187,7 @@ This app requires no account. Logging, totals, charts and backups run entirely o
 
 In-app purchase: the app is free for the first 10 saved workouts. Saving the 11th workout shows a paywall offering a one-time non-consumable unlock (com.hajime5150.kurabellplus.unlock). Previously saved workouts, charts and backups remain accessible without purchasing. "Restore Purchases" is available in the Settings tab.
 
-The exercise list includes a "YouTube" button that optionally opens the system browser to YouTube search results, passing only the exercise name. The "Ask AI" button copies the user's log to the clipboard and opens the AI chat site selected in Settings; nothing is placed in the URL and nothing is transmitted by the app itself. Unless the reviewer taps one of these buttons, the app makes no network requests (apart from StoreKit).
+Each exercise card has a "YouTube" item in its "⋯" menu that optionally opens the system browser to YouTube search results, passing only the exercise name. The "Ask AI" button copies the user's log to the clipboard and opens the AI chat site selected in Settings; nothing is placed in the URL and nothing is transmitted by the app itself. Unless the reviewer taps one of these buttons, the app makes no network requests (apart from StoreKit).
 
 HealthKit: off by default. When the user turns on "Connect to Apple Health" in the Settings tab, the app asks for permission and then (1) saves each workout the user logs as Traditional Strength Training with its start and end times only (no calories), (2) reads the latest body weight to calculate bodyweight exercises, and (3) saves the body weight the user enters in Settings. Deleting a workout in the app also deletes the workout the app wrote to Health. Health data stays on the device; it is never sent to a server or used for advertising.
 
@@ -221,7 +221,7 @@ App Store Connectの「App Privacy」セクションでは、以下の方針で�
   - 入力されたトレーニング記録は端末のローカルストレージにのみ保存され、アプリ自身が外部サーバーへ送信することはありません。
   - アナリティクス・広告・トラッキングSDK、サードパーティ連携は組み込んでいません。
   - 外部サービスを開く機能が2つありますが、いずれも `window.open()` によるOS標準の外部リンク遷移で、SDK埋め込みではありません。どちらもアプリから外部へデータを送信しないため、「収集なし」の回答で問題ありません。
-    - **YouTube検索**: 種目一覧の「YouTube」ボタン。種目名 + 固定の検索語のみをURLに載せます。トレーニング記録は渡しません。
+    - **YouTube検索**: 種目カードの「⋯」メニューの「YouTube」。種目名 + 固定の検索語のみをURLに載せます。トレーニング記録は渡しません。
     - **AIに相談**: 記録タブの「AI相談」ボタンと履歴タブの「AIに相談」ボタン。押すと記録を**端末のクリップボードにコピー**し、設定で選んだAIチャットのページ(ChatGPT / Claude / Gemini / Perplexity / Grok)を開くだけです。**URLのクエリには記録を一切載せていません**(この方式を意図的に避けています。理由は `docs/vite移行.md` を参照)。記録がAIサービスに渡るのは、ユーザー自身がチャット欄へ貼り付けたときだけで、アプリの送信行為ではありません。
   - **ヘルスケア(HealthKit)連携**(iOS、既定オフ): ワークアウトと体重をヘルスケアと端末内でやりとりするだけで、外部へは送信しません。
     Appleの定義上「収集」は端末の外へ送ることなので、これも「収集なし」のままでよい。
@@ -241,7 +241,7 @@ v1(`{ja,en}/` 直下の5枚、v93時点)はアプリ画面をそのまま撮っ�
 
 | ファイル | 見出し(日本語) | 見出し(English) | 見せている画面 |
 |---|---|---|---|
-| `01-last-session.png` | 前回の自分が、セットごとに見える | Your last session, on every set | 記録画面。前回を超えた状態(YOU WIN!)+セット行の拡大 |
+| `01-last-session.png` | 前回の自分が、セットごとに見える | Your last session, on every set | 記録画面。前回を超えた状態(1.1 までは YOU WIN!、1.2 からは緑の比較行)+セット行の拡大 |
 | `02-todays-menu.png` | 今日やることは、もう並んでいる | Today's plan is already waiting | 今日のメニュー(前回からの引き継ぎ) |
 | `03-progress-charts.png` | 伸びが、線で見える | Watch your numbers climb | ボリューム推移と種目別の推定1RM推移 |
 | `04-rest-timer.png` | スマホを置いても、休憩時間がわかる | Put the phone down. We'll keep time. | 休憩タイマー拡大表示+通知バナー(実際の通知文言) |
@@ -254,7 +254,7 @@ v1(`{ja,en}/` 直下の5枚、v93時点)はアプリ画面をそのまま撮っ�
    `serviceWorkers: 'block'` の新しいコンテキスト(440×956、deviceScaleFactor 3 = 1320×2868)を作る
 2. サンプル履歴(PPL・約11週間、36回分)を `localStorage` の `workout-log-v1` に入れてから起動する。
    英語版は `profile.unit: "lb"` にし、重量を5lb刻みに寄せたkg値で入れる(lbで端数が出ないように)
-3. 今日のメニューから記録を開始し、ベンチプレスで前回(70kg×10)を超える72.5kg×10を入力して「YOU WIN!」を出す
+3. 今日のメニューから記録を開始し、ベンチプレスで前回(70kg×10)を超える72.5kg×10を入力して、前回を超えた状態(1.2 からは緑の比較行)を出す
 4. 経過時間・休憩時間は下書き(`workout-draft-v1`)の `startAt` / `restStartAt` を書き換えてから再読み込みして作る
 5. バージョンバッジ(`vNNN`)は非表示にしてから撮る
 6. 見出し・端末フレーム・拡大部分・通知バナーはHTMLで合成して書き出す
@@ -272,7 +272,7 @@ Web版で撮っているので、iOSのネイティブ版と見た目が違う�
 
 App内課金: 記録の保存10回までは無料で、11回目の保存時に買い切りのフル解除(非消耗型)を案内します。購入しなくても、それまでの記録・グラフ・バックアップは閲覧できます。「購入を復元」は設定タブにあります。
 
-種目一覧に「YouTube」ボタンがあり、任意でOS標準の外部ブラウザを開いてYouTube検索結果を表示します(種目名のみを検索語として渡します)。「AI相談」ボタンは記録をクリップボードにコピーし、設定で選んだAIチャットのページを開くだけで、URLに記録は載せず、アプリから送信もしません。これらの操作を行わない限り、アプリは(StoreKitを除き)通信を発生させません。
+種目カードの「⋯」メニューに「YouTube」があり、任意でOS標準の外部ブラウザを開いてYouTube検索結果を表示します(種目名のみを検索語として渡します)。「AI相談」ボタンは記録をクリップボードにコピーし、設定で選んだAIチャットのページを開くだけで、URLに記録は載せず、アプリから送信もしません。これらの操作を行わない限り、アプリは(StoreKitを除き)通信を発生させません。
 
 ヘルスケア(HealthKit)連携: 既定はオフです。設定タブの「ヘルスケアと連携」をオンにすると権限を求め、(1)記録したワークアウトを「従来型筋力トレーニング」として開始・終了時刻のみ書き込み(消費カロリーは書きません)、(2)自重種目の計算のため最新の体重を読み込み、(3)設定で入力した体重を書き込みます。アプリで記録を削除すると、アプリが書き込んだワークアウトもヘルスケアから削除します。ヘルスケアのデータは端末内だけで扱い、外部への送信や広告目的の利用はしません。
 ```
@@ -486,6 +486,45 @@ Claude in Chrome で App Store Connect を操作して入力した(北村さん�
 - ビルドを選ぶ前は、スクリーンショットの欄に「iPad」のタブが出る。iPhone 専用のビルド(`TARGETED_DEVICE_FAMILY = 1`)を選んで保存すると消え、iPad の画像は求められない
 - ビルドの一覧には (12) も出ていた(アップロードに失敗したと思っていた分)。(13) を選んだ
 - Watch アプリは (13) に埋め込み。1.1 (10) からの Watch 側のコード変更は `SampleData.swift`(起動引数のときだけ)だけで、40/41mm の詰め(`71ef6fe`)は `ui-refresh` 側なので 1.2 で入る
+
+## 1.2(画面改善・新アイコン)の掲載情報
+
+ブランチ `ui-refresh` の内容(`docs/画面改善.md`・`docs/アイコン刷新.md`)を出すときのもの。2026-10-01 に用意した。
+
+### 1.1 の掲載から変えたこと
+- **概要(日英)**: 「■ 前回の自分と、セットごとに勝負」の最後の1文。「YOU WIN!」でお知らせ → 緑の印と「1RM更新」のバッジ(上の概要の本文は書き換え済み)
+- **審査メモ(日英)とプライバシーの説明**: YouTube は「種目一覧のボタン」ではなく「種目カードの ⋯ メニュー」(上の本文は書き換え済み)
+- サブタイトル・キーワード・プロモーションテキストは変えない
+
+### このバージョンの最新情報(What's New)
+
+日本語:
+```
+・アイコンを新しくしました
+・記録画面をすっきりさせました。種目ごとの操作は「⋯」にまとめ、前回との比較は1行に。各セットの横には前回の重量×回数と、今日との差が出ます
+・履歴のカレンダーを、分割の日ごとの色で塗り分けるようにしました
+・タブにアイコンを付け、小さい文字を読みやすくしました
+・Apple Watch の入力画面で、前回の重量・回数・余力をそれぞれの欄に表示するようにしました
+```
+
+English:
+```
+• A new app icon.
+• A cleaner logging screen: each exercise's actions now live under "⋯", the comparison with your best fits on one line, and every set shows last time's weight × reps and today's difference.
+• The history calendar is now color-coded by split day.
+• Icons on the tabs, and small text is easier to read.
+• On Apple Watch, your last weight, reps and RIR now appear right next to each field.
+```
+
+### スクリーンショット
+
+**2026-10-01 に作成: `~/Desktop/KURABELL-appstore-screenshots/v4/{ja,en}/` 1320×2868 各7枚**(並びと見出しは v3 と同じ。登録するのは 01〜06、07 の料金は外す)。
+- 新しい画面(⋯・1行の比較・前回との差・タブのアイコン・色分けしたカレンダー)と新しいアイコン(通知バナー)で撮り直した
+- 2枚目の Watch と、Apple Watch の枠の1枚目(入力画面)は、Watch シミュレータの新しい入力画面(前回を各欄に表示)に差し替えた:
+  `~/Desktop/KURABELL-appstore-screenshots/watch-v4/watch-1-input-{ja,en}.png`(416×496)。Apple Watch の枠の2・3枚目(セット一覧・休憩)は 1.1 のまま
+- 撮り方は上の「作り方」と同じ。今回のスクリプト(`shoot-{ja,en}.js`)と合成用 `compose.html` は gitignore 済みの `.playwright-mcp/store-v4/` にある。
+  1.1 からの違い: 撮影先は worktree を配信した 8775 番、サンプルの記録は撮る日に合わせて日付をずらす(古いと「13日前」に見える)、
+  休憩タイマーは「インターバル」の表示を押して開く(「タップで拡大」は使い始めの人にしか出なくなった)、カレンダーは前月に戻してから撮る
 
 ## キャンペーンリンク(流入元の計測)
 

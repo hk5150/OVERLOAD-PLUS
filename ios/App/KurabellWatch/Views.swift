@@ -1,13 +1,18 @@
 import SwiftUI
 import WatchKit
 
+// 画面の小さい機種(40mm・41mm。幅 162/176pt、42mm 以上は 187pt〜)。休憩タイマーを1画面に収めるため、数字を一回り小さくする
+// (シミュレータで、40mm では「前回」の行が画面の外に出ていた)
+let isSmallWatch = WKInterfaceDevice.current().screenBounds.width < 180
+
 // 色は iPhone アプリ(index.html の C)と Live Activity(RestActivityLiveActivity.swift)に揃える。
 // 背景は OLED の黒に溶かし、面だけ C.surface で浮かせる。
 enum Palette {
     static let surface = Color(red: 30 / 255, green: 32 / 255, blue: 35 / 255)
     static let surface2 = Color(red: 38 / 255, green: 41 / 255, blue: 45 / 255)
     static let text = Color(red: 242 / 255, green: 240 / 255, blue: 235 / 255)
-    static let muted = Color(red: 142 / 255, green: 147 / 255, blue: 154 / 255)
+    // iPhone 側(index.html の C.muted)と同じ値。#8E939A では手首で 10〜12pt の文字が読みにくかった
+    static let muted = Color(red: 163 / 255, green: 168 / 255, blue: 176 / 255)
     static let green = Color(red: 76 / 255, green: 175 / 255, blue: 110 / 255)
     static let yellow = Color(red: 232 / 255, green: 179 / 255, blue: 60 / 255)
     static let red = Color(red: 226 / 255, green: 69 / 255, blue: 60 / 255)
@@ -114,7 +119,7 @@ struct RestTimerView: View {
                                 .font(.system(size: 13, weight: .bold))
                                 .foregroundStyle(Palette.muted)
                             Text(timerInterval: startAt...startAt.addingTimeInterval(8 * 3600), countsDown: false)
-                                .numeric(46)
+                                .numeric(isSmallWatch ? 38 : 46)
                                 .foregroundStyle(color)
                                 .multilineTextAlignment(.center)
                         }
@@ -137,10 +142,10 @@ struct RestTimerView: View {
                             // 次に挙げる重量×回数(今日入っている値。前回の複製から始まる)を大きく出し、
                             // 休憩中にプレートやピンの準備ができるようにする
                             HStack(alignment: .firstTextBaseline, spacing: 3) {
-                                Text(n.set.weight.isEmpty ? "–" : n.set.weight).numeric(26)
+                                Text(n.set.weight.isEmpty ? "–" : n.set.weight).numeric(isSmallWatch ? 22 : 26)
                                 Text(n.unit).font(.system(size: 12, weight: .semibold)).foregroundStyle(Palette.muted)
                                 Text("×").font(.system(size: 16, weight: .semibold)).foregroundStyle(Palette.muted)
-                                Text(n.set.reps.isEmpty ? "–" : n.set.reps).numeric(26)
+                                Text(n.set.reps.isEmpty ? "–" : n.set.reps).numeric(isSmallWatch ? 22 : 26)
                             }
                             .foregroundStyle(Palette.text)
                             if let p = n.set.prev {
@@ -401,15 +406,15 @@ struct SetEditView: View {
         // (シミュレータで、押した結果が次に押すまで出ない現象を確認)。46mm で1画面に収まる量にしてある
         Group {
             VStack(spacing: 4) {
-                if let p = row?.prev {
-                    Text("\(labels.prev) \(p.text)")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(Palette.muted)
-                }
-                ValueStepper(value: formatWeight(weight), caption: ex.weightLabel,
+                // 前回の値は、まとめて上に1行で出すのをやめ、重量・回数・RIR の各欄に分けて出す
+                // (「前回 70kg×7 RIR0」を読んでから、どの欄の話かを頭の中で対応させる手間を無くす)。
+                // 上の1行が無くなった分の高さで、46mm でも1画面に収まる
+                ValueStepper(value: formatWeight(weight), caption: ex.weightLabel, shortCaption: ex.unit,
+                        prev: row?.prev.map { "\(labels.prev) \(assistedMark($0))\($0.weight)" },
                         minus: { weight = max(0, weight - ex.step); weightTouched = true },
                         plus: { weight += ex.step; weightTouched = true })
                 ValueStepper(value: String(Int(reps)), caption: labels.reps,
+                        prev: row?.prev.map { "\(labels.prev) \($0.reps)" },
                         minus: { reps = max(0, reps - 1); repsTouched = true },
                         plus: { reps += 1; repsTouched = true })
                 if row?.warmup == true {
@@ -418,11 +423,19 @@ struct SetEditView: View {
                         .tint(Palette.green)
                         .padding(.top, 4)
                 } else {
-                    Text("\(labels.rirQuestion ?? "") (RIR)")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(Palette.muted)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.top, 2)
+                    HStack(spacing: 6) {
+                        Text("\(labels.rirQuestion ?? "") (RIR)")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(Palette.muted)
+                            .lineLimit(1).minimumScaleFactor(0.8)
+                        Spacer(minLength: 0)
+                        if let r = row?.prev?.rir {
+                            Text("\(labels.prev) \(r)")
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundStyle(Palette.text)
+                        }
+                    }
+                    .padding(.top, 2)
                     // いちばん押すボタンなので、スクロールせずに見える1行に並べる。
                     // 選択肢は iPhone と同じ 0/1/2/3+(3+ は 3 として保存)
                     HStack(spacing: 4) {
@@ -447,6 +460,13 @@ struct SetEditView: View {
         }
     }
 
+    // 前回が補助ありだったときの印(「補」)。Prev に専用の項目は無いので、表示用の text の先頭で見分ける
+    // (watch.js が text の先頭に labels.assisted を付けている)
+    private func assistedMark(_ p: WatchSnapshot.Prev) -> String {
+        guard let a = labels.assisted, !a.isEmpty, p.text.hasPrefix(a) else { return "" }
+        return a
+    }
+
     private func commit(rir: Int?) {
         let startedRest = store.commit(exId: ex.id, setIndex: index,
                                        weight: weightTouched ? formatWeight(weight) : (row?.weight ?? ""),
@@ -459,6 +479,8 @@ struct SetEditView: View {
 private struct ValueStepper: View {
     let value: String
     let caption: String
+    var shortCaption: String? = nil  // 幅が足りないときの見出し(例: 「重量 kg/片手」→「kg」)
+    var prev: String? = nil   // 前回の値(例: 前回 70)。欄の下に、見出しより明るく出す
     let minus: () -> Void
     let plus: () -> Void
 
@@ -468,7 +490,16 @@ private struct ValueStepper: View {
             VStack(spacing: 0) {
                 // 高さが足りないときに縮めない(小さい数字は手首で読みにくい)。横幅が足りないときだけ縮める
                 Text(value).numeric(26).lineLimit(1).minimumScaleFactor(0.6).fixedSize(horizontal: false, vertical: true)
-                Text(caption).font(.system(size: 10, weight: .semibold)).foregroundStyle(Palette.muted).lineLimit(1)
+                // 40mm では「重量 kg 前回 80」が入りきらず「前回…」と切れた。入る形を順に試し、
+                // 入らなければ見出しを短く(単位だけ)、それでも入らなければ前回の値だけにする
+                ViewThatFits(in: .horizontal) {
+                    captionRow(caption)
+                    if let shortCaption { captionRow(shortCaption) }
+                    if let prev {
+                        Text(prev).font(.system(size: 11, weight: .bold)).foregroundStyle(Palette.text)
+                    }
+                }
+                .lineLimit(1)
             }
             .frame(maxWidth: .infinity)
             stepButton("plus", action: plus)
@@ -477,6 +508,16 @@ private struct ValueStepper: View {
 
     private func stepButton(_ symbol: String, action: @escaping () -> Void) -> some View {
         StepPad(symbol: symbol, action: action)
+    }
+
+    private func captionRow(_ text: String) -> some View {
+        HStack(spacing: 4) {
+            Text(text).font(.system(size: 10, weight: .semibold)).foregroundStyle(Palette.muted)
+            if let prev {
+                Text(prev).font(.system(size: 11, weight: .bold)).foregroundStyle(Palette.text)
+            }
+        }
+        .fixedSize()
     }
 }
 

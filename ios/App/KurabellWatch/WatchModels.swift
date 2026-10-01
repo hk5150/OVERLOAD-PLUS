@@ -35,6 +35,7 @@ struct WatchSnapshot: Codable, Equatable {
         var addSet: String          // セットを追加
         var rirQuestion: String?    // あと何回できた?(RIR の入力の見出し)
         var next: String?           // 次 / Next(休憩画面の「次のセット」)
+        var assisted: String?       // 補 / A(補助ありの印。iPhone は以前から labels ごと送っている)
     }
 
     struct Exercise: Codable, Equatable, Identifiable {

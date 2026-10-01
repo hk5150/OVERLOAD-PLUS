@@ -47,6 +47,7 @@ const STRINGS = {
   "common.reload":     { ja: "再読み込み",   en: "Reload" },
   "common.retry":      { ja: "再試行",       en: "Retry" },
   "common.today":      { ja: "今日",         en: "Today" },
+  "common.details":    { ja: "詳しく",       en: "Details" },
   "common.daysAgo":    { ja: "{n}日前",      en: "{n}d ago" },
   "common.notSet":     { ja: "未設定",       en: "Not set" },
   "common.all":        { ja: "すべて",       en: "All" },
@@ -101,27 +102,26 @@ const STRINGS = {
   // ---- 比較の見出し ----
   "compare.recentDay": { ja: "直近{n}回の{day}",      en: "Last {n} {day} sessions" },
   "compare.recent":    { ja: "直近{n}回",             en: "Last {n} sessions" },
-  "compare.past":      { ja: "過去の自分",            en: "Your best" },
-  "compare.pastAt":    { ja: "過去の自分({date})",    en: "Your best ({date})" },
   "log.lastDate":      { ja: "前回 {date}",           en: "Last {date}" },
   // 元は「回連続」だけ<strong>で囲っていたが、英語だと語順が変わって太字の範囲を保てない。
   // 1文にまとめ、強調は span 側の fontWeight でかける。
   "log.streak":        { ja: "{w}{unit} で {n}セッション連続", en: "{n} sessions in a row at {w}{unit}" },
   "log.trend":         { ja: "推移 {list}",           en: "Trend {list}" },
-  "log.plateauAlert":  { ja: "⚠ 重量が{n}セッション連続で頭打ち。そろそろ上げどき", en: "⚠ Stuck at this weight for {n} sessions — time to add more" },
+  "log.plateauAlert":  { ja: "重量が{n}セッション連続で頭打ち。そろそろ上げどき", en: "Stuck at this weight for {n} sessions — time to add more" },
   // 同じ重量が続いていても回数が落ちている場合。「上げどき」とは言わず事実だけ渡す。
   // {best}は直近数回での最高であって「前々回」ではないので、矢印で繋がない。
   // 連続回数({n})は隣のlog.streakが既に言っているので繰り返さない。
   "log.repsDown":      { ja: "直近3セッションの最高 {best}回 / 前回 {prev}回", en: "Best {best} reps in the last 3 sessions, {prev} last time" },
-  "compare.now":       { ja: "今日の自分",            en: "Today" },
   "compare.est1RM":    { ja: "推定1RM",               en: "Est. 1RM" },
-  "compare.maxWeight": { ja: "最大重量",              en: "Top weight" },
-  "compare.prFirst":   { ja: "⚡ 初回記録 {v}{unit}", en: "⚡ First record {v}{unit}" },
-  "compare.prBeat":    { ja: "過去の自分に勝利(+{v}{unit})", en: "New best (+{v}{unit})" },
-  "compare.prTop":     { ja: "🏆 最大重量 {v}{unit}", en: "🏆 Top weight {v}{unit}" },
-  "compare.prToday":   { ja: "本日1RM更新済み",       en: "1RM updated today" },
+  "compare.line":      { ja: "推定1RM {now}{unit}(ベスト比 {diff}{unit})", en: "Est. 1RM {now}{unit} ({diff}{unit} vs best)" },
+  "compare.lineFirst": { ja: "初回記録 推定1RM {v}{unit}", en: "First record: est. 1RM {v}{unit}" },
+  "compare.lineBest":  { ja: "過去のベスト 推定1RM {v}{unit}", en: "Your best: est. 1RM {v}{unit}" },
+  "compare.win":       { ja: "過去の自分に勝利", en: "New best" },
+  "compare.bestWeight": { ja: "最大重量 {v}{unit}", en: "Top weight {v}{unit}" },
+  "compare.prTop":     { ja: "最大重量 {v}{unit}", en: "Top weight {v}{unit}" },
   "compare.prStale":   { ja: "1RM {n}日間未更新",     en: "1RM unchanged for {n}d" },
-  "compare.setPR":     { ja: "⚡ 1RM更新 +{v}{unit}", en: "⚡ 1RM +{v}{unit}" },
+  "compare.setPR":     { ja: "1RM更新 +{v}{unit}", en: "1RM +{v}{unit}" },
+  "set.repsDelta":     { ja: "{v}回", en: "reps {v}" },
   "compare.set1RM":    { ja: "推定1RM {v}{unit}",     en: "Est. 1RM {v}{unit}" },
 
   // ---- 記録タブ ----
@@ -132,6 +132,7 @@ const STRINGS = {
   "log.volumeRatio":   { ja: "{pct}%(基準 {v}{unit})", en: "{pct}% of baseline ({v}{unit})" },
   // ゲージ下の残量テキスト。labelには compare.recentDay/compare.recent の結果(例:「直近3回の胸」)が入る
   "log.volumeToGo":    { ja: "{label}の平均まであと{v}{unit}", en: "{v}{unit} to {label} avg" },
+  "log.volumeToGoShort": { ja: "あと{v}", en: "{v} to go" },
   "log.volumeOver":    { ja: "{label}の平均を{v}{unit}上回った", en: "{v}{unit} over {label} avg" },
   "log.tapToExpand":   { ja: "タップで拡大", en: "Tap to expand" },
   "log.saving":        { ja: "保存中…",    en: "Saving…" },
@@ -166,7 +167,9 @@ const STRINGS = {
   "log.history":       { ja: "履歴",                   en: "History" },
   "log.exerciseConfig": { ja: "種目の詳細設定",        en: "Exercise settings" },
   "log.removeExercise": { ja: "種目を削除",            en: "Remove exercise" },
-  "log.removeExerciseBtn": { ja: "✕ 削除",             en: "✕ Remove" },
+  "log.removeExerciseShort": { ja: "削除",              en: "Remove" },
+  "log.exerciseMenu":  { ja: "この種目の操作",        en: "Exercise actions" },
+  "log.exerciseConfigShort": { ja: "設定",            en: "Settings" },
   "log.swapHint":      { ja: "別の種目に差し替えます(入力中のセットは、差し替え先の種目の前回記録に入れ替わります)。", en: "Swap in another exercise. Sets in progress are replaced with that exercise's last session." },
   "log.searchExercise": { ja: "種目を検索",            en: "Search exercises" },
   "log.noHistory":     { ja: "この種目の過去記録はまだありません。", en: "No past records for this exercise yet." },
@@ -175,8 +178,7 @@ const STRINGS = {
   "log.restoredDraft": { ja: "入力途中の記録を復元しました。続きから記録できます。", en: "Restored your in-progress workout. You can pick up where you left off." },
   "log.discardDraft":  { ja: "復元した記録を破棄して、最初からやり直しますか?", en: "Discard the restored workout and start over?" },
   "log.discard":       { ja: "破棄する",               en: "Discard" },
-  "log.backupNudge":   { ja: "記録は端末内にのみ保存されています。念のためファイルに書き出しておきましょう。", en: "Your records live only on this device. Export a backup to be safe." },
-  "log.backupNow":     { ja: "今すぐバックアップ",     en: "Back up now" },
+  "log.backupNow":     { ja: "書き出す",               en: "Export" },
   "log.later":         { ja: "あとで",                 en: "Later" },
   "log.neverBackedUp": { ja: "まだ一度もバックアップしていません。", en: "You have never made a backup." },
   "log.lastBackup":    { ja: "前回のバックアップから{n}日経過しています。", en: "{n} days since your last backup." },
@@ -250,9 +252,9 @@ const STRINGS = {
   "rest.startLine2":   { ja: "開始",                   en: "rest" },
   // ゲージの3セグメント(1分ごと・緑/黄/赤)と対になる声かけ。経過時間そのものは
   // すぐ上の数字が出しているので、この行は「今どうすべきか」だけを言う。
-  "rest.coach1":       { ja: "しっかり休め",           en: "Rest up" },
-  "rest.coach2":       { ja: "そろそろ始めろ",         en: "Time to move" },
-  "rest.coach3":       { ja: "パンプが冷めるぞ",       en: "Your pump's fading" },
+  "rest.coach1":       { ja: "しっかり休憩",           en: "Rest up" },
+  "rest.coach2":       { ja: "そろそろ次のセットへ",   en: "Time for your next set" },
+  "rest.coach3":       { ja: "パンプが冷める前に",     en: "Go before your pump fades" },
   "rest.finish":       { ja: "終了",                   en: "Finish" },
   "watch.startOnPhone": { ja: "iPhoneで記録を開始すると、ここで入力できます", en: "Start a workout on your iPhone to log sets here" },
   "watch.next":        { ja: "次",                     en: "Next" },
@@ -275,13 +277,12 @@ const STRINGS = {
   "guide.step2Body":   { ja: "「あと何回できた?」を入力したセットが実施済みとして記録されます。セット番号のタップでウォームアップ(W)や補助あり(補)に切り替え、連続する種目はスーパーセットにまとめられます。休憩は入力後に自動でタイマーが動き、1分ごとに通知音が鳴ります。", en: "A set counts as done once you enter the reps you had left. Tap the set number to mark it warm-up (W) or assisted (A), and link consecutive exercises into a superset. The rest timer starts on its own and chimes every minute." },
   "guide.step3":       { ja: "③ 伸びを確認する",       en: "③ Watch your progress" },
   "guide.step3Lead":   { ja: "Max 1RMと今日の1RMがその場で比較できます。", en: "Compare your best 1RM against today's, right on the spot." },
-  "guide.step3Body":   { ja: "セットごとに推定1RMが表示され、自己ベストを超えると更新バッジが出ます。何日ベストを更新していないかも分かるので、停滞にすぐ気付けます。\n\n⚠️ データは端末内だけに保存されます。設定タブから定期的にバックアップを書き出してください。", en: "Each set shows its estimated 1RM, with a badge when you beat your best. You can also see how long it has been since your last PR, so plateaus are obvious.\n\n⚠️ Your data is stored only on this device. Export a backup regularly from the Settings tab." },
+  "guide.step3Body":   { ja: "種目ごとに推定1RMと過去のベストとの差が表示され、セットで自己ベストを超えると更新バッジが出ます。ベストを長く更新していないときも知らせるので、停滞にすぐ気付けます。\n\nデータは端末内だけに保存されます。設定タブから定期的にバックアップを書き出してください。", en: "Each exercise shows its estimated 1RM against your best, with a badge on the set that beats it. It also tells you when your best has stood for a long time, so plateaus are obvious.\n\nYour data is stored only on this device. Export a backup regularly from the Settings tab." },
   "guide.start":       { ja: "はじめる",               en: "Get started" },
   "guide.next":        { ja: "次へ",                   en: "Next" },
   "guide.skip":        { ja: "スキップ",               en: "Skip" },
 
   // ---- 分割タブ ----
-  "split.title":       { ja: "分割法",                 en: "Split" },
   "split.rotation":    { ja: "ローテーション方式:保存するたびに次のDayへ進みます。", en: "Rotation: every save advances to the next day." },
   "split.noSplitHint": { ja: "分割を作らなくても、種目を選んですぐ記録を始められます。分割は後からいつでも作れます。", en: "You can start logging right away without a split — you can always build one later." },
   "split.logNow":      { ja: "今すぐ記録する",         en: "Start logging" },
@@ -339,7 +340,7 @@ const STRINGS = {
   "history.count":     { ja: "履歴 {n}回",             en: "History · {n}" },
   "history.empty":     { ja: "まだ記録がありません。", en: "No records yet." },
   // 分割名が付いた日は名前が、付いていない日は赤い点が出る(セルの実装参照)。
-  "history.calendarHint": { ja: "赤い文字・点=トレーニング日。タップでその日の記録を表示", en: "Red label or dot = training day. Tap to see that day's workout." },
+  "history.calendarHint": { ja: "色の付いた日=トレーニング日。タップでその日の記録を表示", en: "Colored days = training days. Tap one to see that day's workout." },
   "history.tapAgain":  { ja: "日付をもう一度タップで解除", en: "Tap the date again to clear" },
   "history.deleteDay": { ja: "この記録を削除",         en: "Delete this workout" },
   "history.deleteWhole": { ja: "この日の記録をまるごと削除", en: "Delete this entire workout" },
@@ -353,7 +354,8 @@ const STRINGS = {
   "history.emptyAfterEdit": { ja: "有効なセットがありません。この記録を削除しますか?", en: "No valid sets left. Delete this workout?" },
 
   // ---- 自己ベスト ----
-  "pr.title":          { ja: "🏆 PR(自己ベスト)",      en: "🏆 Personal bests" },
+  "pr.title":          { ja: "PR(自己ベスト)",      en: "Personal bests" },
+  "pr.aboutTitle":     { ja: "PRと推定1RMについて",   en: "About PRs and estimated 1RM" },
   "pr.noteDef":        { ja: "PR=実際に挙げた最大重量。推定1RMは重量×(1+回数/30)による参考値です。", en: "PR is the heaviest weight you actually lifted. Estimated 1RM is a reference figure: weight × (1 + reps/30)." },
   "pr.note":           { ja: "ダンベル種目は両手合計、自重種目は体重を含む実効重量で表示します。", en: "Dumbbell lifts are shown as both hands combined; bodyweight lifts include your bodyweight." },
   "pr.achievedOn":     { ja: " ({date}に達成)",        en: " (set {date})" },
@@ -364,6 +366,8 @@ const STRINGS = {
   "pr.weightByReps":   { ja: "{w}{unit}×{reps}回",     en: "{w}{unit} × {reps}" },
 
   // ---- ペイウォール(記録タブ、試用10回を超えたとき) ----
+  "trial.left":        { ja: "無料で保存できる記録は、あと{n}回です", en: "Free workouts left: {n}" },
+  "trial.buy":         { ja: "購入", en: "Unlock" },
   "paywall.title":     { ja: "試用は10回までです",     en: "You've reached the 10-workout trial limit" },
   "paywall.body":      { ja: "ここまでの記録・比較・グラフ・バックアップはこのまま何回でもご覧いただけます。今日の記録を保存するには、フル解除の購入が必要です。", en: "Everything you've logged — comparisons, charts, backups — stays available. To save today's workout, unlock the full version." },
   "paywall.unlock":    { ja: "{price}でフル解除",       en: "Unlock for {price}" },
@@ -373,7 +377,6 @@ const STRINGS = {
   "paywall.pending":   { ja: "購入の承認待ちです。承認されると自動でフル解除されます。", en: "Waiting for approval. The full version unlocks automatically once it's approved." },
 
   // ---- 設定タブ ----
-  "settings.title":    { ja: "設定",                   en: "Settings" },
   "settings.iap.title":    { ja: "購入",               en: "Purchase" },
   "settings.iap.unlocked": { ja: "フル解除済みです。試用の記録上限はありません。", en: "You've unlocked the full version. There's no trial limit." },
   "settings.iap.unlock":   { ja: "{price}でフル解除を購入", en: "Unlock full version for {price}" },
@@ -391,10 +394,11 @@ const STRINGS = {
   "settings.unitDesc": { ja: "表示と入力の単位だけが変わります。記録は常にkgで保存されるので、切り替えても過去の記録は書き換わりません。", en: "This changes display and input only. Records are always stored in kg, so switching does not rewrite your past workouts." },
   "unit.kg":           { ja: "kg",                     en: "kg" },
   "unit.lb":           { ja: "lb",                     en: "lb" },
-  "settings.guideAgain": { ja: "📖 使い方ガイドをもう一度見る", en: "📖 Show the guide again" },
+  "settings.guideAgain": { ja: "使い方ガイドをもう一度見る", en: "Show the guide again" },
   "settings.bodyweight": { ja: "体重(自重換算・カロリー計算に使用)", en: "Bodyweight (used for bodyweight lifts and calories)" },
   // ヘルスケア連携(iOSのみ)。何を読み書きするかを画面上で明示する(App Store Guideline 2.5.1)。
   "settings.health.title": { ja: "ヘルスケアと連携", en: "Connect to Apple Health" },
+  "settings.health.summary": { ja: "ヘルスケアから体重を読み込み、ワークアウトと体重を記録します。Apple Watch では心拍数と消費カロリーも記録します。", en: "Reads your body weight from Health and saves your workouts and body weight. On Apple Watch, heart rate and active energy are recorded too." },
   "settings.health.desc": { ja: "ワークアウトを「従来型筋力トレーニング」として記録し、体重を読み込み・記録します。iPhoneから書き込むワークアウトは時刻のみです(消費カロリーは記録しません)。Apple Watchにアプリを入れている場合は、記録を始めるとWatchでワークアウトが始まり、心拍数と消費カロリー付きでWatchが記録します。オンにする前の記録は書き込みません。このアプリで記録を削除すると、ヘルスケアからも削除されます。", en: "Saves workouts as Traditional Strength Training, and reads and saves your body weight. Workouts written from iPhone have times only, no calories. If the app is on your Apple Watch, starting a workout also starts one on the watch, which records it with heart rate and active energy. Workouts from before you turn this on are not added. Deleting a workout in this app also removes it from Health." },
   "settings.health.denied": { ja: "ヘルスケアへの書き込みが一部許可されていません。ヘルスケアアプリの右上のアイコン →「App」→ KURABELL で許可してください。", en: "Some Health write permissions are off. Allow it in the Health app: tap your profile picture → Apps → KURABELL." },
   "settings.health.failed": { ja: "ヘルスケアに接続できませんでした。", en: "Could not connect to Apple Health." },
@@ -424,6 +428,8 @@ const STRINGS = {
 
   // ---- バックアップ ----
   "backup.title":      { ja: "バックアップ",           en: "Backup" },
+  "backup.lastAt":     { ja: "最終: {date}",           en: "Last: {date}" },
+  "backup.never":      { ja: "まだ書き出していません", en: "Not exported yet" },
   "backup.desc":       { ja: "記録・分割・カスタム種目・体重をまとめてファイルに保存できます。機種変更や、データが消えたときの復元に使えます。", en: "Save your workouts, split, custom exercises and bodyweight to one file — for a new phone, or if data is ever lost." },
   "backup.export":     { ja: "⬇ バックアップを書き出す(JSON)", en: "⬇ Export backup (JSON)" },
   "backup.import":     { ja: "⬆ バックアップから復元する", en: "⬆ Restore from backup" },

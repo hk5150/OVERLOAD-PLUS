@@ -57,7 +57,7 @@
   * { -webkit-tap-highlight-color: transparent; }
   #boot { padding-top: calc(24px + env(safe-area-inset-top)); display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 70vh; gap: 14px; padding: 24px; text-align: center; }
   #boot .logo { font-family: 'Barlow Condensed', sans-serif; font-weight: 800; font-size: 34px; letter-spacing: 1px; }
-  #boot .msg { color: #8E939A; font-size: 13px; line-height: 1.7; }
+  #boot .msg { color: #A3A8B0; font-size: 13px; line-height: 1.7; }
   #boot .err { color: #F5B8B3; background: #3A2224; border-radius: 10px; padding: 12px; font-size: 12px; text-align: left; max-width: 420px; word-break: break-all; line-height: 1.7; }
   #boot button { background: #E2453C; color: #fff; border: none; border-radius: 10px; padding: 12px 20px; font-size: 14px; font-weight: 700; font-family: inherit; cursor: pointer; }
   .spinner { width: 22px; height: 22px; border: 2px solid #2E3237; border-top-color: #E2453C; border-radius: 50%; animation: spin .8s linear infinite; }
@@ -78,7 +78,7 @@
       font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', sans-serif;
     }
     #rotate-lock .title { font-size: 16px; font-weight: 700; }
-    #rotate-lock .msg { color: #8E939A; font-size: 13px; line-height: 1.7; }
+    #rotate-lock .msg { color: #A3A8B0; font-size: 13px; line-height: 1.7; }
   }
 </style>
 </head>
@@ -295,7 +295,10 @@ const { LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContain
 // ================= デザイントークン =================
 const C = {
   bg: "#141517", surface: "#1E2023", surface2: "#26292D", border: "#2E3237",
-  text: "#F2F0EB", muted: "#8E939A",
+  // muted は補助文字の色。#8E939A だとジムの照明の下で 11〜12px の文字が読みにくかったので一段明るくした
+  text: "#F2F0EB", muted: "#A3A8B0",
+  // 色の役割: 赤=主要操作と削除、黄=余力(RIR)・インターバル・注意、緑=前回を超えた印、
+  // 青=スーパーセットと「補助あり」の印だけ(以前は選択中のチップや枠など、あちこちに使っていた)
   red: "#E2453C", blue: "#3D7BD9", yellow: "#E8B33C", green: "#4CAF6E", grey: "#5A6069",
 };
 // 本文用フォント。<head>のbodyと同じ指定。Barlow Condensed(数字用)の中に
@@ -310,7 +313,7 @@ const WATCH_LAST_SAVED_KEY = "watch-last-saved-v1";
 const PRE_IMPORT_BACKUP_KEY = "workout-log-v1-pre-import"; // バックアップ復元前のデータ退避(復元に失敗した場合の保険)
 // ヘッダーのバージョンバッジとバックアップのappVersionで共有する単一の定数。
 // sw.js の CACHE 定数とは tests/version.test.js が数字の一致を機械的に縛っている(CLAUDE.md参照)。
-const APP_VERSION = "v135";
+const APP_VERSION = "v136";
 // store(保存レイヤ)は src/domain/storage.js へ移設(テストのため)。
 // LIBSで<script src>読み込み済みなのでグローバルの store をそのまま参照できる。
 const uid = () => Math.random().toString(36).slice(2, 8);
@@ -570,7 +573,7 @@ const SPLIT_PRESETS = [
 
 // ================= 判定タイプ(今日のメニューが前回記録の引き継ぎか初回かのバッジ) =================
 const JUDGE = {
-  new_start: { labelKey: "judge.new", color: C.blue },
+  new_start: { labelKey: "judge.new", color: C.green },
   previous:  { labelKey: "judge.prev", color: C.grey },
 };
 
@@ -590,10 +593,11 @@ const cfgInput = {
   width: 46, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8,
   padding: "5px 2px", color: C.text, textAlign: "center", fontSize: 16, fontFamily: "inherit",
 };
-const chip = (active, activeColor = C.blue) => ({
+// 選択中のチップは白地に黒文字(以前は青)。色は役割を持たせた所(赤=主要操作など)だけに使う
+const chip = (active, activeColor = C.text) => ({
   padding: "6px 12px", borderRadius: 999, fontSize: 13, cursor: "pointer", fontFamily: "inherit",
   border: `1px solid ${active ? activeColor : C.border}`, background: active ? activeColor : C.surface2,
-  color: active ? "#fff" : C.muted, fontWeight: active ? 800 : 400,
+  color: active ? (activeColor === C.text ? C.bg : "#fff") : C.muted, fontWeight: active ? 800 : 400,
 });
 // 目標回数の表示: 全セット同じなら「10回×3」、違えば「10/9/9回」
 const repsLabel = (arr) => {
@@ -650,6 +654,40 @@ function NumInput({ value, onChange, onFocus, onBlur, inputMode = "decimal", sty
     />
   );
 }
+
+// 線画アイコン。絵文字(🏆⚡📌💾🗑など)は端末によって見た目が変わり、暗い画面で浮くので置き換えた。
+// 初回ガイドの GuideArt と同じく、自前の SVG で持つ(外部のアイコンフォントは読み込まない)。
+const ICON_PATHS = {
+  more:    <><circle cx="5" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.6" fill="currentColor" stroke="none"/></>,
+  pin:     <><path d="M9 4h6l-1 6 3 3H7l3-3z"/><path d="M12 13v7"/></>,
+  bolt:    <path d="M13 3 5 14h6l-1 7 8-11h-6z"/>,
+  trophy:  <><path d="M8 4h8v5a4 4 0 0 1-8 0z"/><path d="M8 6H5a3 3 0 0 0 3 4M16 6h3a3 3 0 0 1-3 4M12 13v4M8 20h8"/></>,
+  warn:    <><path d="M12 4 2.5 20h19z"/><path d="M12 10v4M12 17v.5"/></>,
+  book:    <><path d="M4 5a2 2 0 0 1 2-2h5v17H6a2 2 0 0 0-2 2z"/><path d="M20 5a2 2 0 0 0-2-2h-5v17h5a2 2 0 0 1 2 2z"/></>,
+  save:    <><path d="M5 4h11l3 3v13H5z"/><path d="M8 4v5h7V4M8 20v-6h8v6"/></>,
+  trash:   <><path d="M4 7h16M10 11v6M14 11v6"/><path d="M6 7l1 13h10l1-13M9 7V4h6v3"/></>,
+  youtube: <><rect x="3" y="6" width="18" height="12" rx="3"/><path d="M10.5 9.5v5l4-2.5z" fill="currentColor"/></>,
+  split:   <><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 10v10"/></>,
+  log:     <><path d="M8.5 12h7"/><rect x="5" y="6.5" width="3.5" height="11" rx="1.2"/><rect x="15.5" y="6.5" width="3.5" height="11" rx="1.2"/><path d="M2.5 10v4M21.5 10v4"/></>,
+  history: <><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></>,
+  settings:<><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></>,
+};
+function Icon({ name, size = 14, color = "currentColor", style }) {
+  return (
+    <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke={color} strokeWidth={1.9}
+      strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"
+      style={{ display: "inline-block", verticalAlign: "-0.15em", flexShrink: 0, ...style }}>
+      {ICON_PATHS[name]}
+    </svg>
+  );
+}
+
+// グラフの縦軸の目盛り。千以上は 12k のように詰める(幅40pxに収めるため)
+const compactTick = (v) => Math.abs(v) >= 1000 ? `${Math.round(v / 100) / 10}k` : `${Math.round(v * 10) / 10}`;
+// グラフの点は最新だけ打つ。Recharts の dot は要素を返す必要があるので、他は空の <g> にする
+const lastDot = (len, color) => (p) => p.index === len - 1
+  ? <circle key={p.key} cx={p.cx} cy={p.cy} r={4.5} fill={color} stroke={C.surface} strokeWidth={2} />
+  : <g key={p.key} />;
 
 function JudgeBadge({ type }) {
   const j = JUDGE[type] || { label: "―", color: C.grey };
@@ -934,6 +972,9 @@ function App() {
   const [swapMuscle, setSwapMuscle] = useState("");  // 種目差し替え時の部位フィルター
   const [openSetKey, setOpenSetKey] = useState(null); // 展開中のセット "exId:index"
   const [openHist, setOpenHist] = useState({});       // 種目カードの履歴パネル開閉
+  // 種目カードの「⋯」(並べ替え・AI相談・変更・履歴・設定・YouTube・削除)。セットを打つ間は使わない操作なので
+  // 普段は畳んでおく(以前は毎カードで1行を占め、赤い YouTube が「開始」「削除」と同格に見えていた)
+  const [openMenu, setOpenMenu] = useState({});
   const [restFull, setRestFull] = useState(false);    // インターバルの全画面表示
   const [showSplitHistory, setShowSplitHistory] = useState(false); // 上部バーのボリュームタップ→同一分割の履歴一覧
   const splitHistoryModalRef = useRef(null);
@@ -2141,7 +2182,7 @@ function App() {
       setSaving(false);
       return;
     }
-    // 評価ダイアログを頼むかの材料。記録画面の「YOU WIN!」と同じ条件(前回までのベストがある種目で推定1RMを超えた)。
+    // 評価ダイアログを頼むかの材料。記録画面の比較行が緑(「過去の自分に勝利」)になるのと同じ条件(前回までのベストがある種目で推定1RMを超えた)。
     // prMapは保存前の履歴から作られているので、persistより前に出しておく。
     const beatPrevious = today.some(ex => {
       const best = prMap[ex.name]?.best1RM || 0;
@@ -2952,6 +2993,14 @@ function App() {
   // 上部バーの表示条件。ノッチ帯を誰が塞ぐか(バー or header + 目隠し)がこれで決まるので、
   // 参照する3箇所で条件がずれないよう1つにまとめる。
   const barVisible = view === "log" || restStartAt != null;
+  // 案内(「書き出す ›」「購入 ›」)から設定タブの該当の欄へ飛ぶ。購入欄・バックアップ欄は設定の下の方にあるので、
+  // タブを切り替えるだけでは見えない。切り替え直後は欄がまだ描画されていないので、次のフレームまで待つ
+  const goToSettings = (anchorId) => {
+    setView("settings");
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      document.getElementById(anchorId)?.scrollIntoView({ block: "start", behavior: "smooth" });
+    }));
+  };
 
   // 「現在の種目へ」ボタンの飛び先。RIRが入って初めて実施済みなので、まだRIRを入れていない
   // セットを持つ最初の種目を「今やっている種目」とみなす(ウォームアップはRIR不要なので数えない)。
@@ -2971,7 +3020,7 @@ function App() {
   });
 
   // 現在の種目が画面に見えているならボタンは出さない。固定ボタンは右下に居座るので、
-  // 出しっぱなしにすると種目名の行のYouTubeボタンやセット行の×を覆って押せなくする
+  // 出しっぱなしにすると種目名の行の「⋯」やセット行の×を覆って押せなくする
   // (実際に覆っているのを確認した)。見えていれば戻る必要もない。
   const [currentExVisible, setCurrentExVisible] = useState(true);
   useEffect(() => {
@@ -3241,42 +3290,46 @@ function App() {
                   ゲージ全幅を基準の125%とし、80%の位置(=基準ちょうど)に切り欠きを置く。
                   高さは常に確保する。条件表示のままだと最初のRIRを入れた瞬間にバーが16px伸びて、
                   stickyバーの下にある入力欄が丸ごとずれてしまう。 */}
-              <div style={{ height: 5, marginTop: 5 }}>
-                {compareBase && compareBase.avg > 0 && (() => {
-                  const ratio = liveVolume / compareBase.avg;
-                  return (
-                    // ゲージは純粋に視覚的なので、文字で持っていた比較情報はaria-valuetextに移す
-                    // (文字表示をやめた分、読み上げからも消えてしまうため)。
-                    <div role="progressbar" aria-label={t("log.volume")}
-                      aria-valuemin={0} aria-valuemax={100}
-                      aria-valuenow={Math.max(0, Math.min(Math.round(ratio * 100), 100))}
-                      aria-valuetext={t("log.volumeRatio", {
-                        pct: Math.round(ratio * 100),
-                        v: Math.round(toU(compareBase.avg)).toLocaleString(),
-                        unit: uLabel(),
-                      })}
-                      style={{ height: "100%", borderRadius: 999, background: C.border, position: "relative", overflow: "hidden" }}>
-                      <div style={{
-                        // 両側クランプ。NumInputはtype="text"で負の重量を打てるため、片側だけだと
-                        // width:"-32%"という不正値になり、宣言ごと無視されてゲージが満杯に見える。
-                        width: `${Math.max(0, Math.min(ratio / 1.25, 1)) * 100}%`, height: "100%",
-                        background: ratio >= 1 ? C.green : C.blue, transition: "width .3s linear",
-                      }} />
-                      <div style={{ position: "absolute", left: "80%", top: 0, bottom: 0, width: 2, background: C.surface2 }} />
-                    </div>
-                  );
-                })()}
-              </div>
-              {/* 基準の説明をゲージの下に移動。以前はラベル行に「(vs 直近3回の胸)」と
-                  付いていたが、記録開始時点でボタン下にラベルと同じ高さで収めるのが窮屈だった。
-                  ここも高さを常に確保する(理由はゲージと同じ、条件表示だとレイアウトが動く)。 */}
-              <div style={{ height: 13, marginTop: 3, fontSize: 10, color: C.muted, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, height: 15, marginTop: 5 }}>
+                <div style={{ flex: 1, minWidth: 0, height: 5 }}>
+                  {compareBase && compareBase.avg > 0 && (() => {
+                    const ratio = liveVolume / compareBase.avg;
+                    return (
+                      // ゲージは純粋に視覚的なので、文字で持っていた比較情報はaria-valuetextに移す
+                      <div role="progressbar" aria-label={t("log.volume")}
+                        aria-valuemin={0} aria-valuemax={100}
+                        aria-valuenow={Math.max(0, Math.min(Math.round(ratio * 100), 100))}
+                        aria-valuetext={t("log.volumeRatio", {
+                          pct: Math.round(ratio * 100),
+                          v: Math.round(toU(compareBase.avg)).toLocaleString(),
+                          unit: uLabel(),
+                        })}
+                        style={{ height: "100%", borderRadius: 999, background: C.border, position: "relative", overflow: "hidden" }}>
+                        <div style={{
+                          // 両側クランプ。NumInputはtype="text"で負の重量を打てるため、片側だけだと
+                          // width:"-32%"という不正値になり、宣言ごと無視されてゲージが満杯に見える。
+                          width: `${Math.max(0, Math.min(ratio / 1.25, 1)) * 100}%`, height: "100%",
+                          background: ratio >= 1 ? C.green : C.muted, transition: "width .3s linear",
+                        }} />
+                        <div style={{ position: "absolute", left: "80%", top: 0, bottom: 0, width: 2, background: C.surface2 }} />
+                      </div>
+                    );
+                  })()}
+                </div>
+                {/* 基準(直近N回の平均)までの残り。以前は「直近3回のPushの平均まであと5,088kg」を10pxで出していて
+                    ジムでは読めなかった。数字だけをゲージの右端に置き、基準の説明は title と読み上げに回す。
+                    ゲージと同じ行に置くので、出る・出ないで高さは変わらない。 */}
                 {compareBase && compareBase.avg > 0 && (() => {
                   const diff = liveVolume - compareBase.avg;
                   const v = Math.round(toU(Math.abs(diff))).toLocaleString();
-                  return diff >= 0
+                  const full = diff >= 0
                     ? t("log.volumeOver", { label: compareBase.avgLabel, v, unit: uLabel() })
                     : t("log.volumeToGo", { label: compareBase.avgLabel, v, unit: uLabel() });
+                  return (
+                    <span title={full} aria-label={full} style={{ fontSize: 12, fontWeight: 700, whiteSpace: "nowrap", color: diff >= 0 ? C.green : C.muted }}>
+                      {diff >= 0 ? `+${v}` : t("log.volumeToGoShort", { v })}
+                    </span>
+                  );
                 })()}
               </div>
             </div>
@@ -3287,7 +3340,8 @@ function App() {
                 <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: 30, lineHeight: 1, color: C.yellow }}>
                   {fmtClock(restElapsed)}
                 </div>
-                <div style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>{t("log.tapToExpand")}</div>
+                {/* 一度使えば分かるので、使い始め(記録3回未満)のときだけ出す */}
+                {workouts.length < 3 && <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>{t("log.tapToExpand")}</div>}
               </div>
             ) : (
               <button onClick={startRest} style={{
@@ -3317,11 +3371,15 @@ function App() {
         padding: "16px 16px 12px", display: "flex", justifyContent: "space-between", alignItems: "flex-start",
         paddingTop: barVisible ? 16 : "calc(16px + env(safe-area-inset-top))",
       }}>
-        <div>
-          <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: 26, letterSpacing: 0.5, lineHeight: 1.15 }}>
-            KURABELL<span style={{ fontSize: 17 }}> Workout Log</span>
-            <span style={{ fontFamily: FONT_UI, fontSize: 12, fontWeight: 700, color: C.green, marginLeft: 8, verticalAlign: "middle" }}>{APP_VERSION}</span>
+        {/* 見出しはアプリのマーク+いまのタブ名。以前は全タブ共通の「KURABELL Workout Log」で、
+            どの画面にいるかを伝えないまま毎画面で1行を使っていた。マークは配信済みの apple-touch-icon.png を
+            使う(新しいファイルを足すと LIBS / APP_ASSETS / DOMAIN_FILES を揃える必要があるため)。 */}
+        <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+          <img src="apple-touch-icon.png" alt="KURABELL" width="30" height="30" style={{ borderRadius: 7, flexShrink: 0, display: "block" }} />
+          <div style={{ fontSize: 21, fontWeight: 900, lineHeight: 1.2, letterSpacing: 0.3 }}>
+            {t(`tab.${view}`)}
           </div>
+          <span style={{ fontSize: 11, fontWeight: 700, color: C.muted, marginLeft: 2, alignSelf: "center" }}>{APP_VERSION}</span>
         </div>
         {(saveStatus === "saving" || saveStatus === "saved") && (
           <div role="status" style={{ fontSize: 12, color: saveStatus === "saved" ? C.green : C.muted, marginTop: 6 }}>
@@ -3342,7 +3400,7 @@ function App() {
       {/* 入力途中の記録を復元した通知 */}
       {draftRestored && today.length > 0 && (
         <div style={{ margin: "0 16px 12px", padding: 12, borderRadius: 10, background: "#1E3226", border: `1px solid ${C.green}`, display: "flex", gap: 10, alignItems: "flex-start" }}>
-          <span style={{ fontSize: 15, flexShrink: 0 }}>💾</span>
+          <span style={{ flexShrink: 0, color: "#A8E6BC", paddingTop: 2 }}><Icon name="save" size={16} /></span>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 13, color: "#A8E6BC", lineHeight: 1.6, marginBottom: 8 }}>
               {t("log.restoredDraft")}
@@ -3365,38 +3423,30 @@ function App() {
       {updateReady && (
         <div role="status" style={{
           margin: "0 16px 12px", padding: "10px 12px", borderRadius: 10,
-          background: C.surface, border: `1px solid ${C.blue}`, display: "flex", gap: 10, alignItems: "center",
+          background: C.surface, border: `1px solid ${C.border}`, display: "flex", gap: 10, alignItems: "center",
         }}>
           <div style={{ flex: 1, minWidth: 0, fontSize: 13, color: C.text, lineHeight: 1.6 }}>{t("update.ready")}</div>
-          <button onClick={() => location.reload()} style={{ ...btn(C.blue), padding: "7px 14px", fontSize: 13, flexShrink: 0 }}>
+          <button onClick={() => location.reload()} style={{ ...btn(C.red), padding: "7px 14px", fontSize: 13, flexShrink: 0 }}>
             {t("update.reload")}
           </button>
         </div>
       )}
 
-      {/* バックアップ推奨バナー */}
-      {backupNag && (
+      {/* バックアップ推奨。以前は黄色い枠の帯(4行)で、分割・設定の最上部を毎回占めていた。
+          条件(記録3件以上で未実施 or 30日以上前)は同じまま、1行にした。 */}
+      {/* 設定タブではバックアップ欄そのものが見えているので出さない */}
+      {backupNag && view !== "settings" && (
         <div style={{
-          margin: "0 16px 12px", padding: 12, borderRadius: 10,
-          background: "#3A3222", border: `1px solid ${C.yellow}`, display: "flex", gap: 10, alignItems: "flex-start",
+          margin: "0 16px 12px", padding: "8px 8px 8px 12px", borderRadius: 10,
+          background: C.surface, border: `1px solid ${C.border}`, display: "flex", gap: 8, alignItems: "center",
         }}>
-          <span style={{ fontSize: 16, flexShrink: 0, lineHeight: 1.3 }}>💾</span>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 13, color: C.text, lineHeight: 1.6, marginBottom: 8 }}>
-              {backupNag.text}<br />
-              <span style={{ color: C.muted, fontSize: 13 }}>
-                {t("log.backupNudge")}
-              </span>
-            </div>
-            <div style={{ display: "flex", gap: 8 }}>
-              <button onClick={() => { setView("settings"); }} style={{ ...btn(C.yellow, "#141517"), padding: "7px 14px", fontSize: 13 }}>
-                {t("log.backupNow")}
-              </button>
-              <button onClick={() => setHideBackupNag(true)} style={{ ...btn("transparent", C.muted), padding: "7px 10px", fontSize: 13 }}>
-                {t("log.later")}
-              </button>
-            </div>
-          </div>
+          <span style={{ color: C.yellow, display: "grid" }}><Icon name="save" size={16} /></span>
+          <div style={{ flex: 1, minWidth: 0, fontSize: 13, color: C.text, lineHeight: 1.4 }}>{backupNag.text}</div>
+          <button onClick={() => goToSettings("settings-backup")} style={{ ...btn("transparent", C.yellow), padding: "6px 6px", fontSize: 13, whiteSpace: "nowrap" }}>
+            {t("log.backupNow")} ›
+          </button>
+          <button onClick={() => setHideBackupNag(true)} aria-label={t("log.later")} className="tapArea"
+            style={{ ...btn("transparent", C.muted), padding: "4px 6px", fontSize: 15, lineHeight: 1 }}>✕</button>
         </div>
       )}
 
@@ -3404,9 +3454,9 @@ function App() {
       {view === "log" && (
         <div style={{ padding: "0 16px" }}>
           {todayDay && (
-            <div style={{ background: C.surface, border: `1px solid ${C.blue}`, borderRadius: 14, padding: 14, marginBottom: 14 }}>
+            <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: 14, marginBottom: 14 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <div style={{ fontSize: 12, color: C.blue, fontWeight: 800 }}>{t("split.session", { n: split.cursor % split.days.length + 1, total: split.days.length, name: splitName(split.name) })}</div>
+                <div style={{ fontSize: 12, color: C.muted, fontWeight: 800 }}>{t("split.session", { n: split.cursor % split.days.length + 1, total: split.days.length, name: splitName(split.name) })}</div>
               </div>
               <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 26, fontWeight: 800, margin: "4px 0 8px" }}>{dayName(todayDay.name)}</div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
@@ -3435,7 +3485,17 @@ function App() {
                       <span style={{ fontSize: 13, minWidth: 0, lineHeight: 1.4 }}>
                         {exName(p.name)}<span style={{ color: C.muted, fontSize: 12, marginLeft: 6 }}>{muscleName(p.muscle)}</span>
                       </span>
-                      <span style={{ flexShrink: 0 }}><JudgeBadge type={it.type} /></span>
+                      {/* 以前は全行に同じ「前回」のピルが付いていて情報が無かった。最後にやってからの日数を出す
+                          (初めての種目は従来どおり「初回」のバッジ) */}
+                      <span style={{ flexShrink: 0 }}>
+                        {(() => {
+                          if (it.type === "new_start") return <JudgeBadge type={it.type} />;
+                          const last = exerciseInsight(p.name)?.date;
+                          if (!last) return <JudgeBadge type={it.type} />;
+                          const d = Math.max(0, Math.floor((Date.now() - new Date(last).getTime()) / 86400000));
+                          return <span style={{ fontSize: 12, color: C.yellow, fontWeight: 700 }}>{d === 0 ? t("common.today") : t("common.daysAgo", { n: d })}</span>;
+                        })()}
+                      </span>
                     </div>
                     {p.prevSets ? (
                       <div style={{ fontSize: 13, color: C.grey, lineHeight: 1.7, opacity: 0.6 }}>
@@ -3502,70 +3562,79 @@ function App() {
                   {t("log.superset")}
                 </div>
               )}
-              <div style={{ marginBottom: 8 }}>
-                {/* YouTubeは種目に紐づく参照リンクなので、操作ボタン群ではなく種目名の行の右端に置く。
-                    ボタン行から67px抜けることで、「AI相談」を足しても375px幅で1行に収まる
-                    (移動前は既に溢れて2行になっていた)。 */}
-                <div style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 6 }}>
-                  <div style={{ fontSize: 14, fontWeight: 700, lineHeight: 1.4, flex: 1, minWidth: 0 }}>
+              <div style={{ marginBottom: 10 }}>
+                <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+                  <div style={{ fontSize: 15, fontWeight: 700, lineHeight: 1.4, flex: 1, minWidth: 0, paddingTop: 3 }}>
                     {inGroup && <span style={{ color: C.blue, fontWeight: 800, marginRight: 6 }}>{ssLetter}.</span>}
                     {exName(ex.name)}
                     {ex.muscle && <span style={{ color: C.muted, fontSize: 12, fontWeight: 400, marginLeft: 6 }}>{muscleName(ex.muscle)}</span>}
                     {resolveIsDb(ex.name, ex.isDb) && <span style={{ color: C.muted, fontSize: 12, marginLeft: 4 }}>{t("menu.perHandShort")}</span>}
-                    {resolveRom(ex.name, ex.rom) < 1 && <span style={{ color: C.blue, fontSize: 11, marginLeft: 4 }}>ROM×{resolveRom(ex.name, ex.rom)}</span>}
+                    {resolveRom(ex.name, ex.rom) < 1 && <span style={{ color: C.muted, fontSize: 12, marginLeft: 4 }}>ROM×{resolveRom(ex.name, ex.rom)}</span>}
                     {todayDay && ex.muscle && !muscleMatchesDay(ex.muscle, todayDay) && <span style={{ color: C.yellow, fontSize: 12, marginLeft: 6 }}>{t("log.offDay")}</span>}
                   </div>
-                  <button onClick={() => openYouTube(ex.name)} aria-label={t("log.youtube")}
-                    style={{ ...btn(C.surface2, C.red), padding: "4px 8px", fontSize: 12, fontWeight: 700, whiteSpace: "nowrap", flexShrink: 0 }}>YouTube</button>
-                </div>
-                {exIdx > 0 && (
-                  <button onClick={() => toggleSuperset(ex.id)} style={{
-                    ...btn(inGroup && prevEx && prevEx.ssGroup === ex.ssGroup ? C.blue : C.surface2, inGroup && prevEx && prevEx.ssGroup === ex.ssGroup ? "#fff" : C.muted),
-                    padding: "4px 10px", fontSize: 12, marginBottom: 8,
-                  }}>
-                    {inGroup && prevEx && prevEx.ssGroup === ex.ssGroup ? t("log.supersetOff") : t("log.supersetOn")}
+                  <button onClick={() => setOpenMenu({ ...openMenu, [ex.id]: !openMenu[ex.id] })}
+                    aria-label={t("log.exerciseMenu")} aria-expanded={!!openMenu[ex.id]} className="tapArea"
+                    style={{ ...btn(openMenu[ex.id] ? C.surface2 : "transparent", openMenu[ex.id] ? C.text : C.muted),
+                      width: 34, height: 30, padding: 0, display: "grid", placeItems: "center", flexShrink: 0, border: `1px solid ${openMenu[ex.id] ? C.border : "transparent"}` }}>
+                    <Icon name="more" size={18} />
                   </button>
+                </div>
+                {openMenu[ex.id] && (
+                  <div style={{ background: C.bg, borderRadius: 10, padding: 8, marginTop: 8 }}>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
+                      {/* この行は flexWrap: "wrap" で折り返しうるため .tapArea を付けない。
+                          縦方向の透明拡張(-6px)が gap を超え、折り返した隣の行のボタンと
+                          重なって誤タップを誘発するリスクがあるため(reviewer指摘)。 */}
+                      <button onClick={() => moveExercise(ex.id, -1)} disabled={exIdx === 0} aria-label={t("log.moveUp")}
+                        style={{ ...btn(C.surface2, exIdx === 0 ? C.border : C.muted), padding: "6px 10px", fontSize: 13, cursor: exIdx === 0 ? "default" : "pointer" }}>▲</button>
+                      <button onClick={() => moveExercise(ex.id, 1)} disabled={exIdx === today.length - 1} aria-label={t("log.moveDown")}
+                        style={{ ...btn(C.surface2, exIdx === today.length - 1 ? C.border : C.muted), padding: "6px 10px", fontSize: 13, cursor: exIdx === today.length - 1 ? "default" : "pointer" }}>▼</button>
+                      <button onClick={() => consultAi(exerciseToText(ex), `ex:${ex.id}`)}
+                        style={{
+                          ...btn(C.surface2, copiedIdx === `ex:${ex.id}` ? C.green : C.text), padding: "6px 10px", fontSize: 13,
+                          whiteSpace: "nowrap", flexShrink: 0,
+                          // コピー後の「✓ コピー / ✓ Copied」は元のラベルより長い。幅を固定しないと
+                          // 押した瞬間にボタン行が折り返して、下のUIがずれる(英語+375pxで顕著)。
+                          minWidth: 74, textAlign: "center",
+                        }}>
+                        {copiedIdx === `ex:${ex.id}` ? t("log.consultAiDone") : t("log.consultAi")}
+                      </button>
+                      <button onClick={() => { setSwapEx(swapEx === ex.id ? null : ex.id); setSwapSearch(""); setSwapMuscle(""); }}
+                        style={{ ...btn(C.surface2, swapEx === ex.id ? C.yellow : C.text), padding: "6px 10px", fontSize: 13, whiteSpace: "nowrap", flexShrink: 0 }}>{t("log.swap")}</button>
+                      <button onClick={() => setOpenHist({ ...openHist, [ex.id]: !openHist[ex.id] })}
+                        style={{ ...btn(C.surface2, openHist[ex.id] ? C.yellow : C.text), padding: "6px 10px", fontSize: 13, whiteSpace: "nowrap", flexShrink: 0 }}>{t("log.history")}</button>
+                      <button onClick={() => setOpenCfg({ ...openCfg, [ex.id]: !openCfg[ex.id] })} aria-label={t("log.exerciseConfig")} aria-expanded={!!openCfg[ex.id]}
+                        style={{ ...btn(C.surface2, openCfg[ex.id] ? C.yellow : C.text), padding: "6px 10px", fontSize: 13, whiteSpace: "nowrap", flexShrink: 0 }}>{t("log.exerciseConfigShort")}</button>
+                      <button onClick={() => openYouTube(ex.name)} aria-label={t("log.youtube")}
+                        style={{ ...btn(C.surface2, C.text), padding: "6px 10px", fontSize: 13, whiteSpace: "nowrap", flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 5 }}>
+                        <Icon name="youtube" size={15} />YouTube</button>
+                      {exIdx > 0 && (
+                        <button onClick={() => toggleSuperset(ex.id)} style={{
+                          ...btn(inGroup && prevEx && prevEx.ssGroup === ex.ssGroup ? C.blue : C.surface2, inGroup && prevEx && prevEx.ssGroup === ex.ssGroup ? "#fff" : C.text),
+                          padding: "6px 10px", fontSize: 13, whiteSpace: "nowrap",
+                        }}>
+                          {inGroup && prevEx && prevEx.ssGroup === ex.ssGroup ? t("log.supersetOff") : t("log.supersetOn")}
+                        </button>
+                      )}
+                      <div style={{ flex: 1 }} />
+                      <button onClick={() => removeExercise(ex.id)} aria-label={t("log.removeExercise")}
+                        style={{ ...btn("transparent", C.red), padding: "6px 6px", fontSize: 13, whiteSpace: "nowrap", flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 4 }}>
+                        <Icon name="trash" size={15} />{t("log.removeExerciseShort")}</button>
+                    </div>
+                    {/* コピーしただけでは「次に何をすればいいか」が伝わらないため、貼り付けが要ることを明示する。
+                        高さは常に確保する。条件表示にすると、AI側から戻ってきた直後に文言が消えた瞬間
+                        セット行が上へ飛び、狙った入力欄の1つ下を押してしまう(ボタン幅をminWidthで
+                        固定したのと同じ理由)。role="status"もDOMに常駐させないと読み上げられない。 */}
+                    <div role="status" style={{ fontSize: 12, color: C.green, marginTop: 6, height: 17 }}>
+                      {copiedIdx === `ex:${ex.id}` ? t("log.pasteHint") : ""}
+                    </div>
+                  </div>
                 )}
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 4, alignItems: "center" }}>
-                  {/* この行は flexWrap: "wrap" で折り返しうるため .tapArea を付けない。
-                      縦方向の透明拡張(-6px)が gap: 4px を超え、折り返した隣の行のボタンと
-                      重なって誤タップを誘発するリスクがあるため(reviewer指摘)。 */}
-                  <button onClick={() => moveExercise(ex.id, -1)} disabled={exIdx === 0} aria-label={t("log.moveUp")}
-                    style={{ ...btn(C.surface2, exIdx === 0 ? C.border : C.muted), padding: "4px 8px", fontSize: 13, cursor: exIdx === 0 ? "default" : "pointer" }}>▲</button>
-                  <button onClick={() => moveExercise(ex.id, 1)} disabled={exIdx === today.length - 1} aria-label={t("log.moveDown")}
-                    style={{ ...btn(C.surface2, exIdx === today.length - 1 ? C.border : C.muted), padding: "4px 8px", fontSize: 13, cursor: exIdx === today.length - 1 ? "default" : "pointer" }}>▼</button>
-                  <button onClick={() => consultAi(exerciseToText(ex), `ex:${ex.id}`)}
-                    style={{
-                      ...btn(C.surface2, copiedIdx === `ex:${ex.id}` ? C.green : C.muted), padding: "4px 9px", fontSize: 13,
-                      whiteSpace: "nowrap", flexShrink: 0,
-                      // コピー後の「✓ コピー / ✓ Copied」は元のラベルより長い。幅を固定しないと
-                      // 押した瞬間にボタン行が折り返して、下のUIがずれる(英語+375pxで顕著)。
-                      minWidth: 74, textAlign: "center",
-                    }}>
-                    {copiedIdx === `ex:${ex.id}` ? t("log.consultAiDone") : t("log.consultAi")}
-                  </button>
-                  <button onClick={() => { setSwapEx(swapEx === ex.id ? null : ex.id); setSwapSearch(""); setSwapMuscle(""); }}
-                    style={{ ...btn(C.surface2, swapEx === ex.id ? C.blue : C.muted), padding: "4px 9px", fontSize: 13, whiteSpace: "nowrap", flexShrink: 0 }}>{t("log.swap")}</button>
-                  <button onClick={() => setOpenHist({ ...openHist, [ex.id]: !openHist[ex.id] })}
-                    style={{ ...btn(C.surface2, openHist[ex.id] ? C.blue : C.muted), padding: "4px 9px", fontSize: 13, whiteSpace: "nowrap", flexShrink: 0 }}>{t("log.history")}</button>
-                  <button onClick={() => setOpenCfg({ ...openCfg, [ex.id]: !openCfg[ex.id] })} aria-label={t("log.exerciseConfig")} aria-expanded={!!openCfg[ex.id]}
-                    style={{ ...btn(C.surface2, C.muted), padding: "4px 9px", fontSize: 13, minWidth: 32, minHeight: 32, flexShrink: 0 }}>⚙</button>
-                  <div style={{ flex: 1 }} />
-                  <button onClick={() => removeExercise(ex.id)} aria-label={t("log.removeExercise")} style={{ ...btn("transparent", C.muted), padding: "4px 6px", fontSize: 13, whiteSpace: "nowrap", flexShrink: 0 }}>{t("log.removeExerciseBtn")}</button>
-                </div>
-                {/* コピーしただけでは「次に何をすればいいか」が伝わらないため、貼り付けが要ることを明示する。
-                    ボタン行(375pxで既に一杯)には入らないので、行の下に全幅で出す。
-                    高さは常に確保する。条件表示にすると、AI側から戻ってきた直後に文言が消えた瞬間
-                    セット行が上へ飛び、狙った入力欄の1つ下を押してしまう(ボタン幅をminWidthで
-                    固定したのと同じ理由)。role="status"もDOMに常駐させないと読み上げられない。 */}
-                <div role="status" style={{ fontSize: 12, color: C.green, marginTop: 6, height: 17 }}>
-                  {copiedIdx === `ex:${ex.id}` ? t("log.pasteHint") : ""}
-                </div>
               </div>
 
               {/* 種目の差し替え(セットは新しい種目の前回記録から入れ直す) */}
               {swapEx === ex.id && (
-                <div style={{ background: C.bg, borderRadius: 10, padding: 10, marginBottom: 10, border: `1px solid ${C.blue}` }}>
+                <div style={{ background: C.bg, borderRadius: 10, padding: 10, marginBottom: 10, border: `1px solid ${C.border}` }}>
                   <div style={{ fontSize: 12, color: C.muted, marginBottom: 8 }}>
                     {t("log.swapHint")}
                   </div>
@@ -3629,7 +3698,7 @@ function App() {
                     {ins.topWeight != null && ins.streak >= 3 && ins.canAddWeight && (
                       ins.readyToProgress ? (
                         <span style={{ fontSize: 12, fontWeight: 800, color: C.yellow, background: "rgba(232,179,60,0.15)", padding: "2px 8px", borderRadius: 999 }}>
-                          {t("log.plateauAlert", { n: ins.streak })}
+                          <Icon name="warn" size={12} style={{ marginRight: 4 }} />{t("log.plateauAlert", { n: ins.streak })}
                         </span>
                       ) : (
                         <span style={{ fontSize: 12, color: C.muted }}>
@@ -3650,7 +3719,8 @@ function App() {
                 );
               })()}
 
-              {/* 過去の自分 vs 今日の自分 */}
+              {/* 過去の自分 vs 今日の自分。以前は「過去の自分 / VS / 今日の自分」の3列・到達度バー・「YOU WIN!」の帯・
+                  更新バッジの4段で、1種目あたり170px近くあった。比較は1行にまとめ、勝ったら行ごと緑にする。 */}
               {(() => {
                 const pr = prMap[ex.name];
                 const live1RM = liveBest1RM(ex);            // 今日の推定1RM
@@ -3661,95 +3731,38 @@ function App() {
                 const isPR1RM = live1RM > 0 && live1RM > best1RM + 0.01;
                 const hasHistory = !!pr && (pr.best1RM > 0 || pr.bestWeight > 0);
                 if (!hasHistory && live1RM === 0) return null; // 初めての種目で未実施なら表示しない
-                const diff = live1RM > 0 && best1RM > 0 ? live1RM - best1RM : null;
-                const pct = diff != null && best1RM > 0 ? (live1RM / best1RM) * 100 : null;
                 const daysSincePR = pr?.date ? Math.floor((Date.now() - new Date(pr.date).getTime()) / 86400000) : null;
                 const unit = ex.bwFactor > 0 ? t("share.withBw", { unit: uLabel() }) : resolveIsDb(ex.name, ex.isDb) ? t("share.bothHands", { unit: uLabel() }) : uLabel();
+                const f1 = (v) => toU(v).toFixed(1);
+                let main;
+                if (live1RM > 0 && best1RM > 0) {
+                  const d = live1RM - best1RM;
+                  main = t("compare.line", { now: f1(live1RM), diff: `${d >= 0 ? "+" : "−"}${f1(Math.abs(d))}`, unit: uLabel() });
+                } else if (live1RM > 0) {
+                  main = t("compare.lineFirst", { v: f1(live1RM), unit: uLabel() });
+                } else {
+                  main = t("compare.lineBest", { v: f1(best1RM), unit: uLabel() });
+                }
                 return (
-                  <div style={{ background: C.bg, borderRadius: 10, padding: "10px 12px", marginBottom: 10 }}>
-                    {/* 対比 */}
-                    <div style={{ display: "flex", alignItems: "stretch", gap: 8 }}>
-                      <div style={{ flex: 1, textAlign: "center" }}>
-                        <div style={{ fontSize: 10, color: C.muted, marginBottom: 2 }}>
-                          {pr?.date ? t("compare.pastAt", { date: fmtDate(pr.date) }) : t("compare.past")}
-                        </div>
-                        <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 24, fontWeight: 800, color: C.yellow, lineHeight: 1 }}>
-                          {best1RM > 0 ? toU(best1RM).toFixed(1) : "—"}<span style={{ fontSize: 11, color: C.muted }}>{uLabel()}</span>
-                        </div>
-                        <div style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>{pr?.weight > 0 ? t("pr.weightByReps", { w: wU(pr.weight), unit: uLabel(), reps: pr.reps }) : "Max 1RM"}</div>
-                      </div>
-
-                      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", flexShrink: 0, minWidth: 46 }}>
-                        <div style={{ fontSize: 10, color: C.muted }}>VS</div>
-                        {diff != null && (
-                          <div style={{ fontSize: 13, fontWeight: 800, color: diff >= 0 ? C.green : C.red, whiteSpace: "nowrap" }}>
-                            {diff >= 0 ? "+" : ""}{diff.toFixed(1)}
-                          </div>
-                        )}
-                        {pct != null && (
-                          <div style={{ fontSize: 10, color: C.muted }}>{pct.toFixed(0)}%</div>
-                        )}
-                      </div>
-
-                      <div style={{ flex: 1, textAlign: "center" }}>
-                        <div style={{ fontSize: 10, color: isPR1RM ? C.green : C.muted, marginBottom: 2, fontWeight: isPR1RM ? 800 : 400 }}>{t("compare.now")}</div>
-                        <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 24, fontWeight: 800, color: isPR1RM ? C.green : C.text, lineHeight: 1 }}>
-                          {live1RM > 0 ? toU(live1RM).toFixed(1) : "—"}<span style={{ fontSize: 11, color: C.muted }}>{uLabel()}</span>
-                        </div>
-                        <div style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>{t("compare.est1RM")}</div>
-                      </div>
-                    </div>
-
-                    {/* 到達度バー */}
-                    {pct != null && (
-                      <div style={{ marginTop: 8, height: 5, borderRadius: 999, background: C.surface2, overflow: "hidden" }}>
-                        <div style={{
-                          width: `${Math.min(100, pct)}%`, height: "100%", borderRadius: 999,
-                          background: isPR1RM ? C.green : pct >= 95 ? C.yellow : C.blue, transition: "width .3s",
-                        }} />
-                      </div>
-                    )}
-
-                    {/* 過去の自分を超えた! */}
-                    {isPR1RM && best1RM > 0 && (
-                      <div style={{
-                        marginTop: 10, padding: "10px 12px", borderRadius: 10, textAlign: "center",
-                        background: "linear-gradient(90deg, rgba(76,175,110,0.22), rgba(232,179,60,0.22))",
-                        border: `1px solid ${C.green}`,
-                      }}>
-                        <div style={{
-                          fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: 30,
-                          letterSpacing: 2, color: C.green, lineHeight: 1,
-                        }}>
-                          YOU WIN!
-                        </div>
-                        <div style={{ fontSize: 12, color: C.text, marginTop: 5 }}>
-                          {t("compare.prBeat", { v: toU(live1RM - best1RM).toFixed(1), unit: uLabel() })}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* 更新バッジ / 未更新日数 */}
-                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginTop: 8 }}>
-                      {isPR1RM && best1RM === 0 && (
-                        <span style={{ background: C.yellow, color: "#141517", borderRadius: 999, padding: "3px 11px", fontSize: 12, fontWeight: 800 }}>
-                          {t("compare.prFirst", { v: toU(live1RM).toFixed(1), unit: uLabel() })}
+                  <div style={{
+                    display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 10,
+                    padding: "7px 10px", borderRadius: 10, background: C.bg,
+                    border: `1px solid ${isPR1RM && best1RM > 0 ? C.green : "transparent"}`,
+                  }}>
+                    <span style={{ fontSize: 13, fontWeight: isPR1RM ? 800 : 600, color: isPR1RM ? C.green : C.text }}>{main}</span>
+                    {isPR1RM && best1RM > 0 && <span style={{ fontSize: 12, color: C.green }}>{t("compare.win")}</span>}
+                    <span style={{ marginLeft: "auto", display: "inline-flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                      {isPRw ? (
+                        <span style={{ background: C.green, color: "#fff", borderRadius: 999, padding: "2px 9px", fontSize: 12, fontWeight: 800, display: "inline-flex", alignItems: "center", gap: 4 }}>
+                          <Icon name="trophy" size={13} />{t("compare.prTop", { v: f1(liveW), unit })}
                         </span>
+                      ) : bestW > 0 ? (
+                        <span style={{ fontSize: 12, color: C.muted }}>{t("compare.bestWeight", { v: f1(bestW), unit })}</span>
+                      ) : null}
+                      {!isPR1RM && daysSincePR != null && daysSincePR >= 30 && (
+                        <span style={{ fontSize: 12, color: daysSincePR >= 60 ? C.yellow : C.muted }}>{t("compare.prStale", { n: daysSincePR })}</span>
                       )}
-                      {isPRw && (
-                        <span style={{ background: C.green, color: "#fff", borderRadius: 999, padding: "3px 11px", fontSize: 12, fontWeight: 800 }}>
-                          {t("compare.prTop", { v: toU(liveW).toFixed(1), unit })}
-                        </span>
-                      )}
-                      {!isPR1RM && daysSincePR != null && (
-                        <span style={{ fontSize: 11, color: daysSincePR >= 60 ? C.yellow : C.muted }}>
-                          {daysSincePR === 0 ? t("compare.prToday") : t("compare.prStale", { n: daysSincePR })}
-                        </span>
-                      )}
-                      {!isPRw && bestW > 0 && (
-                        <span style={{ fontSize: 11, color: C.muted }}>{t("compare.maxWeight")} {toU(bestW).toFixed(1)}{unit}</span>
-                      )}
-                    </div>
+                    </span>
                   </div>
                 );
               })()}
@@ -3758,9 +3771,12 @@ function App() {
               {openHist[ex.id] && (() => {
                 const hist = exerciseHistory(ex.name, 5);
                 return (
-                  <div style={{ background: C.bg, borderRadius: 10, padding: 10, marginBottom: 10, border: `1px solid ${C.blue}` }}>
-                    <div style={{ fontSize: 12, color: C.muted, marginBottom: 8 }}>
-                      {t("log.recentN", { name: exName(ex.name), n: hist.length })}
+                  <div style={{ background: C.bg, borderRadius: 10, padding: 10, marginBottom: 10, border: `1px solid ${C.border}` }}>
+                    {/* 開くボタンは「⋯」の中にあるので、パネル側にも閉じるボタンを置く */}
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                      <span style={{ fontSize: 12, color: C.muted }}>{t("log.recentN", { name: exName(ex.name), n: hist.length })}</span>
+                      <button onClick={() => setOpenHist({ ...openHist, [ex.id]: false })} aria-label={t("common.close")} className="tapArea"
+                        style={{ ...btn("transparent", C.muted), padding: "2px 6px", fontSize: 14, lineHeight: 1 }}>✕</button>
                     </div>
                     {hist.length === 0 ? (
                       <div style={{ fontSize: 13, color: C.muted, textAlign: "center", padding: "8px 0" }}>{t("log.noHistory")}</div>
@@ -3778,7 +3794,7 @@ function App() {
                       <div key={hi} style={{ marginBottom: 8, paddingBottom: 6, borderBottom: hi < hist.length - 1 ? `1px solid ${C.border}` : "none" }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, marginBottom: 2 }}>
                           <span style={{ fontSize: 13, fontWeight: 700, color: hi === 0 ? C.text : C.muted }}>
-                            {fmtDate(h.date)}{hi === 0 && <span style={{ color: C.blue, fontSize: 11, marginLeft: 6 }}>{t("judge.prev")}</span>}
+                            {fmtDate(h.date)}{hi === 0 && <span style={{ color: C.yellow, fontSize: 12, marginLeft: 6 }}>{t("judge.prev")}</span>}
                           </span>
                           <span style={{ display: "flex", gap: 8, alignItems: "baseline", flexShrink: 0 }}>
                             {best1RM > 0 && <span style={{ fontSize: 12, color: C.text }}>1RM {toU(best1RM).toFixed(1)}{histUnit}</span>}
@@ -3797,6 +3813,11 @@ function App() {
 
               {openCfg[ex.id] && (
                 <div style={{ background: C.bg, borderRadius: 10, padding: 12, marginBottom: 10 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                    <span style={{ fontSize: 12, color: C.muted }}>{t("log.exerciseConfig")}</span>
+                    <button onClick={() => setOpenCfg({ ...openCfg, [ex.id]: false })} aria-label={t("common.close")} className="tapArea"
+                      style={{ ...btn("transparent", C.muted), padding: "2px 6px", fontSize: 14, lineHeight: 1 }}>✕</button>
+                  </div>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center", marginBottom: 10 }}>
                     {!ex.muscle && (
                       <label style={{ fontSize: 13, color: C.yellow }}>{t("cfg.muscleUnset")} <select value={ex.muscle} onChange={e => updEx(ex.id, { muscle: e.target.value })} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: "5px 6px", fontSize: 16, fontFamily: "inherit" }}><option value="">{t("common.notSet")}</option>{MUSCLES.map(m => <option key={m} value={m}>{muscleName(m)}</option>)}</select></label>
@@ -3837,7 +3858,7 @@ function App() {
                             if (v !== (findExercise(ex.name)?.bw ?? 0)) updateCustomExercise(ex.name, { bw: v });
                           }} />
                       </label>
-                      <p style={{ fontSize: 11, color: C.muted, margin: "6px 0 0", lineHeight: 1.7 }}>
+                      <p style={{ fontSize: 12, color: C.muted, margin: "6px 0 0", lineHeight: 1.7 }}>
                         {t("cfg.bwFactorHelp")}{" "}
                         {t("cfg.bwFactorHelp2")}
                       </p>
@@ -3858,7 +3879,7 @@ function App() {
                           if (v !== (findExercise(ex.name)?.rom ?? 1.0)) updateCustomExercise(ex.name, { rom: v });
                         }} />
                     </label>
-                    <p style={{ fontSize: 11, color: C.muted, margin: "6px 0 0", lineHeight: 1.7 }}>
+                    <p style={{ fontSize: 12, color: C.muted, margin: "6px 0 0", lineHeight: 1.7 }}>
                       {t("cfg.romHelp")}{" "}
                       {t("cfg.romHelp2")}{" "}
                       {t("cfg.romHelp3")}
@@ -3931,7 +3952,7 @@ function App() {
                     <button onClick={() => copyFromPrev(ex.id, i)} disabled={i === 0}
                       title={t("set.copyPrev")} aria-label={t("set.copyPrevShort")} className="tapArea"
                       style={{ width: 26, height: 26, borderRadius: 8, flexShrink: 0, cursor: i === 0 ? "default" : "pointer", fontSize: 13,
-                        border: `1px solid ${i === 0 ? C.border : C.blue}`, background: C.surface2, color: i === 0 ? C.border : C.blue }}>⧉</button>
+                        border: `1px solid ${C.border}`, background: C.surface2, color: i === 0 ? C.border : C.muted }}>⧉</button>
                     <div style={{ flex: 2.4, opacity: s.warmup ? 0.35 : 1, pointerEvents: s.warmup ? "none" : "auto" }}>
                       <RirSelect value={s.rir === "" ? null : num(s.rir)} onChange={v => {
                         updateSet(ex.id, i, "rir", v === "" ? "" : v);
@@ -3942,39 +3963,58 @@ function App() {
                       style={{ width: 26, height: 26, borderRadius: 8, border: `1px solid ${C.border}`, background: C.surface2, color: C.muted, fontSize: 13, cursor: "pointer", flexShrink: 0 }}>✕</button>
                   </div>
 
-                  {/* このセットの推定1RM と、前回の同じ番手のセット */}
-                  {(set1RM > 0 || prevSet) && (
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, paddingLeft: 30, marginTop: 3, flexWrap: "wrap" }}>
-                      {set1RM > 0 && (
-                        <span style={{ fontSize: 11, color: isSetPR ? C.green : C.muted }}>
-                          {t("compare.set1RM", { v: toU(set1RM).toFixed(1), unit: uLabel() })}
-                        </span>
-                      )}
-                      {isSetPR && (
-                        <span style={{ background: C.yellow, color: "#141517", borderRadius: 999, padding: "1px 8px", fontSize: 11, fontWeight: 800 }}>
-                          {t("compare.setPR", { v: toU(set1RM - pastBest1RM).toFixed(1), unit: uLabel() })}
-                        </span>
-                      )}
-                      {prevSet && (
-                        <span style={{ fontSize: 11, color: C.muted, marginLeft: "auto" }}>
-                          {t("judge.prev")} {prevSet.assisted ? t("menu.assistedShort") : ""}{wU(prevSet.weight)}×{prevSet.reps}
-                          {prevSet.rir != null ? ` RIR${prevSet.rir}` : ""}
-                          {rirDiff != null && (
-                            <span style={{ marginLeft: 5, fontWeight: 800, color: rirDiff > 0 ? C.green : rirDiff < 0 ? C.yellow : C.muted }}>
-                              {rirDiff > 0 ? `→ RIR+${rirDiff}` : rirDiff < 0 ? `→ RIR${rirDiff}` : t("rir.same")}
+                  {/* 前回の同じ番手のセットと、今日との差。推定1RMは上の比較行で出しているので、
+                      セット行では更新したときだけバッジで出す(以前は毎行「推定1RM 91.8kg」が並んでいた)。 */}
+                  {(prevSet || isSetPR) && (() => {
+                    const prevR = prevSet ? Math.round(num(prevSet.reps)) : 0;
+                    const hasNow = setW > 0 || setR > 0;
+                    // 重量の差は「画面に出ている数字どうし」で取る。kg で記録した前回を lb で表示しているとき、
+                    // 保存値(kg)を換算した差では「+0lb」「−0.4lb」のような、打った数字と合わない差が出る。
+                    // 0.1 単位に丸めて 0 なら、重量は同じとみなして回数の差へ進む(加重を外して 0 にしたときも重量の差を出す)。
+                    const dw = prevSet ? Math.round((num(s.weight) - wU(prevSet.weight)) * 10) / 10 : 0;
+                    let delta = null; // [文言, 色]
+                    // 補助ありと補助なしを比べると、補助で増えた回数が「伸び」に見えるので、種別が違うときは出さない
+                    if (prevSet && hasNow && done && !s.warmup && !!s.assisted === !!prevSet.assisted) {
+                      if (dw !== 0) {
+                        delta = [`${dw > 0 ? "+" : "−"}${Math.abs(dw)}${uLabel()}`, dw > 0 ? C.green : C.yellow];
+                      } else if (setR !== prevR) {
+                        const dr = setR - prevR;
+                        delta = [t("set.repsDelta", { v: `${dr > 0 ? "+" : "−"}${Math.abs(dr)}` }), dr > 0 ? C.green : C.yellow];
+                      } else if (rirDiff != null) {
+                        delta = [rirDiff > 0 ? `RIR+${rirDiff}` : rirDiff < 0 ? `RIR${rirDiff}` : t("rir.same"), rirDiff > 0 ? C.green : rirDiff < 0 ? C.yellow : C.muted];
+                      }
+                    }
+                    return (
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, paddingLeft: 32, marginTop: 4, flexWrap: "wrap", fontSize: 12 }}>
+                        {prevSet && (
+                          <span style={{ color: C.muted }}>
+                            {t("judge.prev")}{" "}
+                            <span style={{ color: C.text, fontWeight: 700 }}>{prevSet.assisted ? t("menu.assistedShort") : ""}{wU(prevSet.weight)}×{prevSet.reps}</span>
+                            {prevSet.rir != null ? ` RIR${prevSet.rir}` : ""}
+                          </span>
+                        )}
+                        <span style={{ marginLeft: "auto", display: "inline-flex", gap: 8, alignItems: "center" }}>
+                          {isSetPR && (
+                            <span style={{ background: C.yellow, color: "#141517", borderRadius: 999, padding: "1px 8px", fontWeight: 800, display: "inline-flex", alignItems: "center", gap: 3 }}>
+                              <Icon name="bolt" size={12} />{t("compare.setPR", { v: toU(set1RM - pastBest1RM).toFixed(1), unit: uLabel() })}
                             </span>
                           )}
+                          {delta && <span style={{ fontWeight: 800, color: delta[1] }}>{delta[0]}</span>}
                         </span>
-                      )}
-                    </div>
-                  )}
+                      </div>
+                    );
+                  })()}
                 </div>
                 );
               })}
-              <div style={{ fontSize: 11, color: C.muted, marginBottom: 8, lineHeight: 1.6 }}>
-                {t("log.setsHint")}{" "}
-                {t("log.setsHint2")}
-              </div>
+              {/* 毎カードに3行出ていた注意書き。使い始め(保存した記録が3回未満)の最初の種目にだけ出す。
+                  説明は初回ガイドと、番号ボタンの title にもある */}
+              {exIdx === 0 && workouts.length < 3 && (
+                <div style={{ fontSize: 12, color: C.muted, marginBottom: 8, lineHeight: 1.6 }}>
+                  {t("log.setsHint")}{" "}
+                  {t("log.setsHint2")}
+                </div>
+              )}
 
               <button onClick={() => { addSet(ex.id); }} style={{ ...btn(C.surface2, C.text), width: "100%", padding: 10, fontSize: 13, marginBottom: 8 }}>{t("log.addSet")}</button>
 
@@ -3988,14 +4028,14 @@ function App() {
                   style={{ flex: 1, padding: "8px 0", borderRadius: 8, cursor: "pointer", fontSize: 13, fontFamily: "inherit",
                     border: `1px solid ${exerciseNotes[ex.name] ? C.yellow : C.border}`, background: C.bg,
                     color: exerciseNotes[ex.name] ? C.yellow : C.muted, fontWeight: exerciseNotes[ex.name] ? 800 : 500 }}>
-                  📌 {t("note.label")}{exerciseNotes[ex.name] ? t("note.has") : ""}
+                  <Icon name="pin" size={13} style={{ marginRight: 4 }} />{t("note.label")}{exerciseNotes[ex.name] ? t("note.has") : ""}
                 </button>
               </div>
 
               {/* 固定メモ(展開時に編集、保存済みなら常に内容を表示) */}
               {openNote[ex.id] ? (
                 <div style={{ marginTop: 8 }}>
-                  <div style={{ fontSize: 11, color: C.muted, marginBottom: 4 }}>{t("note.pinned")}</div>
+                  <div style={{ fontSize: 12, color: C.muted, marginBottom: 4 }}>{t("note.pinned")}</div>
                   <ExerciseNoteEditor
                     key={ex.name}
                     value={exerciseNotes[ex.name] || ""}
@@ -4004,7 +4044,7 @@ function App() {
               ) : exerciseNotes[ex.name] ? (
                 <div onClick={() => setOpenNote({ ...openNote, [ex.id]: true })}
                   style={{ display: "flex", gap: 6, marginTop: 8, background: C.bg, borderLeft: `3px solid ${C.yellow}`, borderRadius: 6, padding: "8px 10px", fontSize: 13, color: C.text, lineHeight: 1.6, whiteSpace: "pre-wrap", cursor: "pointer" }}>
-                  <span style={{ flexShrink: 0 }}>📌</span>
+                  <span style={{ flexShrink: 0, color: C.yellow }}><Icon name="pin" size={14} /></span>
                   <span style={{ minWidth: 0 }}>{exerciseNotes[ex.name]}</span>
                 </div>
               ) : null}
@@ -4046,7 +4086,7 @@ function App() {
                       {pickerList.slice(0, 60).map(e => (
                         <button key={e.n} onClick={() => addExercise(e.n, undefined, exIdx + 1)}
                           style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, width: "100%", textAlign: "left", background: "transparent", border: `1px solid ${C.border}`, borderRadius: 8, padding: "9px 10px", marginBottom: 5, cursor: "pointer", color: C.text, fontSize: 13, fontFamily: "inherit" }}>
-                          <span style={{ minWidth: 0 }}>{exName(e.n)}{recentNames.includes(e.n) && <span style={{ color: C.blue, fontSize: 11, marginLeft: 6 }}>{t("common.recent")}</span>}</span>
+                          <span style={{ minWidth: 0 }}>{exName(e.n)}{recentNames.includes(e.n) && <span style={{ color: C.muted, fontSize: 11, marginLeft: 6 }}>{t("common.recent")}</span>}</span>
                           <span style={{ color: C.muted, fontSize: 12, flexShrink: 0 }}>{muscleName(e.m)}{t("common.sep")}{eqName(e.eq)}</span>
                         </button>
                       ))}
@@ -4108,7 +4148,7 @@ function App() {
             <div style={{ maxHeight: 240, overflowY: "auto" }}>
               {pickerList.map(e => (
                 <button key={e.n} onClick={() => addExercise(e.n)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, width: "100%", textAlign: "left", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 12px", marginBottom: 6, cursor: "pointer", color: C.text, fontSize: 13, fontFamily: "inherit" }}>
-                  <span style={{ minWidth: 0 }}>{exName(e.n)}{recentNames.includes(e.n) && <span style={{ color: C.blue, fontSize: 11, marginLeft: 6 }}>{t("common.recent")}</span>}</span>
+                  <span style={{ minWidth: 0 }}>{exName(e.n)}{recentNames.includes(e.n) && <span style={{ color: C.muted, fontSize: 11, marginLeft: 6 }}>{t("common.recent")}</span>}</span>
                   <span style={{ color: C.muted, fontSize: 12, flexShrink: 0 }}>{muscleName(e.m)}{t("common.sep")}{eqName(e.eq)}</span>
                 </button>
               ))}
@@ -4146,7 +4186,14 @@ function App() {
       {/* ===== 分割タブ ===== */}
       {view === "split" && (
         <div style={{ padding: "0 16px" }}>
-          <h2 style={{ fontSize: 16, fontWeight: 900, margin: "8px 0 4px" }}>{t("split.title")}</h2>
+          {/* 見出し(タブ名)は上の header に出るので、ここでは繰り返さない */}
+          {/* 無料の残りが少なくなったら、保存時のペイウォールより先にここで知らせる(購入の入口は設定の下にある) */}
+          {iapAvailable() && !purchased && workouts.length < TRIAL_WORKOUT_LIMIT && TRIAL_WORKOUT_LIMIT - workouts.length <= 3 && (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 8px 8px 12px", borderRadius: 10, background: C.surface, border: `1px solid ${C.border}`, marginBottom: 12 }}>
+              <div style={{ flex: 1, minWidth: 0, fontSize: 13, color: C.text }}>{t("trial.left", { n: TRIAL_WORKOUT_LIMIT - workouts.length })}</div>
+              <button onClick={() => goToSettings("settings-iap")} style={{ ...btn("transparent", C.yellow), padding: "6px 6px", fontSize: 13, whiteSpace: "nowrap" }}>{t("trial.buy")} ›</button>
+            </div>
+          )}
           <p style={{ color: C.muted, fontSize: 13, margin: "0 0 12px" }}>{t("split.rotation")}</p>
           {(!split || pickingSplit) ? (
             <>
@@ -4174,7 +4221,7 @@ function App() {
             <>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, gap: 8 }}>
                 <input value={split.name} onChange={e => updSplit({ name: e.target.value })} onFocus={selectOnFocus} aria-label={t("split.nameAria")} style={{ background: "transparent", border: "none", color: C.text, fontSize: 16, fontWeight: 900, fontFamily: "inherit", flex: 1, minWidth: 0 }} />
-                <button onClick={() => setPickingSplit(true)} style={{ ...btn(C.blue), fontSize: 13, padding: "6px 10px", flexShrink: 0 }}>{t("split.change")}</button>
+                <button onClick={() => setPickingSplit(true)} style={{ ...btn(C.surface2, C.text), fontSize: 13, padding: "6px 10px", flexShrink: 0, border: `1px solid ${C.border}` }}>{t("split.change")}</button>
               </div>
               <button onClick={deleteSplit} style={{ ...btn("transparent", C.muted), fontSize: 13, padding: "0 0 10px" }}>{t("split.deleteSplit")}</button>
               {split.days.map((d, i) => {
@@ -4182,12 +4229,12 @@ function App() {
                 const goToLog = isNext && !editing;
                 return (
                   <div key={i} id={`split-day-${i}`} onClick={goToLog ? () => setView("log") : undefined}
-                    style={{ background: C.surface, borderRadius: 14, padding: 14, marginBottom: 8, border: `1px solid ${isNext ? C.blue : C.border}`, cursor: goToLog ? "pointer" : "default" }}>
+                    style={{ background: C.surface, borderRadius: 14, padding: 14, marginBottom: 8, border: `1px solid ${isNext ? C.red : C.border}`, cursor: goToLog ? "pointer" : "default" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, minWidth: 0 }}>
                         <span style={{ color: C.muted, fontSize: 13, flexShrink: 0 }}>Day {i + 1}</span>
                         {editing ? <input value={d.name} onChange={e => updDay(i, { name: e.target.value })} onFocus={selectOnFocus} aria-label={t("split.dayNameAria")} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: "4px 8px", fontSize: 16, fontFamily: "inherit", width: "100%" }} /> : <strong style={{ fontSize: 15 }}>{dayName(d.name)}</strong>}
-                        {isNext && <span style={{ background: C.blue, color: "#fff", borderRadius: 999, padding: "2px 8px", fontSize: 11, fontWeight: 800, flexShrink: 0 }}>{t("common.today")}</span>}
+                        {isNext && <span style={{ background: C.red, color: "#fff", borderRadius: 999, padding: "2px 8px", fontSize: 11, fontWeight: 800, flexShrink: 0 }}>{t("common.today")}</span>}
                       </div>
                       <div style={{ display: "flex", gap: 4, flexShrink: 0, alignItems: "center" }} onClick={e => e.stopPropagation()}>
                         <button onClick={() => moveDay(i, -1)} disabled={i === 0} aria-label={t("log.moveUp")}
@@ -4249,8 +4296,8 @@ function App() {
                           {dayPickerList.map(e => {
                             const on = (d.exercises || []).includes(e.n);
                             return (
-                              <button key={e.n} onClick={() => toggleDayExercise(i, e.n)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, width: "100%", textAlign: "left", background: on ? C.surface2 : "transparent", border: `1px solid ${on ? C.blue : C.border}`, borderRadius: 8, padding: "8px 10px", marginBottom: 5, cursor: "pointer", color: C.text, fontSize: 13, fontFamily: "inherit" }}>
-                                <span style={{ minWidth: 0 }}>{on ? "✓ " : ""}{exName(e.n)}{recentNames.includes(e.n) && <span style={{ color: C.blue, fontSize: 11, marginLeft: 6 }}>{t("common.recent")}</span>}</span>
+                              <button key={e.n} onClick={() => toggleDayExercise(i, e.n)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, width: "100%", textAlign: "left", background: on ? C.surface2 : "transparent", border: `1px solid ${on ? C.text : C.border}`, borderRadius: 8, padding: "8px 10px", marginBottom: 5, cursor: "pointer", color: C.text, fontSize: 13, fontFamily: "inherit" }}>
+                                <span style={{ minWidth: 0 }}>{on ? "✓ " : ""}{exName(e.n)}{recentNames.includes(e.n) && <span style={{ color: C.muted, fontSize: 11, marginLeft: 6 }}>{t("common.recent")}</span>}</span>
                                 <span style={{ color: C.muted, fontSize: 12, flexShrink: 0 }}>{muscleName(e.m)}{t("common.sep")}{eqName(e.eq)}</span>
                               </button>
                             );
@@ -4281,7 +4328,7 @@ function App() {
                       </div>
                     )}
 
-                    {goToLog && <div style={{ marginTop: 10, fontSize: 13, color: C.blue, fontWeight: 700 }}>{t("split.tapToLog")}</div>}
+                    {goToLog && <div style={{ marginTop: 10, fontSize: 13, color: C.red, fontWeight: 700 }}>{t("split.tapToLog")}</div>}
                     {editing && <button onClick={() => removeDay(i)} style={{ ...btn("transparent", "#FF5A4E"), fontSize: 13, padding: "8px 0 0" }}>{t("split.deleteDay")}</button>}
                   </div>
                 );
@@ -4338,7 +4385,7 @@ function App() {
       {view === "history" && (
         <div style={{ padding: "0 16px" }}>
           {offerSaveAsMenu && (
-            <div style={{ background: C.surface, borderRadius: 14, padding: 14, border: `1px solid ${C.blue}`, marginBottom: 12 }}>
+            <div style={{ background: C.surface, borderRadius: 14, padding: 14, border: `1px solid ${C.yellow}`, marginBottom: 12 }}>
               <div style={{ fontSize: 13, lineHeight: 1.7, marginBottom: 10 }}>
                 {t("menu.savePrompt")}
               </div>
@@ -4364,24 +4411,24 @@ function App() {
                 {volMode === "total" ? (
                   volumeTrend.length >= 2 ? (
                     <ResponsiveContainer width="100%" height={170}>
-                      <LineChart data={volumeTrend} margin={{ top: 8, right: 8, left: -6, bottom: 0 }}>
+                      <LineChart data={volumeTrend} margin={{ top: 8, right: 10, left: 0, bottom: 0 }}>
                         <CartesianGrid stroke={C.border} strokeDasharray="3 3" />
                         <XAxis dataKey="date" stroke={C.muted} fontSize={11} tickLine={false} />
-                        <YAxis stroke={C.muted} fontSize={11} tickLine={false} width={44} />
+                        <YAxis stroke={C.muted} fontSize={11} tickLine={false} width={40} tickFormatter={compactTick} />
                         <Tooltip contentStyle={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 13, color: C.text }} formatter={v => [`${v.toLocaleString()}${uLabel()}`, t("chart.totalVolume")]} />
-                        <Line type="monotone" dataKey="総ボリューム" stroke={C.green} strokeWidth={2.5} dot={{ r: 3, fill: C.green }} />
+                        <Line type="monotone" dataKey="総ボリューム" stroke={C.green} strokeWidth={2.5} dot={lastDot(volumeTrend.length, C.green)} />
                       </LineChart>
                     </ResponsiveContainer>
                   ) : <div style={{ color: C.muted, fontSize: 13, textAlign: "center", padding: "20px 0" }}>{t("chart.need2")}</div>
                 ) : volMode === "weekly" ? (
                   weeklyVolumeTrend.length >= 2 ? (
                     <ResponsiveContainer width="100%" height={170}>
-                      <BarChart data={weeklyVolumeTrend} margin={{ top: 8, right: 8, left: -6, bottom: 0 }}>
+                      <BarChart data={weeklyVolumeTrend} margin={{ top: 8, right: 10, left: 0, bottom: 0 }}>
                         <CartesianGrid stroke={C.border} strokeDasharray="3 3" />
                         <XAxis dataKey="date" stroke={C.muted} fontSize={11} tickLine={false} />
-                        <YAxis stroke={C.muted} fontSize={11} tickLine={false} width={44} />
+                        <YAxis stroke={C.muted} fontSize={11} tickLine={false} width={40} tickFormatter={compactTick} />
                         <Tooltip contentStyle={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 13, color: C.text }} formatter={v => [`${v.toLocaleString()}${uLabel()}`, t("chart.weekTotal")]} />
-                        <Bar dataKey="総ボリューム" fill={C.blue} radius={[4, 4, 0, 0]} />
+                        <Bar dataKey="総ボリューム" fill={C.green} radius={[4, 4, 0, 0]} />
                       </BarChart>
                     </ResponsiveContainer>
                   ) : <div style={{ color: C.muted, fontSize: 13, textAlign: "center", padding: "20px 0" }}>{t("chart.need2Weeks")}</div>
@@ -4394,12 +4441,12 @@ function App() {
                     </div>
                     {muscleVolumeTrend.length >= 2 ? (
                       <ResponsiveContainer width="100%" height={170}>
-                        <LineChart data={muscleVolumeTrend} margin={{ top: 8, right: 8, left: -6, bottom: 0 }}>
+                        <LineChart data={muscleVolumeTrend} margin={{ top: 8, right: 10, left: 0, bottom: 0 }}>
                           <CartesianGrid stroke={C.border} strokeDasharray="3 3" />
                           <XAxis dataKey="date" stroke={C.muted} fontSize={11} tickLine={false} />
-                          <YAxis stroke={C.muted} fontSize={11} tickLine={false} width={44} />
+                          <YAxis stroke={C.muted} fontSize={11} tickLine={false} width={40} tickFormatter={compactTick} />
                           <Tooltip contentStyle={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 13, color: C.text }} formatter={v => [`${v.toLocaleString()}${uLabel()}`, muscleName(volMuscle)]} />
-                          <Line type="monotone" dataKey="ボリューム" stroke={C.blue} strokeWidth={2.5} dot={{ r: 3, fill: C.blue }} />
+                          <Line type="monotone" dataKey="ボリューム" stroke={C.green} strokeWidth={2.5} dot={lastDot(muscleVolumeTrend.length, C.green)} />
                         </LineChart>
                       </ResponsiveContainer>
                     ) : <div style={{ color: C.muted, fontSize: 13, textAlign: "center", padding: "20px 0" }}>{t("chart.needMuscleName", { name: muscleName(volMuscle) })}</div>}
@@ -4423,14 +4470,14 @@ function App() {
                 </>)}
                 {chartData.length >= 2 ? (
                   <ResponsiveContainer width="100%" height={200}>
-                    <LineChart data={chartData} margin={{ top: 8, right: 8, left: -14, bottom: 0 }}>
+                    <LineChart data={chartData} margin={{ top: 4, right: 10, left: 0, bottom: 0 }}>
                       <CartesianGrid stroke={C.border} strokeDasharray="3 3" />
                       <XAxis dataKey="date" stroke={C.muted} fontSize={11} tickLine={false} />
-                      <YAxis stroke={C.muted} fontSize={11} tickLine={false} domain={["dataMin - 2", "dataMax + 2"]} />
+                      <YAxis stroke={C.muted} fontSize={11} tickLine={false} width={40} domain={["dataMin - 2", "dataMax + 2"]} tickFormatter={compactTick} />
                       <Tooltip contentStyle={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 13, color: C.text }} formatter={(v, n) => [n === "最大重量" ? `${v}${uLabel()}` : `${v.toLocaleString()}${uLabel()}`, n === "最大重量" ? t("chart.maxWeight") : t("chart.est1RM")]} />
-                      <Legend wrapperStyle={{ fontSize: 12, color: C.muted }} formatter={v => v === "最大重量" ? t("chart.maxWeight") : t("chart.est1RM")} />
-                      <Line type="monotone" dataKey="最大重量" stroke={C.red} strokeWidth={2.5} dot={{ r: 4, fill: C.red }} />
-                      <Line type="monotone" dataKey="推定1RM" stroke={C.yellow} strokeWidth={2} strokeDasharray="4 3" dot={{ r: 3, fill: C.yellow }} />
+                      <Legend verticalAlign="top" align="right" height={26} iconSize={10} wrapperStyle={{ fontSize: 12, color: C.muted }} formatter={v => v === "最大重量" ? t("chart.maxWeight") : t("chart.est1RM")} />
+                      <Line type="monotone" dataKey="最大重量" stroke={C.red} strokeWidth={2.5} dot={lastDot(chartData.length, C.red)} />
+                      <Line type="monotone" dataKey="推定1RM" stroke={C.yellow} strokeWidth={2} strokeDasharray="4 3" dot={lastDot(chartData.length, C.yellow)} />
                     </LineChart>
                   </ResponsiveContainer>
                 ) : <div style={{ color: C.muted, fontSize: 13, textAlign: "center", padding: "24px 0" }}>{t("chart.need2Exercise")}</div>}
@@ -4461,6 +4508,25 @@ function App() {
             const cells = [];
             for (let i = 0; i < startDow; i++) cells.push(null);
             for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+            // 分割の日ごとに色を固定する(Push=赤、Pull=黄、Legs=緑…)。以前は全部同じ赤茶で、
+            // 月を見ても配分(どの日が多い・抜けている)が分からなかった。今の分割の並び順で色を決め、
+            // 分割に無い名前(昔の分割やカスタム名)は名前から決める。分割なしで記録した日は無彩色。
+            const SESSION_TINTS = ["226,69,60", "232,179,60", "76,175,110", "94,150,230", "176,120,220", "60,190,190", "230,130,80"];
+            const sessionTint = (name) => {
+              if (!name) return "163,168,176";
+              const i = (split?.days || []).findIndex(d => d.name === name);
+              if (i >= 0) return SESSION_TINTS[i % SESSION_TINTS.length];
+              let h = 0;
+              for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+              return SESSION_TINTS[h % SESSION_TINTS.length];
+            };
+            const monthSessions = [...new Set([...trainedSessions.entries()]
+              .filter(([k]) => k.startsWith(`${calMonth.y}-${calMonth.m}-`))
+              .map(([, v]) => v).filter(Boolean))]
+              .sort((a, b) => {
+                const order = (n) => { const i = (split?.days || []).findIndex(d => d.name === n); return i < 0 ? 99 : i; };
+                return order(a) - order(b) || a.localeCompare(b);
+              });
             const prevMonth = () => setCalMonth(c => c.m === 0 ? { y: c.y - 1, m: 11 } : { y: c.y, m: c.m - 1 });
             const nextMonth = () => setCalMonth(c => c.m === 11 ? { y: c.y + 1, m: 0 } : { y: c.y, m: c.m + 1 });
             const today = new Date();
@@ -4473,7 +4539,7 @@ function App() {
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4 }}>
                   {["cal.sun", "cal.mon", "cal.tue", "cal.wed", "cal.thu", "cal.fri", "cal.sat"].map((k, i) => (
-                    <div key={k} style={{ textAlign: "center", fontSize: 11, color: i === 0 ? C.red : i === 6 ? C.blue : C.muted, paddingBottom: 4 }}>{t(k)}</div>
+                    <div key={k} style={{ textAlign: "center", fontSize: 12, color: C.muted, paddingBottom: 4 }}>{t(k)}</div>
                   ))}
                   {cells.map((d, i) => {
                     if (d === null) return <div key={`e${i}`} />;
@@ -4482,14 +4548,17 @@ function App() {
                     const session = trained ? trainedSessions.get(key) : "";
                     const isToday = today.getFullYear() === calMonth.y && today.getMonth() === calMonth.m && today.getDate() === d;
                     const isSel = selectedDate === key;
+                    const tint = trained ? sessionTint(session) : null;
                     return (
                       <button key={key} onClick={() => setSelectedDate(isSel ? null : key)}
                         style={{
                           // aspectRatioは外した。分割名の行を入れると正方形では潰れるため、
                           // 高さを内容に合わせて確保する(名前の有無で高さが変わらないよう固定)。
-                          minHeight: 46, borderRadius: 8, border: isToday ? `1px solid ${C.muted}` : "1px solid transparent",
-                          background: isSel ? C.blue : trained ? "rgba(226,69,60,0.18)" : "transparent",
-                          color: isSel ? "#fff" : C.text, fontSize: 13, fontFamily: "inherit", cursor: "pointer",
+                          minHeight: 46, borderRadius: 8,
+                          border: isSel ? `2px solid ${C.text}` : isToday ? `1px solid ${C.muted}` : "1px solid transparent",
+                          background: trained ? `rgba(${tint},0.26)` : "transparent",
+                          boxShadow: trained ? `inset 0 -3px 0 rgba(${tint},0.9)` : "none",
+                          color: C.text, fontSize: 13, fontFamily: "inherit", cursor: "pointer",
                           display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 1,
                           padding: "2px 1px", overflow: "hidden",
                         }}>
@@ -4503,16 +4572,26 @@ function App() {
                             overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
                             // 赤字は薄い赤背景の上でコントラストが3.3:1しかなく9pxでは読めない。
                             // トレーニング日であることはセルの背景色が示しているので、文字は本文色にする。
-                            color: isSel ? "#fff" : C.text,
+                            color: C.text,
                           }}>{dayName(session)}</span>
                         ) : (
-                          <span style={{ width: 5, height: 5, borderRadius: "50%", background: isSel ? "#fff" : C.red }} />
+                          <span style={{ width: 5, height: 5, borderRadius: "50%", background: C.muted }} />
                         ))}
                       </button>
                     );
                   })}
                 </div>
-                <div style={{ fontSize: 12, color: C.muted, marginTop: 10, textAlign: "center" }}>
+                {/* 今月に出てくる分割の日の色見本 */}
+                {monthSessions.length > 0 && (
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 12px", justifyContent: "center", marginTop: 10 }}>
+                    {monthSessions.map(n => (
+                      <span key={n} style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12, color: C.text }}>
+                        <span style={{ width: 10, height: 10, borderRadius: 3, background: `rgba(${sessionTint(n)},0.9)` }} />{dayName(n)}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <div style={{ fontSize: 12, color: C.muted, marginTop: 8, textAlign: "center" }}>
                   {selectedDate ? t("history.tapAgain") : t("history.calendarHint")}
                 </div>
               </div>
@@ -4531,9 +4610,9 @@ function App() {
             const editing = editWorkout && editWorkout.index === idx;
             const d = editing ? editWorkout.draft : w;
             return (
-            <div key={idx} style={{ background: C.surface, borderRadius: 14, padding: 14, marginBottom: 10, border: `1px solid ${editing ? C.blue : C.border}` }}>
+            <div key={idx} style={{ background: C.surface, borderRadius: 14, padding: 14, marginBottom: 10, border: `1px solid ${editing ? C.yellow : C.border}` }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4, gap: 8 }}>
-                <div style={{ fontWeight: 900, fontSize: 14, minWidth: 0 }}>{fmtDate(w.date)}{w.session && <span style={{ color: C.blue, marginLeft: 8, fontSize: 13 }}>{dayName(w.session)}</span>}</div>
+                <div style={{ fontWeight: 900, fontSize: 14, minWidth: 0 }}>{fmtDate(w.date)}{w.session && <span style={{ color: C.muted, marginLeft: 8, fontSize: 13, fontWeight: 700 }}>{dayName(w.session)}</span>}</div>
                 <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
                   {editing ? (
                     <>
@@ -4542,12 +4621,13 @@ function App() {
                     </>
                   ) : (
                     <>
+                      {/* 主な操作は「編集」。AI相談は控えめの文字ボタン、削除はアイコンだけ */}
                       <button onClick={() => copyWorkout(w, idx)}
-                        style={{ ...btn(copiedIdx === `hist:${idx}` ? C.green : C.surface2, copiedIdx === `hist:${idx}` ? "#fff" : C.muted), padding: "5px 10px", fontSize: 13 }}>
+                        style={{ ...btn("transparent", copiedIdx === `hist:${idx}` ? C.green : C.muted), padding: "5px 6px", fontSize: 13 }}>
                         {copiedIdx === `hist:${idx}` ? t("history.consultAiDone") : t("history.consultAi")}
                       </button>
-                      <button onClick={() => startEditWorkout(idx)} style={{ ...btn(C.surface2, C.muted), padding: "5px 10px", fontSize: 13 }}>{t("common.edit")}</button>
-                      <button onClick={() => deleteWorkout(idx)} aria-label={t("history.deleteDay")} className="tapArea" style={{ ...btn("transparent", C.muted), padding: "5px 6px", fontSize: 13 }}>🗑</button>
+                      <button onClick={() => startEditWorkout(idx)} style={{ ...btn(C.surface2, C.text), padding: "5px 14px", fontSize: 13, border: `1px solid ${C.border}` }}>{t("common.edit")}</button>
+                      <button onClick={() => deleteWorkout(idx)} aria-label={t("history.deleteDay")} className="tapArea" style={{ ...btn("transparent", C.muted), padding: "5px 6px", display: "grid", placeItems: "center" }}><Icon name="trash" size={17} /></button>
                     </>
                   )}
                 </div>
@@ -4601,14 +4681,14 @@ function App() {
                 return (
                 <div key={j} style={{ fontSize: 13, marginBottom: 8, paddingBottom: 6, borderBottom: j < w.exercises.length - 1 ? `1px solid ${C.border}` : "none" }}>
                   <div style={{ marginBottom: 2, lineHeight: 1.4 }}>
-                    {ssStart && <span style={{ background: C.blue, color: "#fff", fontSize: 10, fontWeight: 800, borderRadius: 4, padding: "1px 6px", marginRight: 6 }}>SS</span>}
+                    {ssStart && <span style={{ background: C.blue, color: "#fff", fontSize: 11, fontWeight: 800, borderRadius: 4, padding: "1px 6px", marginRight: 6 }}>SS</span>}
                     {ex.ssGroup && !ssStart && <span style={{ color: C.blue, marginRight: 6 }}>┗</span>}
                     {exName(ex.name)}
-                    {ex.pain && <span style={{ color: "#FF5A4E", marginLeft: 4 }}>⚠</span>}
+                    {ex.pain && <span role="img" style={{ color: "#FF5A4E", marginLeft: 4 }} aria-label={t("log.pain")}><Icon name="warn" size={13} /></span>}
                     {ex.formBroke && <span style={{ color: C.yellow, marginLeft: 4 }}>△</span>}
                     {hasPR && (
-                      <span style={{ background: C.yellow, color: "#141517", fontSize: 10, fontWeight: 800, borderRadius: 4, padding: "1px 6px", marginLeft: 6 }}>
-                        ⚡1RM {toU(prVal).toFixed(1)}{uLabel()}
+                      <span style={{ background: C.yellow, color: "#141517", fontSize: 11, fontWeight: 800, borderRadius: 4, padding: "1px 6px", marginLeft: 6, whiteSpace: "nowrap" }}>
+                        <Icon name="bolt" size={11} style={{ marginRight: 2 }} />1RM {toU(prVal).toFixed(1)}{uLabel()}
                       </span>
                     )}
                   </div>
@@ -4616,7 +4696,7 @@ function App() {
                     {ex.sets.map((s, si) => (
                       <span key={si} style={hasPR && si === prIdx ? { color: C.yellow, fontWeight: 700 } : undefined}>
                         {si > 0 && <span style={{ color: C.muted, fontWeight: 400 }}> / </span>}
-                        {hasPR && si === prIdx ? "⚡" : ""}{s.warmup ? t("menu.warmupShort") : ""}{s.assisted ? t("menu.assistedShort") : ""}{wU(s.weight)}×{s.reps}{s.rir != null ? `(RIR${s.rir})` : ""}
+                        {hasPR && si === prIdx ? <Icon name="bolt" size={12} style={{ marginRight: 1 }} /> : ""}{s.warmup ? t("menu.warmupShort") : ""}{s.assisted ? t("menu.assistedShort") : ""}{wU(s.weight)}×{s.reps}{s.rir != null ? `(RIR${s.rir})` : ""}
                       </span>
                     ))}
                   </div>
@@ -4723,12 +4803,16 @@ function App() {
           {/* PR(自己ベスト)一覧 */}
           {Object.keys(prMap).length > 0 && (
             <div style={{ background: C.surface, borderRadius: 14, padding: 14, border: `1px solid ${C.border}`, marginBottom: 16 }}>
-              <h2 style={{ fontSize: 14, fontWeight: 900, margin: "0 0 4px" }}>{t("pr.title")}</h2>
-              <p style={{ color: C.muted, fontSize: 12, margin: "0 0 10px", lineHeight: 1.6 }}>
-                {t("pr.noteDef")}{" "}
-                {t("pr.note")}
-              </p>
-              <div style={{ display: "flex", fontSize: 11, color: C.muted, marginBottom: 6 }}>
+              <h2 style={{ fontSize: 14, fontWeight: 900, margin: "0 0 4px", display: "flex", alignItems: "center", gap: 6 }}><Icon name="trophy" size={16} color={C.yellow} />{t("pr.title")}</h2>
+              {/* 説明は一度読めば足りるので畳む(以前は常に3行出ていた) */}
+              <details style={{ margin: "0 0 10px" }}>
+                <summary style={{ color: C.muted, fontSize: 12, cursor: "pointer" }}>{t("pr.aboutTitle")}</summary>
+                <p style={{ color: C.muted, fontSize: 12, margin: "6px 0 0", lineHeight: 1.6 }}>
+                  {t("pr.noteDef")}{" "}
+                  {t("pr.note")}
+                </p>
+              </details>
+              <div style={{ display: "flex", fontSize: 12, color: C.muted, marginBottom: 6 }}>
                 <span style={{ flex: 1 }}>{t("pr.exercise")}</span>
                 <span style={{ width: 76, textAlign: "right" }}>{t("pr.maxWeight")}</span>
                 <span style={{ width: 68, textAlign: "right" }}>{t("compare.est1RM")}</span>
@@ -4747,7 +4831,7 @@ function App() {
                     </span>
                   </div>
                   {days != null && (
-                    <div style={{ fontSize: 11, color: days >= 60 ? C.yellow : C.muted, marginTop: 1 }}>
+                    <div style={{ fontSize: 12, color: days >= 60 ? C.yellow : C.muted, marginTop: 1 }}>
                       {days === 0 ? t("pr.updatedToday") : t("pr.stale", { n: days })}
                       <span style={{ color: C.muted }}>{t("pr.achievedOn", { date: fmtDate(pr.date) })}</span>
                     </div>
@@ -4765,56 +4849,11 @@ function App() {
       {/* ===== 設定タブ ===== */}
       {view === "settings" && (
         <div style={{ padding: "0 16px" }}>
-          <h2 style={{ fontSize: 16, fontWeight: 900, margin: "8px 0 12px" }}>{t("settings.title")}</h2>
-
+          {/* 見出し(タブ名)は上の header に出るので、ここでは繰り返さない */}
           <button onClick={() => { setGuideStep(0); setGuideSeen(false); }}
             style={{ ...btn(C.surface2, C.text), width: "100%", padding: 14, fontSize: 14, marginBottom: 12, border: `1px solid ${C.border}` }}>
-            {t("settings.guideAgain")}
+            <Icon name="book" size={16} style={{ marginRight: 6 }} />{t("settings.guideAgain")}
           </button>
-
-          {/* Web版には出さない(iapAvailable()が常にfalse)。購入済みでも「購入を復元」は
-              常設する(Guideline 3.1.1: 復元可能なIAPには復元手段が必須)。 */}
-          {iapAvailable() && (
-            <div style={{ background: C.surface, borderRadius: 14, padding: 16, border: `1px solid ${C.border}`, marginBottom: 12 }}>
-              <div style={{ fontSize: 14, fontWeight: 900, marginBottom: 10 }}>{t("settings.iap.title")}</div>
-              {iapError && <div role="alert" style={{ fontSize: 13, color: C.red, marginBottom: 10 }}>{iapError}</div>}
-              {iapPending && !purchased && <div role="status" style={{ fontSize: 13, color: C.yellow, lineHeight: 1.6, marginBottom: 10 }}>{t("paywall.pending")}</div>}
-              {iapNotice && <div role="status" style={{ fontSize: 13, color: C.green, lineHeight: 1.6, marginBottom: 10 }}>{iapNotice}</div>}
-              {purchased ? (
-                <p style={{ color: C.muted, fontSize: 13, lineHeight: 1.7, margin: "0 0 10px" }}>{t("settings.iap.unlocked")}</p>
-              ) : (
-                // 価格は上のuseEffect(view==="settings"の条件)で既に先読み済みなので、
-                // ここではpurchaseUnlock()だけ呼べば足りる(ペイウォール側と同じ形)。
-                // 以前はここでfetchUnlockProduct()を取り直していたが、Swift側の
-                // purchase()も内部でfetchProducts()をもう一度呼ぶため二重フェッチだった。
-                <button disabled={iapBusy} onClick={async () => {
-                  setIapBusy(true); setIapError(""); setIapNotice(""); setIapPending(false);
-                  try {
-                    const status = await purchaseUnlock();
-                    if (status === "purchased") setPurchased(true);
-                    else if (status === "pending") setIapPending(true);
-                  } catch { setIapError(t("paywall.purchaseFailed")); }
-                  setIapBusy(false);
-                }} style={{ ...btn(C.red), width: "100%", padding: 14, fontSize: 14, marginBottom: 8, opacity: iapBusy ? 0.6 : 1 }}>
-                  {t("settings.iap.unlock", { price: iapProduct?.displayPrice ?? "…" })}
-                </button>
-              )}
-              <button disabled={iapBusy} onClick={async () => {
-                setIapBusy(true); setIapError(""); setIapNotice(""); setIapPending(false);
-                try {
-                  const ok = await restorePurchase();
-                  if (ok !== null) { // null=サインインをキャンセル。何も表示しない
-                    setPurchased(ok);
-                    if (ok) setIapNotice(t("settings.iap.restored"));
-                    else setIapError(t("settings.iap.restoreNotFound"));
-                  }
-                } catch { setIapError(t("settings.iap.restoreFailed")); }
-                setIapBusy(false);
-              }} style={{ ...btn(C.surface2, C.text), width: "100%", padding: 14, fontSize: 14, border: `1px solid ${C.border}`, opacity: iapBusy ? 0.6 : 1 }}>
-                {t("settings.iap.restore")}
-              </button>
-            </div>
-          )}
 
           <div style={{ background: C.surface, borderRadius: 14, padding: 16, border: `1px solid ${C.border}`, marginBottom: 12 }}>
             <label style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 14 }}>
@@ -4836,9 +4875,14 @@ function App() {
                   <span style={{ position: "absolute", top: 3, left: healthOn ? 25 : 3, width: 24, height: 24, borderRadius: "50%", background: "#fff", transition: "left .15s" }} />
                 </button>
               </label>
-              <p style={{ color: C.muted, fontSize: 13, margin: "10px 0 0", lineHeight: 1.6 }}>
-                {t("settings.health.desc")}
-              </p>
+              {/* 説明は7行あった。要約を1行出し、詳細は畳む */}
+              <p style={{ color: C.muted, fontSize: 13, margin: "10px 0 0", lineHeight: 1.6 }}>{t("settings.health.summary")}</p>
+              <details style={{ marginTop: 4 }}>
+                <summary style={{ color: C.muted, fontSize: 12, cursor: "pointer" }}>{t("common.details")}</summary>
+                <p style={{ color: C.muted, fontSize: 13, margin: "6px 0 0", lineHeight: 1.6 }}>
+                  {t("settings.health.desc")}
+                </p>
+              </details>
               {/* 書き込みの権限は一度拒否されるとシートが出ないので、ヘルスケアアプリへ誘導する */}
               {healthOn && (healthStatus?.workout === "denied" || healthStatus?.bodyMass === "denied") && (
                 <p style={{ color: C.yellow, fontSize: 13, margin: "10px 0 0", lineHeight: 1.6 }}>
@@ -4917,7 +4961,7 @@ function App() {
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 8 }}>
                       <strong style={{ fontSize: 13, minWidth: 0 }}>
                         {exName(e.n)}
-                        {custom && <span style={{ color: C.blue, fontSize: 11, marginLeft: 6 }}>{t("common.custom")}</span>}
+                        {custom && <span style={{ color: C.muted, fontSize: 11, marginLeft: 6 }}>{t("common.custom")}</span>}
                         {edited && <span style={{ color: C.yellow, fontSize: 11, marginLeft: 6 }}>{t("settings.modified")}</span>}
                       </strong>
                       {custom ? (
@@ -5017,7 +5061,7 @@ function App() {
                 return (
                   <button key={s.id} role="radio" aria-checked={on}
                     onClick={() => persist({ profile: { ...profile, aiService: s.id } })}
-                    style={{ ...btn(on ? C.blue : C.surface2, on ? "#fff" : C.text), fontSize: 14, padding: "10px 14px" }}>
+                    style={{ ...btn(on ? C.text : C.surface2, on ? C.bg : C.text), fontSize: 14, padding: "10px 14px" }}>
                     {s.label}
                   </button>
                 );
@@ -5034,7 +5078,7 @@ function App() {
               {SUPPORTED_LANGS.map(code => (
                 <button key={code} role="radio" aria-checked={lang === code}
                   onClick={() => persist({ profile: { ...profile, lang: code } })}
-                  style={{ ...btn(lang === code ? C.blue : C.surface2, lang === code ? "#fff" : C.text), flex: 1, fontSize: 14, padding: "10px 12px" }}>
+                  style={{ ...btn(lang === code ? C.text : C.surface2, lang === code ? C.bg : C.text), flex: 1, fontSize: 14, padding: "10px 12px" }}>
                   {t("lang." + code)}
                 </button>
               ))}
@@ -5048,7 +5092,7 @@ function App() {
               {SUPPORTED_UNITS.map(code => (
                 <button key={code} role="radio" aria-checked={unit === code}
                   onClick={() => persist({ profile: { ...profile, unit: code } })}
-                  style={{ ...btn(unit === code ? C.blue : C.surface2, unit === code ? "#fff" : C.text), flex: 1, fontSize: 14, padding: "10px 12px" }}>
+                  style={{ ...btn(unit === code ? C.text : C.surface2, unit === code ? C.bg : C.text), flex: 1, fontSize: 14, padding: "10px 12px" }}>
                   {t("unit." + code)}
                 </button>
               ))}
@@ -5067,10 +5111,12 @@ function App() {
                 <span style={{ position: "absolute", top: 3, left: soundOn ? 25 : 3, width: 24, height: 24, borderRadius: "50%", background: "#fff", transition: "left .15s" }} />
               </button>
             </label>
-            <p style={{ color: C.muted, fontSize: 13, margin: "10px 0 0", lineHeight: 1.6 }}>
-              {t("settings.soundDesc")}{" "}
-              {t("settings.soundDesc2")}
-            </p>
+            {/* 1文目(いつ知らせるか)だけ常に出し、通知を許可しない場合とサイレントスイッチの説明は畳む */}
+            <p style={{ color: C.muted, fontSize: 13, margin: "10px 0 0", lineHeight: 1.6 }}>{t("settings.soundDesc")}</p>
+            <details style={{ marginTop: 4 }}>
+              <summary style={{ color: C.muted, fontSize: 12, cursor: "pointer" }}>{t("common.details")}</summary>
+              <p style={{ color: C.muted, fontSize: 13, margin: "6px 0 0", lineHeight: 1.6 }}>{t("settings.soundDesc2")}</p>
+            </details>
             {/* 一度拒否されるとiOSは再度ダイアログを出さないため、設定アプリへ誘導するしかない */}
             {soundOn && notifyPerm === "denied" && (
               <p style={{ color: C.yellow, fontSize: 13, margin: "10px 0 0", lineHeight: 1.6 }}>
@@ -5079,9 +5125,60 @@ function App() {
             )}
           </div>
 
+          {/* 購入。以前は設定の最上部にあったが、設定を開くたびに最初に見える場所に置くほどの操作ではない。
+              買うきっかけは記録の保存時(ペイウォール)と、分割タブの残り回数の案内で足りる。
+              Web版には出さない(iapAvailable()が常にfalse)。購入済みでも「購入を復元」は
+              常設する(Guideline 3.1.1: 復元可能なIAPには復元手段が必須)。 */}
+          {iapAvailable() && (
+            <div id="settings-iap" style={{ background: C.surface, borderRadius: 14, padding: 16, border: `1px solid ${C.border}`, marginBottom: 12, scrollMarginTop: 16 }}>
+              <div style={{ fontSize: 14, fontWeight: 900, marginBottom: 10 }}>{t("settings.iap.title")}</div>
+              {iapError && <div role="alert" style={{ fontSize: 13, color: C.red, marginBottom: 10 }}>{iapError}</div>}
+              {iapPending && !purchased && <div role="status" style={{ fontSize: 13, color: C.yellow, lineHeight: 1.6, marginBottom: 10 }}>{t("paywall.pending")}</div>}
+              {iapNotice && <div role="status" style={{ fontSize: 13, color: C.green, lineHeight: 1.6, marginBottom: 10 }}>{iapNotice}</div>}
+              {purchased ? (
+                <p style={{ color: C.muted, fontSize: 13, lineHeight: 1.7, margin: "0 0 10px" }}>{t("settings.iap.unlocked")}</p>
+              ) : (
+                // 価格は上のuseEffect(view==="settings"の条件)で既に先読み済みなので、
+                // ここではpurchaseUnlock()だけ呼べば足りる(ペイウォール側と同じ形)。
+                // 以前はここでfetchUnlockProduct()を取り直していたが、Swift側の
+                // purchase()も内部でfetchProducts()をもう一度呼ぶため二重フェッチだった。
+                <button disabled={iapBusy} onClick={async () => {
+                  setIapBusy(true); setIapError(""); setIapNotice(""); setIapPending(false);
+                  try {
+                    const status = await purchaseUnlock();
+                    if (status === "purchased") setPurchased(true);
+                    else if (status === "pending") setIapPending(true);
+                  } catch { setIapError(t("paywall.purchaseFailed")); }
+                  setIapBusy(false);
+                }} style={{ ...btn(C.red), width: "100%", padding: 14, fontSize: 14, marginBottom: 8, opacity: iapBusy ? 0.6 : 1 }}>
+                  {t("settings.iap.unlock", { price: iapProduct?.displayPrice ?? "…" })}
+                </button>
+              )}
+              <button disabled={iapBusy} onClick={async () => {
+                setIapBusy(true); setIapError(""); setIapNotice(""); setIapPending(false);
+                try {
+                  const ok = await restorePurchase();
+                  if (ok !== null) { // null=サインインをキャンセル。何も表示しない
+                    setPurchased(ok);
+                    if (ok) setIapNotice(t("settings.iap.restored"));
+                    else setIapError(t("settings.iap.restoreNotFound"));
+                  }
+                } catch { setIapError(t("settings.iap.restoreFailed")); }
+                setIapBusy(false);
+              }} style={{ ...btn(C.surface2, C.text), width: "100%", padding: 14, fontSize: 14, border: `1px solid ${C.border}`, opacity: iapBusy ? 0.6 : 1 }}>
+                {t("settings.iap.restore")}
+              </button>
+            </div>
+          )}
+
           {/* バックアップ */}
-          <div style={{ background: C.surface, borderRadius: 14, padding: 16, border: `1px solid ${C.border}`, marginBottom: 12 }}>
-            <div style={{ fontSize: 14, fontWeight: 900, marginBottom: 4 }}>{t("backup.title")}</div>
+          <div id="settings-backup" style={{ background: C.surface, borderRadius: 14, padding: 16, border: `1px solid ${C.border}`, marginBottom: 12, scrollMarginTop: 16 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, marginBottom: 4 }}>
+              <div style={{ fontSize: 14, fontWeight: 900 }}>{t("backup.title")}</div>
+              <div style={{ fontSize: 12, color: lastBackupAt ? C.muted : C.yellow }}>
+                {lastBackupAt ? t("backup.lastAt", { date: fmtDate(lastBackupAt) }) : t("backup.never")}
+              </div>
+            </div>
             <p style={{ color: C.muted, fontSize: 13, margin: "0 0 12px", lineHeight: 1.6 }}>
               {t("backup.desc")}
             </p>
@@ -5089,7 +5186,7 @@ function App() {
               <div role="status" style={{ background: "#1E3226", color: "#A8E6BC", borderRadius: 8, padding: 10, fontSize: 13, marginBottom: 10 }}>{backupMsg}</div>
             )}
             <button onClick={exportBackup} disabled={workouts.length === 0}
-              style={{ ...btn(workouts.length === 0 ? C.surface2 : C.blue, workouts.length === 0 ? C.muted : "#fff"), width: "100%", padding: 14, fontSize: 14, marginBottom: 8 }}>
+              style={{ ...btn(workouts.length === 0 ? C.surface2 : C.red, workouts.length === 0 ? C.muted : "#fff"), width: "100%", padding: 14, fontSize: 14, marginBottom: 8 }}>
               {t("backup.export")}
             </button>
 
@@ -5131,7 +5228,7 @@ function App() {
       {showSplitHistory && todayDay && (
         <div onClick={closeSplitHistory} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.6)", zIndex: 50, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
           <div ref={splitHistoryModalRef} onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-label={t("split.dayHistory", { day: dayName(todayDay.name) })} tabIndex={-1}
-            style={{ background: C.surface, borderTop: `3px solid ${C.blue}`, borderRadius: "16px 16px 0 0", padding: "20px 20px calc(20px + env(safe-area-inset-bottom))", width: "100%", maxWidth: 520, maxHeight: "70vh", overflowY: "auto" }}>
+            style={{ background: C.surface, borderTop: `3px solid ${C.yellow}`, borderRadius: "16px 16px 0 0", padding: "20px 20px calc(20px + env(safe-area-inset-bottom))", width: "100%", maxWidth: 520, maxHeight: "70vh", overflowY: "auto" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
               <strong style={{ fontSize: 15 }}>{t("split.dayHistory", { day: dayName(todayDay.name) })}</strong>
               <button onClick={closeSplitHistory} style={{ ...btn(C.surface2, C.muted), padding: "4px 12px", fontSize: 13 }}>{t("common.close")}</button>
@@ -5165,7 +5262,15 @@ function App() {
       {/* タブバー */}
       <nav ref={navRef} style={{ position: "fixed", bottom: 0, left: 0, right: 0, maxWidth: 520, margin: "0 auto", display: "flex", background: C.surface, borderTop: `1px solid ${C.border}`, paddingBottom: "env(safe-area-inset-bottom)" }}>
         {[["split", t("tab.split")], ["log", t("tab.log")], ["history", t("tab.history")], ["settings", t("tab.settings")]].map(([k, label]) => (
-          <button key={k} onClick={() => setView(k)} style={{ flex: 1, padding: "14px 0 18px", background: "none", border: "none", color: view === k ? C.red : C.muted, fontWeight: view === k ? 900 : 400, fontSize: 13, cursor: "pointer", fontFamily: "inherit", borderTop: view === k ? `2px solid ${C.red}` : "2px solid transparent" }}>{label}</button>
+          // 線アイコン+文字。文字だけだと、片手で持ったときに見ずに押せる手がかりが無かった
+          <button key={k} onClick={() => setView(k)} aria-current={view === k ? "page" : undefined}
+            // 高さは 56px ちょうどに固定する。インターバルのパネル・「現在の種目へ」ボタン・ルートの paddingBottom が
+            // 「タブバー = 56px + env(safe-area-inset-bottom)」を前提にしている(アイコンを足して伸ばすと、そこが重なる)
+            style={{ flex: 1, height: 56, boxSizing: "border-box", padding: "0", background: "none", border: "none", color: view === k ? C.red : C.muted, fontWeight: view === k ? 800 : 500, fontSize: 11, lineHeight: "14px", cursor: "pointer", fontFamily: "inherit",
+              display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3 }}>
+            <Icon name={k} size={22} />
+            {label}
+          </button>
         ))}
       </nav>
     </div>
