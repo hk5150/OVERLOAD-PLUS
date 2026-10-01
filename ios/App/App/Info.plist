@@ -41,8 +41,27 @@
 	<true/>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
-	<key>UIMainStoryboardFile</key>
-	<string>Main</string>
+	<!-- UIScene のライフサイクル。iOS 27 SDK(Xcode 27)でビルドしたアプリは、これが無いと iOS 27 の端末で
+	     起動時に UIKit に止められる(1.1.1 (11) の実機で踏んだ。docs/Watchアプリ.md)。
+	     ウィンドウと最初の画面は SceneDelegate.swift がコードで作るので、Main.storyboard は使わない。 -->
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<false/>
+		<key>UISceneConfigurations</key>
+		<dict>
+			<key>UIWindowSceneSessionRoleApplication</key>
+			<array>
+				<dict>
+					<!-- AppDelegate.swift の configurationForConnecting が返す名前と同じにしておく -->
+					<key>UISceneConfigurationName</key>
+					<string>Default Configuration</string>
+					<key>UISceneDelegateClassName</key>
+					<string>$(PRODUCT_MODULE_NAME).SceneDelegate</string>
+				</dict>
+			</array>
+		</dict>
+	</dict>
 	<key>UIRequiredDeviceCapabilities</key>
 	<array>
 		<string>armv7</string>

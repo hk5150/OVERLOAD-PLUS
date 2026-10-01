@@ -377,6 +377,22 @@ describe("休憩タイマーのネイティブ設定", () => {
     expect(read("ios/App/App/App.entitlements")).toContain("com.apple.developer.usernotifications.time-sensitive");
   });
 
+  it("UISceneのライフサイクルを採用している(iOS 27 SDKでビルドしたアプリは、無いとiOS 27の端末で起動を拒否される)", () => {
+    // 1.1.1 (11) の実機(iOS 27.0)で起動直後に落ちた。iOS 26 のシミュレータでは再現しないので、設定が戻ったらここで止める。
+    const plist = read("ios/App/App/Info.plist");
+    expect(plist).toContain("<key>UIApplicationSceneManifest</key>");
+    expect(plist).toContain("<string>$(PRODUCT_MODULE_NAME).SceneDelegate</string>");
+    expect(plist).not.toContain("UIMainStoryboardFile"); // 画面は SceneDelegate がコードで作る
+    const appDelegate = read("ios/App/App/AppDelegate.swift");
+    expect(appDelegate).toContain("configurationForConnecting");
+    expect(appDelegate).toContain('UISceneConfiguration(name: "Default Configuration"');
+    expect(plist).toMatch(/<key>UISceneConfigurationName<\/key>\s*<string>Default Configuration<\/string>/);
+    const scene = read("ios/App/App/SceneDelegate.swift");
+    expect(scene).toContain("rootViewController = BridgeViewController()"); // プラグインの登録は BridgeViewController で行う
+    const pbx = read("ios/App/App.xcodeproj/project.pbxproj");
+    expect(pbx).toContain("SceneDelegate.swift in Sources");
+  });
+
   it("Live Activityが有効で、拡張がビルド・埋め込みされる", () => {
     const plist = read("ios/App/App/Info.plist");
     expect(plist).toMatch(/<key>NSSupportsLiveActivities<\/key>\s*<true\/>/);

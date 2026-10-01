@@ -68,6 +68,11 @@ KURABELL Workout Log は漸進性過負荷にもとづく筋トレ記録PWA。**
   Web版は `LIBS` 経由で読むので無症状、テストも「参照先が実在するか」しか見ていなかった。
   今は `<script src>` を `DOMAIN_FILES` から生成し、逆方向(コピーしたのに読み込まれていない)も
   テストで縛ってある。**手で並びを書き足す場所を作らないこと。**
+- **iOS は UIScene のライフサイクルで動いている(`SceneDelegate.swift`)。** Xcode 27(iOS 27 SDK)でビルドしたアプリは、
+  `UIApplicationSceneManifest` と `configurationForConnecting` が無いと iOS 27 の端末で起動時に UIKit に止められる
+  (1.1.1 (11) の実機で踏んだ。シミュレータの iOS 26 では再現しない)。`Main.storyboard` は使っていない。ウィンドウと
+  `BridgeViewController` は SceneDelegate がコードで作るので、`UIMainStoryboardFile` を戻したり、AppDelegate の
+  `window` に頼るコードを足したりしないこと。Capacitor 6 には公式の scene 対応が無く、手で足している。詳細は `docs/Watchアプリ.md`
 - **外部ホストへのリクエストを足さない。** フォントもライブラリも同梱済み。
   電波の悪いジムや機内モードが主戦場なので、外部依存は実用上の欠陥になる。テストで縛ってある。
 - **`src/domain/storage.js` はもう完全に汎用のkey-valueストアではない。** `"workout-log-v1"`

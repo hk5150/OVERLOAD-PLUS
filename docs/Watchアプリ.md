@@ -9,12 +9,25 @@ Watch でセットを入力するためのアプリ(v120〜)。
 **TestFlight に 1.1.1 (11) をアップロード済み**(2026-10-01 8:29、v135)。中身は v134(Watch の記録中は休憩の Live Activity を出さない)と
 v135(数値欄の遅延 select() がフォーカスを奪い合い、重量に「60」と打つと「6」になる不具合)。審査にはまだ出していない。
 
+**1.1.1 (11) は iOS 27.0 に上がった実機で起動直後にクラッシュした**(2026-10-01 9:05、北村さんの iPhone 15 Pro Max)。
+クラッシュログ: `EXC_BREAKPOINT` in `UIKitCore ___UIApplicationEvaluateRuntimeIssueForNoSceneLifecycleAdoption_block_invoke`。
+Xcode 27(iOS 27 SDK)でビルドしたアプリは **UIScene のライフサイクルを採用していないと iOS 27 の端末で起動を拒否される**
+(Apple DTS: `UIApplicationSceneManifest` が無い、または `application(_:configurationForConnecting:options:)` 未実装で起動失敗。
+Capacitor 公式の手順は 8.5 向け https://capacitorjs.com/docs/updating/8-5 で、6 系にはバックポートされていない)。
+iOS 26.5 のシミュレータでは再現しない(検査は iOS 27 の実行環境でだけ働く)ので、**実機の OS 版を最初に疑うこと**。
+→ **1.1.1 (12) で対応**: `SceneDelegate.swift`(ウィンドウと `BridgeViewController()` をコードで作る。URL / NSUserActivity は
+`ApplicationDelegateProxy` へ)、`AppDelegate` に `configurationForConnecting`、`Info.plist` に `UIApplicationSceneManifest`
+(`UIMainStoryboardFile` は外した。`Main.storyboard` のファイルは残っているが未使用)。
+シミュレータ(26.5、Release、既存アプリの上に上書き)で起動・設定画面のプラグイン表示まで確認。**iOS 27 の実機で起動するかは (12) の TestFlight で確かめる。**
+
 (以下は 1.1 提出時点のメモ)
 提出の内容と App Store Connect の入力の罠は `APPSTORE.md` の提出記録。コードは全部 push 済み(`d95f721`)。
 
 **次のセッションでやること(優先順)**
-0. **1.1.1 (11) を実機で確かめる**: (a) iPhone でセットを入力しても Watch の KURABELL が隠れないか(下の「休憩」)、
-   (b) 前回の記録が無い種目の重量欄に2桁を打っても消えないか。問題なければ 1.1.1 として審査に出す(最新情報は不具合修正の2点)
+0. **1.1.1 (12) を実機(iOS 27.0)で確かめる**: まず起動すること。次に (a) iPhone でセットを入力しても Watch の KURABELL が隠れないか(下の「休憩」)、
+   (b) 前回の記録が無い種目の重量欄に2桁を打っても消えないか、(c) 前面復帰・共有シート(書き出し)・Live Activity・購入シート(サンドボックス)が scene 化で壊れていないか。
+   問題なければ 1.1.1 として審査に出す(最新情報は不具合修正の2点 + iOS 27 対応)。**審査に出さないと、App Store 版 1.1 (10) も iOS 27 の端末では
+   同じ理由で落ちる可能性がある**(1.1 (10) は Xcode 26 系でビルドしたので対象外のはず。クラッシュの報告が来たら最優先)
 1. 審査結果のメールを見る。差し戻しなら内容に沿って対応(1.0 のときは新規アカウント向けの 2.1 Information Needed だった)
 2. 承認されたら、実機の App Store で 1.1 が出ることと、Watch アプリが App Store 版で入ることを確認
 3. 残課題(コード変更が要る): `www/` の minify、`swapExercise` のテスト、初回訪問時のスクリプト混在(低優先)。
