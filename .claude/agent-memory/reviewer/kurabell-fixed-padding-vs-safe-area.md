@@ -19,6 +19,11 @@ metadata:
 「ブラウザで実測して収まることを確認した」という報告は iOS の検証にはならない
 ([[kurabell-1rm-filter-divergence]] と同じく、Web/iOSの2経路のうち片方しか見ていない型)。
 
+**タブバーの高さ「56px」も決め打ちの前提。** インターバル展開パネルとFABの `bottom: calc(56px + env())`、
+restFull時の `322px`(=パネル+56px)、通常時のルート `paddingBottom: 90`(=56+env34 にたまたま一致)が
+タブバー56pxを仮定している。ui-refresh(v136)でタブバーにアイコン(23px)を足して約60px超に伸びたのに
+これらが据え置きだった。**タブバー(navRef)の中身・padding・font-sizeを変える差分では、この4箇所を照合する。**
+
 **上側にも同じ型がある。** 上部バーは `position: sticky, top: 0` で
 `paddingTop: calc(10px + env(safe-area-inset-top))` を持つ。だから
 - `scrollIntoView({block:"start"})` の着地点を決める `scrollMarginTop: <実測px>`

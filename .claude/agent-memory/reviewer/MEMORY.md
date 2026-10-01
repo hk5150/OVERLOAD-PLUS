@@ -1,7 +1,7 @@
 - [select センチネル不一致](kurabell-select-sentinel-mismatch.md) — 保存時フォールバック値と`<option value>`のセンチネルがずれるバグクラス(eqで実例)
 - [チップ→ジャンプ の母集団不一致](kurabell-chip-jump-pool-mismatch.md) — 絞り込みチップをジャンプ用に転用する際、表示母集団とジャンプ先存在条件がずれると無反応になる
 - [ゲージ幅の片側クランプ](kurabell-gauge-width-clamp.md) — `${x*100}%` を片側しかクランプしないと負値/NaNで幅autoになり満杯に見える
-- [固定px paddingとsafe-area](kurabell-fixed-padding-vs-safe-area.md) — fixed要素避けの実測px paddingBottomはenv()の分だけiOS実機で不足する
+- [固定px paddingとsafe-area](kurabell-fixed-padding-vs-safe-area.md) — fixed要素避けの実測px paddingBottomはenv()分iOSで不足。タブバー56px決め打ち4箇所(v136)
 - [1RMのフィルタ不一致](kurabell-1rm-filter-divergence.md) — 推定1RMの算出が4箇所、除外条件が3種類。workingSetsはassistedを除かない
 - [版上げ時のvite移行.md節](kurabell-version-entry-in-vite-doc.md) — v116で節が途絶。v117以降は小さな版上げで指摘しない
 - [拡張ターゲットの版・Archive設定](kurabell-extension-version-sync.md) — v112以降RestActivity拡張あり。App/拡張の版一致・SKIP_INSTALL・埋め込み順を差分で確認
@@ -16,3 +16,5 @@
 - [保存済みrirの空文字](kurabell-stored-rir-empty-string.md) — 保存済みの未実施はrirキー無し。rir:""は s.rir!=null 箇所とWatchのPrev.rir(Int?)デコードを壊す(v128)
 - [編集画面と補助の印](kurabell-edit-screen-assisted.md) — v129でassisted保持、v130でnextSetTypeに集約、v131でvolume.jsへ移設・テスト化
 - [LIBSのglobals起動検査](kurabell-boot-globals-check.md) — v133: Web版だけで効く。公開名の増減はglobalsとセット。誤検知の前提と再読み込みがキャッシュを破らない件
+- [await跨ぎのsetState分割](kurabell-await-split-setstate.md) — saveWorkoutでawait前後に分けたsetStateが中間renderでLive Activity等のeffectを一瞬走らせる(v134)
+- [UISceneライフサイクル](kurabell-uiscene-lifecycle.md) — 1.1.1(12)でscene化。AppDelegateのdidBecomeActive/windowは死ぬ。Capacitor 6.2.1コアはkeyWindow不使用(確認済)
