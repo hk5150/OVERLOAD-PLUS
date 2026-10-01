@@ -20,6 +20,13 @@ iOS 26.5 のシミュレータでは再現しない(検査は iOS 27 の実行�
 (`UIMainStoryboardFile` は外した。`Main.storyboard` のファイルは残っているが未使用)。
 シミュレータ(26.5、Release、既存アプリの上に上書き)で起動・設定画面のプラグイン表示まで確認。**iOS 27 の実機で起動するかは (12) の TestFlight で確かめる。**
 
+**1.1.1 (13) を TestFlight にアップロード済み**(2026-10-01 22:40。中身は (12) と同じで番号だけ上げた)。
+(12) は、Xcode のサインインを直したあとの1回目のアップロードで App Store Connect 側に受け付け枠だけが作られて失敗し、
+以後「The bundle version must be higher than the previously uploaded version」(409、ENTITY_ERROR.ATTRIBUTE.INVALID.DUPLICATE)で
+上げられなくなった。**アップロードが途中で失敗したら、番号を1つ上げて作り直すのが早い。**
+**次: iOS 27 の実機で (13) が起動するかを確かめ、問題なければ 1.1.1 を審査に出す。**
+
+以下は (12) のときの経緯。
 **1.1.1 (12) はアーカイブ済み・アップロード待ち**(2026-10-01 午前)。`xcodebuild -exportArchive` が
 「Failed to Use Accounts(App Store Connect access for LJR5Q5TU54 is required)」で止まった(Xcode の Apple Account のセッション切れ。前にも起きた)。
 帰宅後にやること(どちらか):
