@@ -448,6 +448,45 @@ Claude in Chrome で App Store Connect を操作して入力した(北村さん�
   メディアマネージャーの 6.9インチの枠で「すべてを削除」してから1枚ずつ入れる。英語は「日本語の画像を流用中」になるので「編集」を押してから入れる。
   1枚ずつ入れれば順番どおりに並ぶ
 
+## 1.1.1(不具合修正 + iOS 27 対応)の掲載情報
+
+中身は v128〜v135 と UIScene 対応(`fee5499`)。ビルドは 1.1.1 (13)。
+2026-10-01 夜、iOS 27 の実機で起動・Watch の画面・重量欄の2桁・共有シート・購入シートを確認済み(北村さん)。
+変えるのは What's New だけ。説明文・スクリーンショット・審査メモ・キーワードは 1.1 のまま。
+評価依頼(v132)は利用者に告知する変更ではないので書かない。
+
+### このバージョンの最新情報(What's New)
+
+日本語:
+```
+・Apple Watch で記録している間、iPhone の休憩表示が Watch の画面を隠すことがある問題を修正しました
+・重量や回数の欄に2桁を入力すると、1桁しか入らないことがある問題を修正しました
+・履歴を編集すると「補助あり」の印が消える問題を修正しました。履歴の編集画面でも補助の印を切り替えられます
+・範囲外の値を含むバックアップを復元できない問題を修正しました
+・CSV の書き出しで、補助ありのセットを区別できるようにしました
+・iOS 27 に対応しました
+```
+
+English:
+```
+- Fixed an issue where the iPhone rest timer could cover the Apple Watch app while a workout was recorded on the watch.
+- Fixed an issue where typing two digits into a weight or reps field could keep only one.
+- Fixed an issue where editing a past workout removed the assisted mark. You can now toggle the assisted mark in the history editor.
+- Fixed an issue where a backup containing out-of-range values could not be restored.
+- CSV exports now mark assisted sets.
+- Supports iOS 27.
+```
+
+### 1.1.1 (ビルド13) — 2026-10-01 22:56 に審査へ提出
+
+Claude in Chrome で App Store Connect を操作して入力した(北村さんがサインイン、「審査へ提出」の前に確認)。
+
+- バージョンは、1.1 のページのバージョン名の横の ⌄ → 「iOSアプリ」の ⊕ で作る(Chrome の窓が狭いと左の一覧が出ない)
+- **新しいバージョンでは、プロモーション用テキストが日英とも空になる**(概要・キーワード・スクリーンショット・審査メモ・リリース設定は引き継がれる)。1.1 と同じ文面を入れ直した
+- ビルドを選ぶ前は、スクリーンショットの欄に「iPad」のタブが出る。iPhone 専用のビルド(`TARGETED_DEVICE_FAMILY = 1`)を選んで保存すると消え、iPad の画像は求められない
+- ビルドの一覧には (12) も出ていた(アップロードに失敗したと思っていた分)。(13) を選んだ
+- Watch アプリは (13) に埋め込み。1.1 (10) からの Watch 側のコード変更は `SampleData.swift`(起動引数のときだけ)だけで、40/41mm の詰め(`71ef6fe`)は `ui-refresh` 側なので 1.2 で入る
+
 ## キャンペーンリンク(流入元の計測)
 
 アプリにSDKを入れていないので、どこから来た人がダウンロードしたかは、リンクの `ct` で分けて
