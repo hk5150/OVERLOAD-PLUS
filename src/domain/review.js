@@ -14,7 +14,7 @@ const REVIEW_INTERVAL_DAYS = 120;
 const REVIEW_MIN_WORKOUTS = 3;
 
 // 保存に成功した直後に依頼するかどうか(テスト対象)。
-// beatPrevious: 保存した記録のどれかの種目で、推定1RMが前回までのベストを超えた(記録画面の「YOU WIN!」と同じ条件)
+// beatPrevious: 保存した記録のどれかの種目で、推定1RMが前回までのベストを超えた(記録画面の比較行が緑になる「過去の自分に勝利」と同じ条件)
 // workoutsCount: 保存後の記録の件数
 // lastRequestedAt: 前回依頼した日時(ISO文字列。未依頼・読めない値は依頼していない扱い)
 function shouldRequestReview({ beatPrevious, workoutsCount, lastRequestedAt, now }) {

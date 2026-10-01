@@ -11,7 +11,7 @@ private enum Palette {
     static let yellow = Color(red: 232 / 255, green: 179 / 255, blue: 60 / 255)
     static let red = Color(red: 226 / 255, green: 69 / 255, blue: 60 / 255)
     static let surface = Color(red: 30 / 255, green: 32 / 255, blue: 35 / 255)
-    static let muted = Color(red: 142 / 255, green: 147 / 255, blue: 154 / 255)
+    static let muted = Color(red: 163 / 255, green: 168 / 255, blue: 176 / 255)  // アプリの C.muted と同じ
 }
 
 // 8時間はLive Activityのシステム上限。これより長い範囲を渡す意味はない。
