@@ -168,6 +168,11 @@ KURABELL Workout Log は漸進性過負荷にもとづく筋トレ記録PWA。**
   **他のセッションの印があれば、その作業には触らない。** 自分が引き取るべき状況なら、ユーザーに確かめてから
 - ぶつかったと気づいたら、`mcp__ccd_session_mgmt__send_message` で相手のセッションに、こちらの状況を短く知らせる
 - `.claude/locks/` は gitignore 済み(このMacのセッション同士でだけ使う)
+- **日次ルーティン「【毎日12時】KURABELL App Store実績」**(scheduled task `kurabell-appstore-metrics`、毎日12:12頃)も同じ印を使う。
+  Chrome で App Store Connect の分析画面を読むだけで、その間 `appstore-metrics.md` の印を出す。結果は Obsidian の
+  `Projects/kurabell-metrics.md`(公開・審査提出の出来事もメモ欄に入る)。指標を知りたいときはまずそこを読む。
+  ルーティンは無人で動くので `send_message` は届かない。ルーティンへの連絡は、印と `docs/Watchアプリ.md` の「いまの状態」で行う
+  (ルーティンは毎回そこを読んで、配信中・審査中の版を報告に添える)
 
 ## ファイル
 
