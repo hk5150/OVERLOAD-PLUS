@@ -413,8 +413,12 @@ describe("Watch アプリのネイティブ設定", () => {
     expect(fin).toContain("play(.success)");
     expect(fin).toContain("Task.sleep(nanoseconds: 15_000_000_000)");
     expect(fin).toContain(".onTapGesture { close() }");
+    expect(fin).toContain('Button("OK") { close() }');
+    expect(fin).toContain("scenePhase == .active"); // 見ていない間は数えない
+    // シートで重ねない(子のシートが出ていると出せずに終わる)。出した時点で印を付ける
+    expect(views.slice(views.indexOf("struct RootView"), views.indexOf("struct FinishedView"))).not.toContain(".sheet(item: $store.showingFinished");
     const store = read("ios/App/KurabellWatch/SessionStore.swift");
-    expect(store).toMatch(/func finishedDismissed[\s\S]*?defaults\.set\(f\.id, forKey: finishedShownKey\)/);
+    expect(store).toMatch(/func presentFinishedIfNeeded[\s\S]*?defaults\.set\(f\.id, forKey: finishedShownKey\)[\s\S]*?showingFinished = f/);
     // 心拍とカロリーは Watch がそのワークアウトを保存するときに読む
     expect(read("ios/App/KurabellWatch/WorkoutManager.swift")).toMatch(/averageQuantity\(\)[\s\S]*?finishWorkout\(\)/);
   });

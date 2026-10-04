@@ -36,6 +36,19 @@ struct RootView: View {
     @State private var path: [String] = SampleData.launchValue("-KurabellOpen").map { [$0] } ?? []
 
     var body: some View {
+        // 保存したら「お疲れ様でした」(改善要望 12)。シートで重ねると、休憩画面などの子のシートが出ている・閉じかけている
+        // 間は出せずに終わり、値が残ったまま以後ずっと出なくなる(reviewer 指摘)。画面ごと差し替える
+        // (NavigationStack ごと外れるので、子のシートも一緒に閉じる)
+        if let f = store.showingFinished {
+            FinishedView(finished: f, stats: store.workoutStats?.recordStartAt == f.id ? store.workoutStats : nil) {
+                store.finishedDismissed(f)
+            }
+        } else {
+            main
+        }
+    }
+
+    private var main: some View {
         NavigationStack(path: $path) {
             if let s = store.snapshot {
                 switch s.state {
@@ -47,23 +60,19 @@ struct RootView: View {
                 IdleView()
             }
         }
-        // 保存したら「お疲れ様でした」(改善要望 12)。閉じ方を問わず、閉じたら同じ記録では二度と出さない
-        .sheet(item: $store.showingFinished, onDismiss: {}) { f in
-            FinishedView(finished: f, stats: store.workoutStats?.recordStartAt == f.id ? store.workoutStats : nil) {
-                store.finishedDismissed(f)
-            }
-        }
     }
 }
 
 // MARK: - 完了画面
 
-// タップか15秒で閉じる。出たときに成功の振動を返す。
+// タップか15秒で閉じる。出たときに成功の振動を返す。15秒は画面を見ている(アクティブな)間だけ数える
+// (ワークアウト中は手首を下ろしてもアプリが裏で動き続けるので、見ないうちに閉じてしまう。reviewer 指摘)。
 // 心拍とカロリーは、この Watch がその記録のワークアウトを記録していたときだけ(iPhone は知らないので Watch の値)
 struct FinishedView: View {
     let finished: WatchSnapshot.Finished
     let stats: SessionStore.WorkoutStats?
     let close: () -> Void
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         ScrollView {
@@ -116,15 +125,20 @@ struct FinishedView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 4)
+            .contentShape(Rectangle())
+            .onTapGesture { close() }
+            // シートではないので × が無い。閉じる手段を見える形でも置く
+            Button("OK") { close() }
+                .buttonStyle(.borderedProminent)
+                .tint(Palette.green)
+                .padding(.top, 8)
         }
-        .contentShape(Rectangle())
-        .onTapGesture { close() }
         .onAppear { WKInterfaceDevice.current().play(.success) }
-        .task {
+        .task(id: scenePhase) {
+            guard scenePhase == .active else { return }
             try? await Task.sleep(nanoseconds: 15_000_000_000)
             if !Task.isCancelled { close() }
         }
-        .onDisappear { close() } // × やスワイプで閉じたときも、出したことにする
         .background(Color.black.ignoresSafeArea())
     }
 }

@@ -78,11 +78,13 @@ final class SessionStore: NSObject, ObservableObject {
         guard showingFinished == nil, let f = base?.finished else { return }
         let shown = defaults.object(forKey: finishedShownKey) as? Double
         guard f.id != shown, Date().timeIntervalSince1970 * 1000 - f.endAt < Self.finishedMaxAge else { return }
+        // 出した時点で「出した」ことにする。閉じたときに付けると、閉じる途中に届いたスナップショットでもう一度出る。
+        // 出したまま Watch のアプリが落ちても、次の記録の起動時に前回のものを出さない(reviewer 指摘)
+        defaults.set(f.id, forKey: finishedShownKey)
         showingFinished = f
     }
 
     func finishedDismissed(_ f: WatchSnapshot.Finished) {
-        defaults.set(f.id, forKey: finishedShownKey)
         if showingFinished?.id == f.id { showingFinished = nil }
     }
 
@@ -161,6 +163,8 @@ final class SessionStore: NSObject, ObservableObject {
         if snap.state != .active { pending.removeAll { $0.kind != "workout" } }
         save()
         syncWorkout(with: snap)
+        // 次の記録が始まったら、前回の完了画面は下げる
+        if snap.recordStartAt != nil { showingFinished = nil }
         presentFinishedIfNeeded()
         // Watch で始めた休憩が iPhone で確認された後に、iPhone 側で止まった・別の休憩が始まったら、
         // Watch の通知を取り消す(確認前の古いスナップショットでは判断しない)
