@@ -411,12 +411,12 @@ struct SetEditView: View {
                 // 上の1行が無くなった分の高さで、46mm でも1画面に収まる
                 ValueStepper(value: formatWeight(weight), caption: ex.weightLabel, shortCaption: ex.unit,
                         prev: row?.prev.map { "\(labels.prev) \(assistedMark($0))\($0.weight)" },
-                        minus: { weight = max(0, weight - ex.step); weightTouched = true },
-                        plus: { weight += ex.step; weightTouched = true })
+                        minus: { stepWeight(-1, $0) },
+                        plus: { stepWeight(1, $0) })
                 ValueStepper(value: String(Int(reps)), caption: labels.reps,
                         prev: row?.prev.map { "\(labels.prev) \($0.reps)" },
-                        minus: { reps = max(0, reps - 1); repsTouched = true },
-                        plus: { reps += 1; repsTouched = true })
+                        minus: { stepReps(-1, $0) },
+                        plus: { stepReps(1, $0) })
                 if row?.warmup == true {
                     Button("OK") { commit(rir: nil) }
                         .buttonStyle(.borderedProminent)
@@ -460,6 +460,32 @@ struct SetEditView: View {
         }
     }
 
+    // −/+ の1回分(改善要望 5)。押してすぐは今までどおり1刻み。押し続けると StepPad が繰り返し呼び、
+    // 1.5秒を過ぎた分(.fast)は重量だけ 5kg(lb は 10)刻みに速める。速いときは刻みの倍数に揃える(61 → 65 → 70)。
+    // 戻り値は「振動を返すか」。連続中は毎回ではなく、10kg(lb は 20)・5回の区切りをまたいだときだけ返す
+    private func stepWeight(_ dir: Double, _ phase: StepPhase) -> Bool {
+        let before = weight
+        if phase == .fast {
+            let fs: Double = ex.unit == "lb" ? 10 : 5
+            weight = dir > 0 ? (floor(weight / fs + 1e-9) + 1) * fs : max(0, (ceil(weight / fs - 1e-9) - 1) * fs)
+        } else {
+            weight = max(0, weight + dir * ex.step)
+        }
+        weightTouched = true
+        return phase == .tap || crossed(before, weight, every: ex.unit == "lb" ? 20 : 10)
+    }
+
+    private func stepReps(_ dir: Double, _ phase: StepPhase) -> Bool {
+        let before = reps
+        reps = max(0, reps + dir)
+        repsTouched = true
+        return phase == .tap || crossed(before, reps, every: 5)
+    }
+
+    private func crossed(_ a: Double, _ b: Double, every: Double) -> Bool {
+        floor(a / every + 1e-9) != floor(b / every + 1e-9)
+    }
+
     // 前回が補助ありだったときの印(「補」)。Prev に専用の項目は無いので、表示用の text の先頭で見分ける
     // (watch.js が text の先頭に labels.assisted を付けている)
     private func assistedMark(_ p: WatchSnapshot.Prev) -> String {
@@ -481,8 +507,8 @@ private struct ValueStepper: View {
     let caption: String
     var shortCaption: String? = nil  // 幅が足りないときの見出し(例: 「重量 kg/片手」→「kg」)
     var prev: String? = nil   // 前回の値(例: 前回 70)。欄の下に、見出しより明るく出す
-    let minus: () -> Void
-    let plus: () -> Void
+    let minus: (StepPhase) -> Bool
+    let plus: (StepPhase) -> Bool
 
     var body: some View {
         HStack(spacing: 4) {
@@ -506,7 +532,7 @@ private struct ValueStepper: View {
         }
     }
 
-    private func stepButton(_ symbol: String, action: @escaping () -> Void) -> some View {
+    private func stepButton(_ symbol: String, action: @escaping (StepPhase) -> Bool) -> some View {
         StepPad(symbol: symbol, action: action)
     }
 
@@ -521,15 +547,21 @@ private struct ValueStepper: View {
     }
 }
 
+// −/+ の1回分が、どの押し方で来たか
+enum StepPhase { case tap, repeating, fast }
+
 // −/+ は続けて何度も押すので、標準の Button ではなく「指が触れた瞬間」に反応させる。
 // Button は指を離したときに確定し、素早く続けて押すと取りこぼした(シミュレータで3回押して1回しか増えない)。
 // 入力画面は ScrollView で包まないので、スクロールのつもりで触れて誤って増減することはない。
+// 押し続けると連続で入る(改善要望 5): 0.4秒で始まり1秒に約8回、1.5秒を過ぎると .fast(重量の刻みを大きく)。
+// 指を離すとすぐ止まる。Digital Crown は使わない(2026-09-26 の判断のまま)。
 private struct StepPad: View {
     let symbol: String
-    let action: () -> Void
+    let action: (StepPhase) -> Bool  // 戻り値が true のときだけ振動を返す
     // 触れている間だけ true。@GestureState は、指を離したときだけでなく、ジェスチャが途中で
     // 取り消されたときも必ず false に戻る(@State だと戻らずに次の接触を無視し続ける恐れがある)
     @GestureState private var pressed = false
+    @State private var repeatTask: Task<Void, Never>?
 
     var body: some View {
         Image(systemName: symbol)
@@ -544,15 +576,33 @@ private struct StepPad: View {
                         guard !isDown else { return } // 1回の接触で1回だけ(触れた瞬間)
                         isDown = true
                         DispatchQueue.main.async {
-                            WKInterfaceDevice.current().play(.click) // 押せたことを指先に返す
-                            action()
+                            if action(.tap) { WKInterfaceDevice.current().play(.click) } // 押せたことを指先に返す
+                            startRepeating()
                         }
                     }
             )
+            // 離した・取り消された(pressed が false に戻った)ら、連続をすぐ止める
+            .onChange(of: pressed) { _, isDown in
+                if !isDown { repeatTask?.cancel(); repeatTask = nil }
+            }
+            .onDisappear { repeatTask?.cancel(); repeatTask = nil }
             .accessibilityElement()
             .accessibilityLabel(Text(symbol == "plus" ? "+" : "−"))
             .accessibilityAddTraits(.isButton)
-            .accessibilityAction { action() }
+            .accessibilityAction { _ = action(.tap) }
+    }
+
+    private func startRepeating() {
+        repeatTask?.cancel()
+        repeatTask = Task { @MainActor in
+            let start = Date()
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            while !Task.isCancelled && pressed {
+                let phase: StepPhase = Date().timeIntervalSince(start) >= 1.5 ? .fast : .repeating
+                if action(phase) { WKInterfaceDevice.current().play(.click) }
+                try? await Task.sleep(nanoseconds: 125_000_000)
+            }
+        }
     }
 }
 

@@ -363,6 +363,18 @@ describe("Watch アプリのネイティブ設定", () => {
     expect(editor).not.toMatch(/ScrollView\s*\{/); // コメントで名前を挙げるのは可
   });
 
+  it("−/+ は押し続けると連続で入り、離すとすぐ止まる(改善要望 5)", () => {
+    const views = read("ios/App/KurabellWatch/Views.swift");
+    const pad = views.slice(views.indexOf("private struct StepPad"), views.indexOf("struct PadButtonStyle"));
+    expect(pad).toContain("Task.sleep(nanoseconds: 400_000_000)"); // 0.4秒で始まる
+    expect(pad).toContain("Task.sleep(nanoseconds: 125_000_000)"); // 1秒に約8回
+    expect(pad).toMatch(/\.onChange\(of: pressed\)[\s\S]*?repeatTask\?\.cancel\(\)/); // 離したら止める
+    // 速くするのは重量だけ(回数は1のまま)
+    const editor = views.slice(views.indexOf("private func stepWeight"), views.indexOf("private func crossed"));
+    expect(editor.slice(0, editor.indexOf("private func stepReps"))).toContain(".fast");
+    expect(editor.slice(editor.indexOf("private func stepReps"))).not.toContain(".fast");
+  });
+
   it("iPhone から起動されたワークアウトを受けられる(HealthKit・バックグラウンド・利用目的の文言)", () => {
     const pbx = read("ios/App/App.xcodeproj/project.pbxproj");
     expect(pbx).toContain("CODE_SIGN_ENTITLEMENTS = KurabellWatch/KurabellWatch.entitlements;");
