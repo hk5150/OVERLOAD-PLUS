@@ -54,8 +54,9 @@ describe("est1RM (推定1RM)", () => {
     expect(est1RM(60, 12)).toBeCloseTo(60 * (1 + 12 / 30));
   });
 
-  it("13回以上", () => {
-    expect(est1RM(60, 20)).toBeCloseTo(60 * (1 + 20 / 30));
+  it("13回以上は推定しない(0)。高回数のセットが自己ベストを押し上げないように(2026-10-05 の仕様変更)", () => {
+    expect(est1RM(60, 13)).toBe(0);
+    expect(est1RM(60, 20)).toBe(0);
   });
 
   it("不正値(負の回数)", () => {
@@ -294,5 +295,15 @@ describe("showsSet1RM(各セットの推定1RMを出すか)", () => {
   it("実効重量か回数が0なら出さない", () => {
     expect(showsSet1RM(s(), 0, 10)).toBe(false);
     expect(showsSet1RM(s(), 70, 0)).toBe(false);
+  });
+});
+
+describe("dayBest1RM は13回以上のセットを数えない", () => {
+  it("12回以下のセットの最大を取る", () => {
+    const sets = [{ weight: 60, reps: 20 }, { weight: 80, reps: 8 }];
+    expect(dayBest1RM(sets, false, 0, 70)).toBeCloseTo(80 * (1 + 8 / 30));
+  });
+  it("13回以上しかない日は 0", () => {
+    expect(dayBest1RM([{ weight: 40, reps: 15 }], false, 0, 70)).toBe(0);
   });
 });

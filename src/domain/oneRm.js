@@ -3,8 +3,14 @@
 // (importやexportは使わない。ビルド不要の原則を維持するため)。
 // ロジックは元のindex.html内の定義から一切変更していない(フェーズ0監査時点のコードをそのまま移設)。
 
+// 13回以上は推定しない(0 を返す)。Epley 式は回数が多いほど高めに出て、軽い重量の高回数セットが
+// 自己ベストに見えてしまうため(北村さんの判断、2026-10-05。docs/改善要望_2026-10.md の 6)。
+// ここで切るので、自己ベスト(prMap)・比較の行・⚡・グラフ・Watch の完了画面がすべて同じ基準になる
+// (呼び出し側で個別に除くと、条件がずれて「比較は緑なのに ⚡ が無い」が起きた)。
+const SET_1RM_MAX_REPS = 12;
 const est1RM = (weight, reps) => {
   if (!weight || !reps || reps < 1) return 0;
+  if (reps > SET_1RM_MAX_REPS) return 0;
   if (reps === 1) return weight;
   return weight * (1 + reps / 30);
 };
@@ -31,12 +37,10 @@ function dayBest1RM(sets, isDb, bwFactor, bodyweight) {
 }
 
 // 記録画面の各セットに推定1RMを出すか。ウォームアップと補助ありは実力を表さないので出さない。
-// 13回以上も出さない: Epley 式は回数が多いほど高めに出て、軽い重量の高回数セットが
-// 自己ベストに見えてしまう(北村さんの判断。docs/改善要望_2026-10.md の 6)。
+// 13回以上も出さない(est1RM が 0 を返すのと同じ基準)。
 // RIR の有無は見ない(入る前から薄く出す。濃さは呼び出し側が決める)。
 // effW は effWeight を通した実効重量(ダンベルは両手、自重は体重込み)。入力した重量で判定すると、
 // 加重0の懸垂やディップスに一切出なくなる(reviewer 指摘)。
-const SET_1RM_MAX_REPS = 12;
 function showsSet1RM(s, effW, reps) {
   return !s.warmup && !s.assisted && effW > 0 && reps >= 1 && reps <= SET_1RM_MAX_REPS;
 }
