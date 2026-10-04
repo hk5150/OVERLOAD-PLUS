@@ -265,3 +265,29 @@ describe("dayBest1RMの境界値(記録が無い日を0で表せること)", () 
     expect(dayBest1RM([workSet({ weight: 0, reps: 10 })], false, 0, 70)).toBe(0);
   });
 });
+
+describe("showsSet1RM(各セットの推定1RMを出すか)", () => {
+  const { showsSet1RM, SET_1RM_MAX_REPS } = loadDomainModule("src/domain/oneRm.js");
+  const s = (o = {}) => ({ warmup: false, ...o });
+
+  it("重量と回数が入った本番セットには出す(RIR の有無は見ない)", () => {
+    expect(showsSet1RM(s({ rir: "" }), 70, 10)).toBe(true);
+    expect(showsSet1RM(s({ rir: 1 }), 70, 1)).toBe(true);
+  });
+
+  it("12回までは出し、13回以上は出さない(Epley 式が高めに出るため)", () => {
+    expect(SET_1RM_MAX_REPS).toBe(12);
+    expect(showsSet1RM(s(), 40, 12)).toBe(true);
+    expect(showsSet1RM(s(), 40, 13)).toBe(false);
+  });
+
+  it("ウォームアップと補助ありには出さない", () => {
+    expect(showsSet1RM(s({ warmup: true }), 70, 10)).toBe(false);
+    expect(showsSet1RM(s({ assisted: true }), 70, 10)).toBe(false);
+  });
+
+  it("重量か回数が0なら出さない", () => {
+    expect(showsSet1RM(s(), 0, 10)).toBe(false);
+    expect(showsSet1RM(s(), 70, 0)).toBe(false);
+  });
+});

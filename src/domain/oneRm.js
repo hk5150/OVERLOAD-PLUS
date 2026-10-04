@@ -30,8 +30,19 @@ function dayBest1RM(sets, isDb, bwFactor, bodyweight) {
   }, 0);
 }
 
+// 記録画面の各セットに推定1RMを出すか。ウォームアップと補助ありは実力を表さないので出さない。
+// 13回以上も出さない: Epley 式は回数が多いほど高めに出て、軽い重量の高回数セットが
+// 自己ベストに見えてしまう(北村さんの判断。docs/改善要望_2026-10.md の 6)。
+// RIR の有無は見ない(入る前から薄く出す。濃さは呼び出し側が決める)。
+const SET_1RM_MAX_REPS = 12;
+function showsSet1RM(s, weight, reps) {
+  return !s.warmup && !s.assisted && weight > 0 && reps >= 1 && reps <= SET_1RM_MAX_REPS;
+}
+
 // ブラウザの<script>グローバルスコープではconst宣言もbare identifierとして参照できるが、
 // vmサンドボックス(テスト環境)ではcontextオブジェクトのプロパティにならないため明示的に公開する。
 globalThis.est1RM = est1RM;
 globalThis.effWeight = effWeight;
 globalThis.dayBest1RM = dayBest1RM;
+globalThis.SET_1RM_MAX_REPS = SET_1RM_MAX_REPS;
+globalThis.showsSet1RM = showsSet1RM;

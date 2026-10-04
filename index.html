@@ -186,13 +186,13 @@
     { key:'units',      urls:['src/domain/units.js'],
       globals:['LB_PER_KG','SUPPORTED_UNITS','resolveUnit','getUnit','setUnit','uLabel','kgToLb','lbToKg','toU','fromU','wU','wStr','convWeightStr','incU'] },
     { key:'oneRm',      urls:['src/domain/oneRm.js'],
-      globals:['est1RM','effWeight','dayBest1RM'] },
+      globals:['est1RM','effWeight','dayBest1RM','SET_1RM_MAX_REPS','showsSet1RM'] },
     { key:'storage',    urls:['src/domain/storage.js'],
       globals:['store'] },
     { key:'backupValidation', urls:['src/domain/backupValidation.js'],
       globals:['extractWorkoutsArray','validateWorkoutsShape','CURRENT_BACKUP_FORMAT_VERSION','validateBackupPayload','SET_VALUE_LIMITS','isSetValueInRange'] },
     { key:'volume',     urls:['src/domain/volume.js'],
-      globals:['workingSets','setVolume','exVolume','nextSetType'] },
+      globals:['workingSets','setVolume','exVolume','nextSetType','volumeGoalKey'] },
     { key:'coefficients', urls:['src/domain/coefficients.js'],
       globals:['resolveCoefficients'] },
     { key:'insight',    urls:['src/domain/insight.js'],
@@ -303,6 +303,8 @@ const C = {
 };
 // 本文用フォント。<head>のbodyと同じ指定。Barlow Condensed(数字用)の中に
 // 日本語を戻したいときだけ明示的に使う(それ以外はbodyから継承させる)。
+// 画面には出さず、読み上げにだけ渡すテキスト
+const srOnly = { position: "absolute", width: 1, height: 1, padding: 0, margin: -1, overflow: "hidden", clip: "rect(0 0 0 0)", whiteSpace: "nowrap", border: 0 };
 const FONT_UI = "-apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic', Meiryo, sans-serif";
 
 const STORAGE_KEY = "workout-log-v1";
@@ -1735,6 +1737,8 @@ function App() {
     const avg = recent.reduce((a, w) => a + volOf(w), 0) / recent.length;
     return {
       avg,
+      n: recent.length,
+      sameDay: sameList.length > 0,
       avgLabel: sameList.length > 0 ? t("compare.recentDay", { n: recent.length, day: dayName(todayDay.name) }) : t("compare.recent", { n: recent.length }),
     };
   }, [workouts, split, profile.bodyweight, exerciseOverrides, lang]);
@@ -3009,7 +3013,7 @@ function App() {
     : (today.find(ex => ex.sets.some(s => !s.warmup && (s.rir === "" || s.rir == null))) || today[today.length - 1]);
 
   // 上部バーとタブバーは自分でsafe-areaを負担しているので、実際の高さは端末で変わる
-  // (バーは 約95px + env(top)、タブバーは 56px + env(bottom))。ここをpxで決め打つと
+  // (バーは 約115px + env(top)、タブバーは 56px + env(bottom))。ここをpxで決め打つと
   // ブラウザでは合っていてもiOS実機だけ数十pxずれるので、必ず実測して使う。
   // rootMarginはcalc()/env()を受け付けないため、そもそも実測しないと書けない。
   const topBarRef = useRef(null);
@@ -3259,7 +3263,7 @@ function App() {
 
       {/* ===== 固定バー(タイマー+ボリューム) =====
           原則は記録タブ限定。以前は全タブに出していたが、設定・履歴・分割の画面で
-          経過時間とボリュームは判断材料にならず、縦を85px専有するだけだった。
+          経過時間とボリュームは判断材料にならず、縦を85px(今は約110px)専有するだけだった。
           ただしインターバル計測中だけは例外で全タブに出す。休憩中に履歴で前回の数字を
           見るのは実際の動線で、そこでバーが消えると残り時間も見えず止める手段も無くなる
           (上部バーの「インターバル開始」ボタン経由だとrestFullが開いていないため)。
@@ -3290,35 +3294,39 @@ function App() {
                   ゲージ全幅を基準の125%とし、80%の位置(=基準ちょうど)に切り欠きを置く。
                   高さは常に確保する。条件表示のままだと最初のRIRを入れた瞬間にバーが16px伸びて、
                   stickyバーの下にある入力欄が丸ごとずれてしまう。 */}
-              <div style={{ display: "flex", alignItems: "center", gap: 6, height: 15, marginTop: 5 }}>
-                <div style={{ flex: 1, minWidth: 0, height: 5 }}>
-                  {compareBase && compareBase.avg > 0 && (() => {
-                    const ratio = liveVolume / compareBase.avg;
-                    return (
-                      // ゲージは純粋に視覚的なので、文字で持っていた比較情報はaria-valuetextに移す
-                      <div role="progressbar" aria-label={t("log.volume")}
-                        aria-valuemin={0} aria-valuemax={100}
-                        aria-valuenow={Math.max(0, Math.min(Math.round(ratio * 100), 100))}
-                        aria-valuetext={t("log.volumeRatio", {
-                          pct: Math.round(ratio * 100),
-                          v: Math.round(toU(compareBase.avg)).toLocaleString(),
-                          unit: uLabel(),
-                        })}
-                        style={{ height: "100%", borderRadius: 999, background: C.border, position: "relative", overflow: "hidden" }}>
-                        <div style={{
-                          // 両側クランプ。NumInputはtype="text"で負の重量を打てるため、片側だけだと
-                          // width:"-32%"という不正値になり、宣言ごと無視されてゲージが満杯に見える。
-                          width: `${Math.max(0, Math.min(ratio / 1.25, 1)) * 100}%`, height: "100%",
-                          background: ratio >= 1 ? C.green : C.muted, transition: "width .3s linear",
-                        }} />
-                        <div style={{ position: "absolute", left: "80%", top: 0, bottom: 0, width: 2, background: C.surface2 }} />
-                      </div>
-                    );
-                  })()}
-                </div>
-                {/* 基準(直近N回の平均)までの残り。以前は「直近3回のPushの平均まであと5,088kg」を10pxで出していて
-                    ジムでは読めなかった。数字だけをゲージの右端に置き、基準の説明は title と読み上げに回す。
-                    ゲージと同じ行に置くので、出る・出ないで高さは変わらない。 */}
+              <div style={{ height: 5, marginTop: 6 }}>
+                {compareBase && compareBase.avg > 0 && (() => {
+                  const ratio = liveVolume / compareBase.avg;
+                  return (
+                    // ゲージは純粋に視覚的なので、文字で持っていた比較情報はaria-valuetextに移す
+                    <div role="progressbar" aria-label={t("log.volume")}
+                      aria-valuemin={0} aria-valuemax={100}
+                      aria-valuenow={Math.max(0, Math.min(Math.round(ratio * 100), 100))}
+                      aria-valuetext={t("log.volumeRatio", {
+                        pct: Math.round(ratio * 100),
+                        v: Math.round(toU(compareBase.avg)).toLocaleString(),
+                        unit: uLabel(),
+                      })}
+                      style={{ height: "100%", borderRadius: 999, background: C.border, position: "relative", overflow: "hidden" }}>
+                      <div style={{
+                        // 両側クランプ。NumInputはtype="text"で負の重量を打てるため、片側だけだと
+                        // width:"-32%"という不正値になり、宣言ごと無視されてゲージが満杯に見える。
+                        width: `${Math.max(0, Math.min(ratio / 1.25, 1)) * 100}%`, height: "100%",
+                        background: ratio >= 1 ? C.green : C.muted, transition: "width .3s linear",
+                      }} />
+                      <div style={{ position: "absolute", left: "80%", top: 0, bottom: 0, width: 2, background: C.surface2 }} />
+                    </div>
+                  );
+                })()}
+              </div>
+              {/* 基準までの残り(「過去3回平均まで あと480kg」)。以前はゲージの右端に「あと480」だけを出していたが、
+                  何に対する残りか・単位が分からなかった。ゲージの横には収まらないので下に置き、
+                  狭い画面では「過去3回平均まで」「あと480kg」の2行に折り返す。
+                  高さは常に2行分を確保する。数字の桁で1行と2行が入れ替わったり、出る・出ないで高さが変わったりすると、
+                  stickyバーの下にある入力欄が丸ごとずれる。
+                  読み上げは、見えている2つの断片ではなく、Day 名まで入れた1文(srOnly)で行う。
+                  role の無い span に aria-label を付けても読まれない場合があり、断片の片方が抜けるため(reviewer 指摘)。 */}
+              <div style={{ height: 26, marginTop: 3, display: "flex", flexWrap: "wrap", alignContent: "center", justifyContent: "center", columnGap: 4, fontSize: 11, lineHeight: "13px", fontWeight: 700, overflow: "hidden", position: "relative" }}>
                 {compareBase && compareBase.avg > 0 && (() => {
                   const diff = liveVolume - compareBase.avg;
                   const v = Math.round(toU(Math.abs(diff))).toLocaleString();
@@ -3326,9 +3334,12 @@ function App() {
                     ? t("log.volumeOver", { label: compareBase.avgLabel, v, unit: uLabel() })
                     : t("log.volumeToGo", { label: compareBase.avgLabel, v, unit: uLabel() });
                   return (
-                    <span title={full} aria-label={full} style={{ fontSize: 12, fontWeight: 700, whiteSpace: "nowrap", color: diff >= 0 ? C.green : C.muted }}>
-                      {diff >= 0 ? `+${v}` : t("log.volumeToGoShort", { v })}
-                    </span>
+                    <>
+                      {t(volumeGoalKey(compareBase, diff >= 0), { n: compareBase.n, v, unit: uLabel() }).split("|").map((part, i) => (
+                        <span key={i} title={full} aria-hidden="true" style={{ whiteSpace: "nowrap", color: diff >= 0 ? C.green : C.muted }}>{part}</span>
+                      ))}
+                      <span style={srOnly}>{full}</span>
+                    </>
                   );
                 })()}
               </div>
@@ -3515,6 +3526,13 @@ function App() {
                         {wU(p.weight)}<span style={{ fontSize: 12, color: C.muted }}>{uLabel()}{p.bwFactor > 0 ? t("menu.weighted") : p.isDb ? t("menu.perHandShort") : ""}</span>
                         {" × "}<span style={{ fontSize: 15 }}>{repsLabel(p.targetReps)}</span>
                       </div>
+                    )}
+                    {/* 初めての種目は、まずフォームを見てから始められるように(改善要望 10b) */}
+                    {it.type === "new_start" && (
+                      <button onClick={() => openYouTube(p.name)}
+                        style={{ ...btn("transparent", C.text), padding: "4px 0", fontSize: 12, marginTop: 2, display: "inline-flex", alignItems: "center", gap: 5 }}>
+                        <Icon name="youtube" size={14} />{t("menu.watchForm")}
+                      </button>
                     )}
                   </div>
                 );
@@ -3920,6 +3938,11 @@ function App() {
                   return bi;
                 })();
                 const isSetPR = set1RM > 0 && set1RM > pastBest1RM + 0.01 && i === bestIdxInSession;
+                // 行の右端に出す推定1RM。重量と回数が入っていれば RIR の前から出す(未実施の行は行ごと薄くなる)。
+                // 自己ベストを超えたら緑。初めての種目は比べる相手がいないので緑にしない(全部の行が緑になる)
+                const show1RM = showsSet1RM(s, setW, setR);
+                const row1RM = show1RM ? est1RM(effWeight(setW, resolveIsDb(ex.name, ex.isDb), ex.bwFactor || 0, profile.bodyweight), setR) : 0;
+                const over1RM = pastBest1RM > 0 && row1RM > pastBest1RM + 0.01;
                 // 前回の同じ番手のワーキングセット。同じ重量×回数なら余力の伸びを差分で出す
                 const prevSet = s.warmup ? null : (ins?.sets?.[wsIndex - 1] || null);
                 const rirDiff = (prevSet && prevSet.rir != null && s.rir !== "" && s.rir != null
@@ -3963,9 +3986,11 @@ function App() {
                       style={{ width: 26, height: 26, borderRadius: 8, border: `1px solid ${C.border}`, background: C.surface2, color: C.muted, fontSize: 13, cursor: "pointer", flexShrink: 0 }}>✕</button>
                   </div>
 
-                  {/* 前回の同じ番手のセットと、今日との差。推定1RMは上の比較行で出しているので、
-                      セット行では更新したときだけバッジで出す(以前は毎行「推定1RM 91.8kg」が並んでいた)。 */}
-                  {(prevSet || isSetPR) && (() => {
+                  {/* 前回の同じ番手のセットと、今日との差、このセットの推定1RM。
+                      1RM は以前は毎行「推定1RM 91.8kg」と出していて長すぎたので、更新したときだけバッジにしていた。
+                      1.3 で右端に短く「1RM 92.5」を戻した(改善要望 6)。更新の印はバッジをやめて、数字の緑と ⚡ に寄せた
+                      (バッジ・差・1RM の3つが並ぶと 375px で折り返すため)。 */}
+                  {(prevSet || show1RM) && (() => {
                     const prevR = prevSet ? Math.round(num(prevSet.reps)) : 0;
                     const hasNow = setW > 0 || setR > 0;
                     // 重量の差は「画面に出ている数字どうし」で取る。kg で記録した前回を lb で表示しているとき、
@@ -3994,12 +4019,14 @@ function App() {
                           </span>
                         )}
                         <span style={{ marginLeft: "auto", display: "inline-flex", gap: 8, alignItems: "center" }}>
-                          {isSetPR && (
-                            <span style={{ background: C.yellow, color: "#141517", borderRadius: 999, padding: "1px 8px", fontWeight: 800, display: "inline-flex", alignItems: "center", gap: 3 }}>
-                              <Icon name="bolt" size={12} />{t("compare.setPR", { v: toU(set1RM - pastBest1RM).toFixed(1), unit: uLabel() })}
+                          {delta && <span style={{ fontWeight: 800, color: delta[1] }}>{delta[0]}</span>}
+                          {show1RM && (
+                            <span title={isSetPR ? t("compare.setPR", { v: toU(set1RM - pastBest1RM).toFixed(1), unit: uLabel() }) : undefined}
+                              style={{ display: "inline-flex", alignItems: "center", gap: 2, whiteSpace: "nowrap", color: over1RM ? C.green : C.muted, fontWeight: over1RM ? 800 : 500 }}>
+                              {isSetPR && <Icon name="bolt" size={12} />}
+                              {t("set.oneRm", { v: toU(row1RM).toFixed(1) })}
                             </span>
                           )}
-                          {delta && <span style={{ fontWeight: 800, color: delta[1] }}>{delta[0]}</span>}
                         </span>
                       </div>
                     );

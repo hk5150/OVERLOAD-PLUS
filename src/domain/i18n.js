@@ -100,7 +100,7 @@ const STRINGS = {
   "rir.same":          { ja: "→ 同じ",        en: "→ same" },
 
   // ---- 比較の見出し ----
-  "compare.recentDay": { ja: "直近{n}回の{day}",      en: "Last {n} {day} sessions" },
+  "compare.recentDay": { ja: "過去{n}回の{day}",      en: "Last {n} {day} sessions" },
   "compare.recent":    { ja: "直近{n}回",             en: "Last {n} sessions" },
   "log.lastDate":      { ja: "前回 {date}",           en: "Last {date}" },
   // 元は「回連続」だけ<strong>で囲っていたが、英語だと語順が変わって太字の範囲を保てない。
@@ -122,7 +122,8 @@ const STRINGS = {
   "compare.prStale":   { ja: "1RM {n}日間未更新",     en: "1RM unchanged for {n}d" },
   "compare.setPR":     { ja: "1RM更新 +{v}{unit}", en: "1RM +{v}{unit}" },
   "set.repsDelta":     { ja: "{v}回", en: "reps {v}" },
-  "compare.set1RM":    { ja: "推定1RM {v}{unit}",     en: "Est. 1RM {v}{unit}" },
+  // 各セットの右端の推定1RM(単位は付けない。行が長くなるため。同じ行の重量で単位は分かる)
+  "set.oneRm":         { ja: "1RM {v}", en: "1RM {v}" },
 
   // ---- 記録タブ ----
   "log.title":         { ja: "今日の記録", en: "Today's workout" },
@@ -130,9 +131,16 @@ const STRINGS = {
   "log.volume":        { ja: "ボリューム", en: "Volume" },
   // 上部バーの到達度ゲージの読み上げ用(画面上は数字を出さずゲージだけ)
   "log.volumeRatio":   { ja: "{pct}%(基準 {v}{unit})", en: "{pct}% of baseline ({v}{unit})" },
-  // ゲージ下の残量テキスト。labelには compare.recentDay/compare.recent の結果(例:「直近3回の胸」)が入る
+  // ボリュームの基準までの残りの全文(title と読み上げ用。画面の文言は下の volumeToGoDay 等)。labelには compare.recentDay/compare.recent の結果(例:「過去3回の胸」)が入る
   "log.volumeToGo":    { ja: "{label}の平均まであと{v}{unit}", en: "{v}{unit} to {label} avg" },
-  "log.volumeToGoShort": { ja: "あと{v}", en: "{v} to go" },
+  // ゲージの下の文言(volumeGoalKey)。{n} は基準にした回数。「平均」だけの表記はしない。
+  // 「|」は狭い画面で折り返す位置(記録画面はそこで2つに分けて並べる)
+  "log.volumeToGoDay":    { ja: "過去{n}回平均まで|あと{v}{unit}", en: "{v}{unit} short of|last-{n} avg" },
+  "log.volumeToGoRecent": { ja: "直近{n}回平均まで|あと{v}{unit}", en: "{v}{unit} short of|recent-{n} avg" },
+  "log.volumeToGoPrev":   { ja: "前回まで|あと{v}{unit}", en: "{v}{unit} short of|last time" },
+  "log.volumeOverDay":    { ja: "過去{n}回平均|+{v}{unit}", en: "+{v}{unit}|vs last-{n} avg" },
+  "log.volumeOverRecent": { ja: "直近{n}回平均|+{v}{unit}", en: "+{v}{unit}|vs recent-{n} avg" },
+  "log.volumeOverPrev":   { ja: "前回|+{v}{unit}", en: "+{v}{unit}|vs last time" },
   "log.volumeOver":    { ja: "{label}の平均を{v}{unit}上回った", en: "{v}{unit} over {label} avg" },
   "log.tapToExpand":   { ja: "タップで拡大", en: "Tap to expand" },
   "log.saving":        { ja: "保存中…",    en: "Saving…" },
@@ -155,6 +163,7 @@ const STRINGS = {
   "log.moveUp":        { ja: "上へ移動",               en: "Move up" },
   "log.moveDown":      { ja: "下へ移動",               en: "Move down" },
   "log.youtube":       { ja: "YouTubeでフォームを検索", en: "Search form on YouTube" },
+  "menu.watchForm":    { ja: "フォームを動画で確認", en: "Watch the form on video" },
   "log.consultAi":     { ja: "AI相談",                 en: "Ask AI" },
   "log.consultAiDone": { ja: "✓ コピー",               en: "✓ Copied" },
   // ボタンのラベルには入れない(minWidth 74の枠に収まらず、押した瞬間に行が折り返す)。
@@ -517,7 +526,8 @@ const STRINGS = {
   "note.rom":          { ja: "シュラッグ・カーフレイズ・クランチなど可動域が小さい種目は、荷重が動く距離に応じて集計ボリュームを0.3〜0.75倍で換算しています(推定1RM・PR・次回メニューの判定には影響しません)。種目ごとに⚙から調整できます。", en: "Shrugs, calf raises, crunches and other short-range exercises have their volume scaled to 0.3–0.75× based on how far the load travels (estimated 1RM, PRs and the next menu are unaffected). Adjust per exercise via ⚙." },
 
   // YouTubeのフォーム検索。表示文言ではなく検索クエリなので、言語ごとに語順ごと変える。
-  "youtube.query":     { ja: "{name} やり方 フォーム", en: "{name} how to proper form" },
+  // 「やり方」だと入門の長い解説動画が上に来る。ジムで手早く見たいのは要点なので「コツ」にした(改善要望 10c)
+  "youtube.query":     { ja: "{name} フォーム コツ", en: "{name} form tips" },
 };
 
 // t() は言語別のフラットな表を引く。STRINGS から組み立てることで、
