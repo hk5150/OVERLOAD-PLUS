@@ -61,13 +61,35 @@ function autoDayName(muscles) {
   return groups.sort((a, b) => DAY_GROUP_ORDER.indexOf(a) - DAY_GROUP_ORDER.indexOf(b)).join("・");
 }
 
-// 部位を変えたときに Day 名を付け直すか。まだ手で名前を付けていない(既定の「Day 3」か、
-// 前の部位から自動で付けた名前のまま)ときだけ付け直す。手で付けた名前(「Push」など)は触らない。
-function nextDayName(day, nextMuscles, index) {
+// 部位を変えたときの Day 名。まだ手で名前を付けていない(既定の「Day 3」か、前の部位から
+// 自動で付けた名前のまま)ときだけ付け直す。手で付けた名前(「Push」など)は触らない。
+// opts.locked: その名前の記録がすでにある。Day 名は記録の session に入っていて、前回の同じ Day・
+//   同じ Day の平均・今日のメニューを名前で引いている。変えるとつながりが切れるので、記録がある Day は変えない
+//   (5分割のプリセットの「脚」は autoDayName と同じ形なので、これが無いと腹筋を足しただけで「脚・腹」になった。reviewer 指摘)
+// opts.taken: ほかの Day の名前。同じ名前が2つあると記録が混ざるので、重なったら「胸・肩 2」のように番号を付ける
+function nextDayName(day, nextMuscles, index, opts) {
+  const o = opts || {};
+  if (o.locked) return day.name;
   const auto = autoDayName(day.muscles);
-  const untouched = /^Day \d+$/.test(day.name) || (auto !== "" && day.name === auto);
+  const base = day.name.replace(/ \d+$/, "");
+  const untouched = /^Day \d+$/.test(day.name) || (auto !== "" && base === auto);
   if (!untouched) return day.name;
-  return autoDayName(nextMuscles) || `Day ${index + 1}`;
+  const next = autoDayName(nextMuscles);
+  return next ? uniqueDayName(next, o.taken) : uniqueDayName(`Day ${index + 1}`, o.taken, true);
+}
+
+// taken に無い名前にする。isDayN なら「Day N」の N を進め、そうでなければ「 2」「 3」を付ける
+function uniqueDayName(name, taken, isDayN) {
+  const t = taken || [];
+  if (!t.includes(name)) return name;
+  if (isDayN) {
+    let n = parseInt(name.slice(4), 10);
+    while (t.includes(`Day ${n}`)) n++;
+    return `Day ${n}`;
+  }
+  let k = 2;
+  while (t.includes(`${name} ${k}`)) k++;
+  return `${name} ${k}`;
 }
 
 globalThis.STARTER_PICKS = STARTER_PICKS;
@@ -77,3 +99,4 @@ globalThis.starterPicks = starterPicks;
 globalThis.DAY_GROUP_OF = DAY_GROUP_OF;
 globalThis.autoDayName = autoDayName;
 globalThis.nextDayName = nextDayName;
+globalThis.uniqueDayName = uniqueDayName;

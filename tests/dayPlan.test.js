@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { loadDomainModule } from "./helpers/loadDomain.js";
 
-const { STARTER_PICKS, STARTER_FULL_BODY, starterPicks, DAY_GROUP_OF, autoDayName, nextDayName } = loadDomainModule("src/domain/dayPlan.js");
+const { STARTER_PICKS, STARTER_FULL_BODY, starterPicks, DAY_GROUP_OF, autoDayName, nextDayName, uniqueDayName } = loadDomainModule("src/domain/dayPlan.js");
 
 // EXERCISE_DB は index.html の #appsrc の中にあるので、文字列から名前と部位を拾う
 const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
@@ -77,5 +77,29 @@ describe("autoDayName / nextDayName(部位から付ける Day 名)", () => {
 
   it("手で付けた名前は触らない", () => {
     expect(nextDayName({ name: "Push", muscles: ["大胸筋"] }, ["大胸筋", "三角筋前部"], 0)).toBe("Push");
+  });
+
+  it("その名前の記録がある Day は変えない(Day 名で前回の記録を引いているため。5分割の「脚」に腹筋を足しても「脚」のまま)", () => {
+    expect(nextDayName({ name: "脚", muscles: ["大腿四頭筋", "ハムストリングス"] }, ["大腿四頭筋", "ハムストリングス", "腹筋"], 2, { locked: true })).toBe("脚");
+    expect(nextDayName({ name: "Day 3", muscles: [] }, ["大胸筋"], 2, { locked: true })).toBe("Day 3");
+  });
+
+  it("ほかの Day と同じ名前にならないよう番号を付ける(同じ名前だと記録が混ざる)", () => {
+    expect(nextDayName({ name: "Day 4", muscles: [] }, ["大胸筋", "三角筋前部"], 3, { taken: ["胸・肩"] })).toBe("胸・肩 2");
+    // 番号付きの自動名も「自動で付けた名前のまま」とみなす
+    expect(nextDayName({ name: "胸・肩 2", muscles: ["大胸筋", "三角筋前部"] }, ["大胸筋"], 3, { taken: ["胸・肩"] })).toBe("胸");
+    expect(nextDayName({ name: "胸", muscles: ["大胸筋"] }, [], 1, { taken: ["Day 1", "Day 2"] })).toBe("Day 3");
+  });
+});
+
+describe("uniqueDayName", () => {
+  it("空いていればそのまま", () => {
+    expect(uniqueDayName("胸", ["背中"])).toBe("胸");
+  });
+  it("「Day N」は番号を進める", () => {
+    expect(uniqueDayName("Day 2", ["Day 1", "Day 2", "Day 3"], true)).toBe("Day 4");
+  });
+  it("それ以外は後ろに番号を付ける", () => {
+    expect(uniqueDayName("胸", ["胸", "胸 2"])).toBe("胸 3");
   });
 });

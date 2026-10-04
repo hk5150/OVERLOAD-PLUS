@@ -165,6 +165,7 @@ describe("表示名の解決", () => {
     expect(i18n.dayName("胸・肩")).toBe("Chest & Shoulders");
     expect(i18n.dayName("胸・肩・腕")).toBe("Chest, Shoulders & Arms");
     expect(i18n.dayName("胸・自作")).toBe("胸・自作"); // 訳せない語が混ざったら手で付けた名前として扱う
+    expect(i18n.dayName("胸・肩 2")).toBe("Chest & Shoulders 2");
     i18n.setLang("ja");
     expect(i18n.dayName("胸・肩")).toBe("胸・肩");
   });

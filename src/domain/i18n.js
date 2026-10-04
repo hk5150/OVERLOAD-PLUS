@@ -185,7 +185,7 @@ const STRINGS = {
   "log.historyAria":   { ja: "この種目の履歴",   en: "History of this exercise" },
   "log.confirmRemove": { ja: "「{name}」には実施済みのセットがあります。種目ごと削除しますか?", en: "\"{name}\" has completed sets. Remove the whole exercise?" },
   "log.removed":       { ja: "「{name}」を削除しました", en: "Removed \"{name}\"" },
-  "log.addedToDay":    { ja: "Day「{day}」にも登録しました", en: "Also added to \"{day}\"" },
+  "log.addedToDay":    { ja: "Day「{day}」にも登録しました", en: "Also added to day \"{day}\"" },
   "log.undoAdd":       { ja: "取り消す", en: "Undo" },
   "log.undo":          { ja: "元に戻す", en: "Undo" },
   "log.swapHint":      { ja: "別の種目に差し替えます(入力中のセットは、差し替え先の種目の前回記録に入れ替わります)。", en: "Swap in another exercise. Sets in progress are replaced with that exercise's last session." },
@@ -755,10 +755,12 @@ const eqName     = (name) => lookupName(EQ_NAMES_EN, name);
 const splitName  = (name) => lookupName(SPLIT_NAMES_EN, name);
 // 部位から自動で付けた名前(「胸・肩」、src/domain/dayPlan.js の autoDayName)は、1語ずつ訳して繋ぐ
 const dayName    = (name) => {
-  const parts = typeof name === "string" && name.includes("・") ? name.split("・") : null;
+  // 同じ名前の Day が重なったときの番号(「胸・肩 2」)は外して訳し、後ろに付け直す
+  const m = typeof name === "string" ? name.match(/^(.*?)( \d+)?$/) : null;
+  const parts = m && m[1].includes("・") ? m[1].split("・") : null;
   if (LANG === "en" && parts && parts.every(p => DAY_NAMES_EN[p])) {
     const en = parts.map(p => DAY_NAMES_EN[p]);
-    return en.length > 2 ? `${en.slice(0, -1).join(", ")} & ${en[en.length - 1]}` : en.join(" & ");
+    return (en.length > 2 ? `${en.slice(0, -1).join(", ")} & ${en[en.length - 1]}` : en.join(" & ")) + (m[2] || "");
   }
   return lookupName(DAY_NAMES_EN, name);
 };

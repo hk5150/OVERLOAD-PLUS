@@ -194,7 +194,7 @@
     { key:'volume',     urls:['src/domain/volume.js'],
       globals:['workingSets','setVolume','exVolume','nextSetType','volumeGoalKey'] },
     { key:'dayPlan',    urls:['src/domain/dayPlan.js'],
-      globals:['STARTER_PICKS','STARTER_FULL_BODY','STARTER_MAX','starterPicks','DAY_GROUP_OF','autoDayName','nextDayName'] },
+      globals:['STARTER_PICKS','STARTER_FULL_BODY','STARTER_MAX','starterPicks','DAY_GROUP_OF','autoDayName','nextDayName','uniqueDayName'] },
     { key:'coefficients', urls:['src/domain/coefficients.js'],
       globals:['resolveCoefficients'] },
     { key:'insight',    urls:['src/domain/insight.js'],
@@ -1805,9 +1805,12 @@ function App() {
     const rank = (e) => { const r = recentNames.indexOf(e.n); return r >= 0 ? r : 1000; };
     return [...list].sort((a, b) => rank(a) - rank(b));
   }, [editingDay, daySearch, recentNames, allExercises]);
+  // 見出しの部位。MUSCLES に無い部位(改名前の「胸」のまま残ったカスタム種目など)は「その他」に入れる
+  // (落とすと一覧に出ず、検索では見つかるので作成パネルも出ず、登録できなくなる。reviewer 指摘)
+  const muscleGroupOf = (e) => MUSCLES.includes(e.m) ? e.m : "";
   // 部位ごとの見出しで区切る(改善要望 3b)。並びは MUSCLES の順、部位の中は最近使った順(上の sort)のまま
   const dayPickerGroups = useMemo(() => {
-    const groups = [...MUSCLES, ""].map(m => ({ m, items: dayPickerList.filter(e => (e.m || "") === m) }));
+    const groups = [...MUSCLES, ""].map(m => ({ m, items: dayPickerList.filter(e => muscleGroupOf(e) === m) }));
     return groups.filter(g => g.items.length);
   }, [dayPickerList]);
   // 別のDayを開いたら、前のDayで入れていた検索語とカスタム種目の設定は捨てる
@@ -2270,7 +2273,7 @@ function App() {
     }
     // 登録種目が0件の Day で記録したら、その内容を Day の種目にするか尋ねる(改善要望 3d)。
     // 記録中に足した種目が Day に登録されるのは、登録が1件以上あるときだけなので、0件の Day はずっと空のままになる
-    if (split && todayDay && !(todayDay.exercises || []).length) {
+    if (split && todayDay && !(todayDay.exercises || []).length && !dayHasRecords(todayDay.name)) {
       setOfferSaveAsMenu({ exercises: [...new Set(exercises.map(ex => ex.name))], dayIdx: split.cursor % split.days.length, dayName: todayDay.name });
     }
     // 書き込めなかったら、入力中の記録・下書き・開始時刻はそのまま残す(2026-09-29に実機で、保存に失敗した
@@ -2370,9 +2373,15 @@ function App() {
   const toggleDayMuscle = (i, m) => {
     const d = split.days[i];
     const muscles = d.muscles.includes(m) ? d.muscles.filter(x => x !== m) : [...d.muscles, m];
-    updDay(i, { muscles, name: nextDayName(d, muscles, i) });
+    const taken = split.days.filter((_, j) => j !== i).map(x => x.name);
+    updDay(i, { muscles, name: nextDayName(d, muscles, i, { locked: dayHasRecords(d.name), taken }) });
   };
-  // 登録種目の並べ替え。この順が「今日のメニュー」の並びになる(改善要望 3c)
+  // その名前の Day で記録したことがあるか。Day 名は記録の session に入っていて、前回の同じ Day を名前で引く。
+  // 「最初の種目設定」(おまかせ・選ぶための AI 相談・保存時の登録の申し出)は、まだ記録が無い Day にだけ出す
+  // (プリセットの Day は登録種目を持たないまま記録を重ねるので、登録0件だけで判断すると出続けた。reviewer 指摘)
+  const dayHasRecords = (name) => workouts.some(w => w.session === name);
+  // 登録種目の並べ替え(改善要望 3c)。この順が今日のメニューの並びになるのは、その Day の記録がまだ無いとき
+  // (記録があると、今日のメニューは前回の同じ Day の順を優先する。autoMenu)
   const moveDayExercise = (i, name, dir) => {
     const ex = [...(split.days[i].exercises || [])];
     const a = ex.indexOf(name), b = a + dir;
@@ -2402,13 +2411,22 @@ function App() {
   // 「今日」の Day がずれないよう、足した位置より後ろにあれば cursor も1つ進める
   const addDay = (at = split.days.length) => {
     const days = [...split.days];
-    days.splice(at, 0, { name: `Day ${at + 1}`, muscles: [] });
+    // 既定名が既存の Day と重なると記録が混ざるので、空いている番号にする(reviewer 指摘)
+    days.splice(at, 0, { name: uniqueDayName(`Day ${at + 1}`, split.days.map(d => d.name), true), muscles: [] });
     const cur = split.cursor % split.days.length;
     updSplit({ days, cursor: cur >= at ? cur + 1 : cur });
     setEditDay(at);
     scrollToDayRef.current = at;
   };
-  const removeDay = (i) => { const days = split.days.filter((_, j) => j !== i); if (!days.length) { persist({ split: null }); setEditDay(null); return; } updSplit({ days, cursor: Math.min(split.cursor, days.length - 1) }); setEditDay(null); };
+  // 消した Day より後ろが「今日」なら cursor を1つ戻す(以前は min を取るだけで、前の Day を消すと「今日」が1つ先へずれた。
+  // 途中に Day を挟める addDay(at) と対称にする。reviewer 指摘)
+  const removeDay = (i) => {
+    const days = split.days.filter((_, j) => j !== i);
+    if (!days.length) { persist({ split: null }); setEditDay(null); return; }
+    const cur = split.cursor % split.days.length;
+    updSplit({ days, cursor: cur > i ? cur - 1 : Math.min(cur, days.length - 1) });
+    setEditDay(null);
+  };
   // Dayの並べ替え(dir: -1=上へ, +1=下へ)。「今日」の位置がずれないようcursorも追従させる。
   const moveDay = (i, dir) => {
     const j = i + dir;
@@ -2737,7 +2755,7 @@ function App() {
   // 他の日が何を担当しているか)が無いと、AIは「胸の日に背中も入れては」のような、
   // 分割の設計と衝突する助言をしてくる。
   const dayToText = (d, i) => {
-    if (!(d.exercises || []).length && d.muscles.length) return dayPickText(d, i);
+    if (!(d.exercises || []).length && d.muscles.length && !dayHasRecords(d.name)) return dayPickText(d, i);
     const dName = dayName(d.name);
     const lines = [t("share.dayPrompt", { name: dName }), ""];
     lines.push(t("share.dayMeta", { split: splitName(split.name), n: i + 1, total: split.days.length, name: dName }));
@@ -2811,7 +2829,7 @@ function App() {
     lines.push("", t("share.dayPickList"));
     const cands = allExercises.filter(e => muscleMatchesDay(e.m, d));
     [...MUSCLES, ""].forEach(m => {
-      const names = cands.filter(e => (e.m || "") === m).map(e => exName(e.n));
+      const names = cands.filter(e => muscleGroupOf(e) === m).map(e => exName(e.n));
       if (names.length) lines.push(`${m ? muscleName(m) : t("settings.other")}: ${names.join(" / ")}`);
     });
     lines.push("", t("share.dayPickRule"), "— KURABELL Workout Log");
@@ -4425,7 +4443,7 @@ function App() {
                           : <span style={{ color: C.muted, fontSize: 13 }}>{t("split.muscleUnset")}</span>}
                     </div>
 
-                    {(d.exercises || []).length === 0 && d.muscles.length > 0 ? (
+                    {(d.exercises || []).length === 0 && d.muscles.length > 0 && !dayHasRecords(d.name) ? (
                       // 登録0件の Day(改善要望 2)。最初の種目設定のときだけ、定番を入れるか AI に選ばせるかを出す。
                       // 貼り付けの案内は下の行に高さを取っておく(このカードは登録すれば出なくなるので、常時取っても数枚だけ)
                       <div style={{ marginTop: 10 }} onClick={e => e.stopPropagation()}>
