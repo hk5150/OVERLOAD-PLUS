@@ -45,7 +45,8 @@ enum SampleData {
                 ]),
             ],
             menu: [],
-            applied: []
+            applied: [],
+            volume: .init(ratio: 0.62, now: "2,480kg", lines: ["過去3回平均まで", "あと1,520kg"], over: false)
         )
     }
 
@@ -82,7 +83,8 @@ enum SampleData {
                 ]),
             ],
             menu: [],
-            applied: []
+            applied: [],
+            volume: .init(ratio: 0.62, now: "5,470lb", lines: ["3,350lb short of", "last-3 avg"], over: false)
         )
     }
 }

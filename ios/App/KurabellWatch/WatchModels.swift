@@ -17,6 +17,15 @@ struct WatchSnapshot: Codable, Equatable {
     var applied: [String]?          // iPhone が today に合流済みの opId(直近のもの)
     var recordStartAt: Double? = nil    // 記録中なら、その記録の startAt(ms)。Watch のワークアウトと対応付ける
     var lastSaved: LastSaved? = nil     // 直近に保存した記録。Watch のワークアウトを保存するか破棄するかの判断に使う
+    var volume: Volume? = nil           // 今日のボリュームと基準(改善要望 8)。記録中で、比べる基準があるときだけ
+
+    // 計算と文言は iPhone 側(index.html の compareBase・volumeGoalKey)。Watch はリングと文字を並べるだけ
+    struct Volume: Codable, Equatable {
+        var ratio: Double           // 基準に対する割合(1 で1周)
+        var now: String             // 今日のボリューム(表示用。例: 2,480kg)
+        var lines: [String]         // 例: ["過去3回平均まで", "あと480kg"] / ["過去3回平均", "+105kg"]
+        var over: Bool              // 基準を超えたか
+    }
 
     struct LastSaved: Codable, Equatable {
         var key: String             // ヘルスケアの紐づけキー(記録の startAt の ISO 文字列)

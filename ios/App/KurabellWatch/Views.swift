@@ -160,6 +160,12 @@ struct RestTimerView: View {
                         .background(RoundedRectangle(cornerRadius: 10).fill(Palette.surface))
                         .padding(.top, 2)
                     }
+                    // 46mm で次のセットの「前回」の行までがスクロールせずに見える量なので、リングはその下(スクロールで見る)
+                    if let v = snap.volume {
+                        VolumeRow(volume: v)
+                            .padding(.horizontal, 4)
+                            .padding(.top, 6)
+                    }
                 }
             }
             // 後ろの画面(一覧の緑の数字など)が透けて見えないよう、背景は黒で塗る
@@ -190,6 +196,38 @@ struct RestTimerView: View {
         let sameLoad = Double(s.weight) != nil && Double(s.weight) == Double(p.weight) && Int(s.reps) == Int(p.reps)
         if sameLoad, let r = p.rir { return "\(labels.prev) RIR\(r)" }
         return "\(labels.prev) \(p.text)"
+    }
+}
+
+// 今日のボリュームを、基準(同じ Day の直近の平均など)で1周するリングで見せる(改善要望 8)。
+// 超えたら緑で満たす。数字と「過去3回平均まで / あと480kg」は iPhone が作った文字をそのまま出す
+struct VolumeRow: View {
+    let volume: WatchSnapshot.Volume
+
+    var body: some View {
+        HStack(spacing: 8) {
+            ZStack {
+                Circle().stroke(Palette.surface2, lineWidth: 5)
+                Circle()
+                    .trim(from: 0, to: min(max(volume.ratio, 0), 1))
+                    .stroke(volume.over ? Palette.green : Palette.text.opacity(0.85),
+                            style: StrokeStyle(lineWidth: 5, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+            }
+            .frame(width: 34, height: 34)
+            .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(volume.now).numeric(18, weight: .bold).foregroundStyle(Palette.text)
+                ForEach(Array(volume.lines.enumerated()), id: \.offset) { _, line in
+                    Text(line)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(volume.over ? Palette.green : Palette.muted)
+                        .lineLimit(1).minimumScaleFactor(0.8)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -229,8 +267,13 @@ struct ExerciseListView: View {
 
     var body: some View {
         List {
+            // 休憩の経過は急ぐ情報なので先に、リングはその下に
             if let r = snap.restStartAt {
                 RestRowButton(store: store, label: snap.labels.rest, startAt: Date(timeIntervalSince1970: r / 1000))
+                    .listRowBackground(Color.clear)
+            }
+            if let v = snap.volume {
+                VolumeRow(volume: v)
                     .listRowBackground(Color.clear)
             }
             ForEach(snap.exercises) { ex in

@@ -2197,6 +2197,18 @@ function App() {
         applied: watchApplied,
         recordStartAt: startAt,
         lastSaved: watchLastSaved,
+        // 記録画面の固定バーと同じ基準・同じ文言(volumeGoalKey)。Watch で入れたセットは、iPhone が合流させて
+        // 送り直すまでリングに入らない(Watch はボリュームを計算しない)
+        volume: compareBase && compareBase.avg > 0 ? (() => {
+          const diff = liveVolume - compareBase.avg;
+          const v = Math.round(toU(Math.abs(diff))).toLocaleString();
+          return {
+            ratio: Math.max(0, liveVolume / compareBase.avg),
+            now: `${Math.round(toU(liveVolume)).toLocaleString()}${uLabel()}`,
+            lines: t(volumeGoalKey(compareBase, diff >= 0), { n: compareBase.n, v, unit: uLabel() }).split("|"),
+            over: diff >= 0,
+          };
+        })() : null,
         fmtW: wU,
       });
       const { sentAt, ...content } = snap;
@@ -2206,7 +2218,7 @@ function App() {
       syncWatchSnapshot(snap);
     }, 400);
     return () => clearTimeout(timer);
-  }, [loaded, today, restStartAt, todayDay, autoMenu, watchApplied, workouts, lang, unit, customExercises, exerciseOverrides, startAt, watchLastSaved]);
+  }, [loaded, today, restStartAt, todayDay, autoMenu, watchApplied, workouts, lang, unit, customExercises, exerciseOverrides, startAt, watchLastSaved, profile.bodyweight]);
 
   // カロリー(METs×体重×時間, 目安)
   const estimateKcal = (min) => Math.round(5.0 * profile.bodyweight * (min / 60));

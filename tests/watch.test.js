@@ -29,6 +29,14 @@ describe("buildWatchSnapshot", () => {
     expect(buildWatchSnapshot({ now: 1, labels: LABELS, fmtW, restStartAt: 100, exercises: [bench([])] }).restStartAt).toBe(100);
   });
 
+  it("ボリュームのリングの値は記録中だけ送る(改善要望 8)", () => {
+    const { buildWatchSnapshot } = load();
+    const volume = { ratio: 0.6, now: "1,200kg", lines: ["過去3回平均まで", "あと800kg"], over: false };
+    expect(buildWatchSnapshot({ now: 1, labels: LABELS, fmtW, volume }).volume).toBeNull();
+    expect(buildWatchSnapshot({ now: 1, labels: LABELS, fmtW, volume, exercises: [bench([])] }).volume).toEqual(volume);
+    expect(buildWatchSnapshot({ now: 1, labels: LABELS, fmtW, exercises: [bench([])] }).volume).toBeNull();
+  });
+
   it("前回の同じ番手は、ウォームアップを数えないワーキングセットの通し番号で対応させる", () => {
     const { buildWatchSnapshot } = load();
     const snap = buildWatchSnapshot({

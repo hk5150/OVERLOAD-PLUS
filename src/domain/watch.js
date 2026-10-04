@@ -32,14 +32,17 @@ const watchRir = (v) => (v === "" || v == null || isNaN(Number(v)) ? null : Numb
 // recordStartAt: 記録中なら、その記録の startAt(ms)。Watch のワークアウトとこの記録を対応付ける
 // lastSaved: 直近に保存した記録 { key(ヘルスケアの紐づけキー), startAt, endAt }。Watch はこれを見て、
 //            自分のワークアウトを保存する(一致)か破棄する(不一致=破棄された記録)かを決める
+// volume: 今日のボリュームと基準(改善要望 8)。{ ratio(基準に対する割合), now(表示用), lines(「過去3回平均まで」「あと480kg」), over }。
+//         計算と文言は iPhone で済ませる(Watch はリングと文字を並べるだけ)。基準が無ければ null
 function buildWatchSnapshot({ now, exercises = [], restStartAt = null, dayName = null, menu = [], labels, applied = [], fmtW,
-  recordStartAt = null, lastSaved = null }) {
+  recordStartAt = null, lastSaved = null, volume = null }) {
   const state = exercises.length > 0 ? "active" : menu.length > 0 ? "menu" : "idle";
   return {
     v: WATCH_SNAPSHOT_VERSION,
     sentAt: now,
     state,
     restStartAt: state === "active" ? restStartAt : null,
+    volume: state === "active" ? volume : null,
     // 種目を全部消して一時的に active でなくなっても、記録(startAt)が続いている間は載せ続ける。
     // Watch はこれが消えたときに「記録が終わった」と判断する
     recordStartAt,
