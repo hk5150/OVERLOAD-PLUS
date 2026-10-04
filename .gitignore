@@ -9,3 +9,4 @@ www/
 
 # UI検証時のスクリーンショット・コンソールログ(Playwright MCPが吐く作業用の生成物)
 .playwright-mcp/
+.claude/locks/
