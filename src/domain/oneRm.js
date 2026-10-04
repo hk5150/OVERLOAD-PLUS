@@ -34,9 +34,11 @@ function dayBest1RM(sets, isDb, bwFactor, bodyweight) {
 // 13回以上も出さない: Epley 式は回数が多いほど高めに出て、軽い重量の高回数セットが
 // 自己ベストに見えてしまう(北村さんの判断。docs/改善要望_2026-10.md の 6)。
 // RIR の有無は見ない(入る前から薄く出す。濃さは呼び出し側が決める)。
+// effW は effWeight を通した実効重量(ダンベルは両手、自重は体重込み)。入力した重量で判定すると、
+// 加重0の懸垂やディップスに一切出なくなる(reviewer 指摘)。
 const SET_1RM_MAX_REPS = 12;
-function showsSet1RM(s, weight, reps) {
-  return !s.warmup && !s.assisted && weight > 0 && reps >= 1 && reps <= SET_1RM_MAX_REPS;
+function showsSet1RM(s, effW, reps) {
+  return !s.warmup && !s.assisted && effW > 0 && reps >= 1 && reps <= SET_1RM_MAX_REPS;
 }
 
 // ブラウザの<script>グローバルスコープではconst宣言もbare identifierとして参照できるが、

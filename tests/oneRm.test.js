@@ -286,7 +286,12 @@ describe("showsSet1RM(各セットの推定1RMを出すか)", () => {
     expect(showsSet1RM(s({ assisted: true }), 70, 10)).toBe(false);
   });
 
-  it("重量か回数が0なら出さない", () => {
+  it("加重0の自重種目にも出す(実効重量で判定する)", () => {
+    const { effWeight } = loadDomainModule("src/domain/oneRm.js");
+    expect(showsSet1RM(s(), effWeight(0, false, 1.0, 70), 10)).toBe(true);
+  });
+
+  it("実効重量か回数が0なら出さない", () => {
     expect(showsSet1RM(s(), 0, 10)).toBe(false);
     expect(showsSet1RM(s(), 70, 0)).toBe(false);
   });

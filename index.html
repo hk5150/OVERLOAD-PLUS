@@ -303,9 +303,9 @@ const C = {
 };
 // 本文用フォント。<head>のbodyと同じ指定。Barlow Condensed(数字用)の中に
 // 日本語を戻したいときだけ明示的に使う(それ以外はbodyから継承させる)。
+const FONT_UI = "-apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic', Meiryo, sans-serif";
 // 画面には出さず、読み上げにだけ渡すテキスト
 const srOnly = { position: "absolute", width: 1, height: 1, padding: 0, margin: -1, overflow: "hidden", clip: "rect(0 0 0 0)", whiteSpace: "nowrap", border: 0 };
-const FONT_UI = "-apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic', Meiryo, sans-serif";
 
 const STORAGE_KEY = "workout-log-v1";
 const DRAFT_KEY = "workout-draft-v1"; // 入力途中の記録(アプリが落ちても復元できるように)
@@ -672,6 +672,12 @@ const ICON_PATHS = {
   split:   <><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 10v10"/></>,
   log:     <><path d="M8.5 12h7"/><rect x="5" y="6.5" width="3.5" height="11" rx="1.2"/><rect x="15.5" y="6.5" width="3.5" height="11" rx="1.2"/><path d="M2.5 10v4M21.5 10v4"/></>,
   history: <><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></>,
+  up:      <path d="M6 15l6-6 6 6"/>,
+  down:    <path d="M6 9l6 6 6-6"/>,
+  check:   <path d="M5 12.5l4.5 4.5L19 7.5"/>,
+  chat:    <><path d="M4 5h16v11H10l-4 3.5V16H4z"/><path d="M8 9.5h8M8 12.5h5"/></>,
+  swap:    <><path d="M4 8h13l-3-3M20 16H7l3 3"/></>,
+  link:    <><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></>,
   settings:<><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></>,
 };
 function Icon({ name, size = 14, color = "currentColor", style }) {
@@ -976,7 +982,6 @@ function App() {
   const [openHist, setOpenHist] = useState({});       // 種目カードの履歴パネル開閉
   // 種目カードの「⋯」(並べ替え・AI相談・変更・履歴・設定・YouTube・削除)。セットを打つ間は使わない操作なので
   // 普段は畳んでおく(以前は毎カードで1行を占め、赤い YouTube が「開始」「削除」と同格に見えていた)
-  const [openMenu, setOpenMenu] = useState({});
   const [restFull, setRestFull] = useState(false);    // インターバルの全画面表示
   const [showSplitHistory, setShowSplitHistory] = useState(false); // 上部バーのボリュームタップ→同一分割の履歴一覧
   const splitHistoryModalRef = useRef(null);
@@ -2035,6 +2040,35 @@ function App() {
     if (ex) updateSplitDayExercise(ex.name, null);
     if (today.every(e => e.id === id)) clearErrorIf("log.noValidSets", "err.workoutSaveFailed"); // 最後の種目を消した(入力はもう残っていない)
   };
+  // カードの ✕ からの削除(改善要望 11)。実施済みのセットがあるときだけ確認し、消した直後の5秒は元に戻せる。
+  // removeExercise は今日の Day の登録種目からも外すので、戻すときは登録も同じ位置に戻す。
+  const [removedEx, setRemovedEx] = useState(null); // { ex, idx, dayName, dayPos }
+  const removedTimerRef = useRef(null);
+  const removeExerciseUndoable = (ex) => {
+    const entered = ex.sets.some(s => s.rir !== "" && s.rir != null);
+    if (entered && !window.confirm(t("log.confirmRemove", { name: exName(ex.name) }))) return;
+    const idx = today.findIndex(e => e.id === ex.id);
+    const dayPos = todayDay?.exercises ? todayDay.exercises.indexOf(ex.name) : -1;
+    removeExercise(ex.id);
+    setRemovedEx({ ex, idx, dayName: todayDay?.name ?? null, dayPos });
+    clearTimeout(removedTimerRef.current);
+    removedTimerRef.current = setTimeout(() => setRemovedEx(null), 5000);
+  };
+  const undoRemoveExercise = () => {
+    const r = removedEx;
+    if (!r) return;
+    clearTimeout(removedTimerRef.current);
+    setRemovedEx(null);
+    // 5秒の間に同じ種目を足し直していたら戻さない(同名が2枚あると、名前で引く前回の記録が片方にしか付かない)
+    setToday(t => t.some(e => e.id === r.ex.id || e.name === r.ex.name) ? t : [...t.slice(0, r.idx), r.ex, ...t.slice(r.idx)]);
+    if (r.dayPos >= 0 && split && todayDay && todayDay.name === r.dayName && !(todayDay.exercises || []).includes(r.ex.name)) {
+      const dayIdx = split.cursor % split.days.length;
+      const list = [...(todayDay.exercises || [])];
+      list.splice(Math.min(r.dayPos, list.length), 0, r.ex.name);
+      persist({ split: { ...split, days: split.days.map((d, i) => i === dayIdx ? { ...d, exercises: list } : d) } });
+    }
+  };
+  useEffect(() => () => clearTimeout(removedTimerRef.current), []);
   // 種目の並べ替え(dir: -1=上へ, +1=下へ)
   // 種目の差し替え(セット内容は維持したまま種目だけ変更)
   const swapExercise = (id, newName) => {
@@ -3363,6 +3397,28 @@ function App() {
               </button>
             )}
           </div>
+          {/* 種目を消した直後の「元に戻す」と、AI相談のあとの貼り付けの案内(改善要望 11)。
+              バーの直下に重ねて出す。カードの中に出すと、消えるときに下の入力欄がずれる。
+              画面の下側は「ワークアウトを保存」と重なり、押し間違えを招く */}
+          {view === "log" && (removedEx || (copiedIdx || "").startsWith("ex:")) && (
+            <div role="status" style={{
+              position: "absolute", left: 0, right: 0, top: "calc(100% + 8px)", maxWidth: 520, margin: "0 auto", padding: "0 16px", pointerEvents: "none",
+            }}>
+              <div style={{
+                display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 12, pointerEvents: "auto",
+                background: C.surface2, border: `1px solid ${C.border}`, boxShadow: "0 6px 20px rgba(0,0,0,0.5)", fontSize: 13,
+              }}>
+                {removedEx ? (
+                  <>
+                    <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t("log.removed", { name: exName(removedEx.ex.name) })}</span>
+                    <button onClick={undoRemoveExercise} style={{ ...btn("transparent", C.yellow), padding: "4px 2px", fontSize: 13, fontWeight: 800, flexShrink: 0 }}>{t("log.undo")}</button>
+                  </>
+                ) : (
+                  <span style={{ color: C.green }}>{t("log.pasteHint")}</span>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -3529,8 +3585,8 @@ function App() {
                     )}
                     {/* 初めての種目は、まずフォームを見てから始められるように(改善要望 10b) */}
                     {it.type === "new_start" && (
-                      <button onClick={() => openYouTube(p.name)}
-                        style={{ ...btn("transparent", C.text), padding: "4px 0", fontSize: 12, marginTop: 2, display: "inline-flex", alignItems: "center", gap: 5 }}>
+                      <button onClick={() => openYouTube(p.name)} className="tapArea"
+                        style={{ ...btn("transparent", C.text), padding: "6px 0", fontSize: 12, marginTop: 2, display: "inline-flex", alignItems: "center", gap: 5 }}>
                         <Icon name="youtube" size={14} />{t("menu.watchForm")}
                       </button>
                     )}
@@ -3580,8 +3636,7 @@ function App() {
                   {t("log.superset")}
                 </div>
               )}
-              <div style={{ marginBottom: 10 }}>
-                <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+              <div style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 10 }}>
                   <div style={{ fontSize: 15, fontWeight: 700, lineHeight: 1.4, flex: 1, minWidth: 0, paddingTop: 3 }}>
                     {inGroup && <span style={{ color: C.blue, fontWeight: 800, marginRight: 6 }}>{ssLetter}.</span>}
                     {exName(ex.name)}
@@ -3590,105 +3645,11 @@ function App() {
                     {resolveRom(ex.name, ex.rom) < 1 && <span style={{ color: C.muted, fontSize: 12, marginLeft: 4 }}>ROM×{resolveRom(ex.name, ex.rom)}</span>}
                     {todayDay && ex.muscle && !muscleMatchesDay(ex.muscle, todayDay) && <span style={{ color: C.yellow, fontSize: 12, marginLeft: 6 }}>{t("log.offDay")}</span>}
                   </div>
-                  <button onClick={() => setOpenMenu({ ...openMenu, [ex.id]: !openMenu[ex.id] })}
-                    aria-label={t("log.exerciseMenu")} aria-expanded={!!openMenu[ex.id]} className="tapArea"
-                    style={{ ...btn(openMenu[ex.id] ? C.surface2 : "transparent", openMenu[ex.id] ? C.text : C.muted),
-                      width: 34, height: 30, padding: 0, display: "grid", placeItems: "center", flexShrink: 0, border: `1px solid ${openMenu[ex.id] ? C.border : "transparent"}` }}>
-                    <Icon name="more" size={18} />
-                  </button>
-                </div>
-                {openMenu[ex.id] && (
-                  <div style={{ background: C.bg, borderRadius: 10, padding: 8, marginTop: 8 }}>
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
-                      {/* この行は flexWrap: "wrap" で折り返しうるため .tapArea を付けない。
-                          縦方向の透明拡張(-6px)が gap を超え、折り返した隣の行のボタンと
-                          重なって誤タップを誘発するリスクがあるため(reviewer指摘)。 */}
-                      <button onClick={() => moveExercise(ex.id, -1)} disabled={exIdx === 0} aria-label={t("log.moveUp")}
-                        style={{ ...btn(C.surface2, exIdx === 0 ? C.border : C.muted), padding: "6px 10px", fontSize: 13, cursor: exIdx === 0 ? "default" : "pointer" }}>▲</button>
-                      <button onClick={() => moveExercise(ex.id, 1)} disabled={exIdx === today.length - 1} aria-label={t("log.moveDown")}
-                        style={{ ...btn(C.surface2, exIdx === today.length - 1 ? C.border : C.muted), padding: "6px 10px", fontSize: 13, cursor: exIdx === today.length - 1 ? "default" : "pointer" }}>▼</button>
-                      <button onClick={() => consultAi(exerciseToText(ex), `ex:${ex.id}`)}
-                        style={{
-                          ...btn(C.surface2, copiedIdx === `ex:${ex.id}` ? C.green : C.text), padding: "6px 10px", fontSize: 13,
-                          whiteSpace: "nowrap", flexShrink: 0,
-                          // コピー後の「✓ コピー / ✓ Copied」は元のラベルより長い。幅を固定しないと
-                          // 押した瞬間にボタン行が折り返して、下のUIがずれる(英語+375pxで顕著)。
-                          minWidth: 74, textAlign: "center",
-                        }}>
-                        {copiedIdx === `ex:${ex.id}` ? t("log.consultAiDone") : t("log.consultAi")}
-                      </button>
-                      <button onClick={() => { setSwapEx(swapEx === ex.id ? null : ex.id); setSwapSearch(""); setSwapMuscle(""); }}
-                        style={{ ...btn(C.surface2, swapEx === ex.id ? C.yellow : C.text), padding: "6px 10px", fontSize: 13, whiteSpace: "nowrap", flexShrink: 0 }}>{t("log.swap")}</button>
-                      <button onClick={() => setOpenHist({ ...openHist, [ex.id]: !openHist[ex.id] })}
-                        style={{ ...btn(C.surface2, openHist[ex.id] ? C.yellow : C.text), padding: "6px 10px", fontSize: 13, whiteSpace: "nowrap", flexShrink: 0 }}>{t("log.history")}</button>
-                      <button onClick={() => setOpenCfg({ ...openCfg, [ex.id]: !openCfg[ex.id] })} aria-label={t("log.exerciseConfig")} aria-expanded={!!openCfg[ex.id]}
-                        style={{ ...btn(C.surface2, openCfg[ex.id] ? C.yellow : C.text), padding: "6px 10px", fontSize: 13, whiteSpace: "nowrap", flexShrink: 0 }}>{t("log.exerciseConfigShort")}</button>
-                      <button onClick={() => openYouTube(ex.name)} aria-label={t("log.youtube")}
-                        style={{ ...btn(C.surface2, C.text), padding: "6px 10px", fontSize: 13, whiteSpace: "nowrap", flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 5 }}>
-                        <Icon name="youtube" size={15} />YouTube</button>
-                      {exIdx > 0 && (
-                        <button onClick={() => toggleSuperset(ex.id)} style={{
-                          ...btn(inGroup && prevEx && prevEx.ssGroup === ex.ssGroup ? C.blue : C.surface2, inGroup && prevEx && prevEx.ssGroup === ex.ssGroup ? "#fff" : C.text),
-                          padding: "6px 10px", fontSize: 13, whiteSpace: "nowrap",
-                        }}>
-                          {inGroup && prevEx && prevEx.ssGroup === ex.ssGroup ? t("log.supersetOff") : t("log.supersetOn")}
-                        </button>
-                      )}
-                      <div style={{ flex: 1 }} />
-                      <button onClick={() => removeExercise(ex.id)} aria-label={t("log.removeExercise")}
-                        style={{ ...btn("transparent", C.red), padding: "6px 6px", fontSize: 13, whiteSpace: "nowrap", flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 4 }}>
-                        <Icon name="trash" size={15} />{t("log.removeExerciseShort")}</button>
-                    </div>
-                    {/* コピーしただけでは「次に何をすればいいか」が伝わらないため、貼り付けが要ることを明示する。
-                        高さは常に確保する。条件表示にすると、AI側から戻ってきた直後に文言が消えた瞬間
-                        セット行が上へ飛び、狙った入力欄の1つ下を押してしまう(ボタン幅をminWidthで
-                        固定したのと同じ理由)。role="status"もDOMに常駐させないと読み上げられない。 */}
-                    <div role="status" style={{ fontSize: 12, color: C.green, marginTop: 6, height: 17 }}>
-                      {copiedIdx === `ex:${ex.id}` ? t("log.pasteHint") : ""}
-                    </div>
-                  </div>
-                )}
+                {/* 削除は、ほかの操作から離して見出しの右端に置く(改善要望 11。「削除は結構使う」)。
+                    実施済みのセットがあるときだけ確認し、消した直後は「元に戻す」を数秒出す */}
+                <button onClick={() => removeExerciseUndoable(ex)} aria-label={t("log.removeExercise")} title={t("log.removeExercise")} className="tapArea"
+                  style={{ ...btn("transparent", C.muted), width: 30, height: 30, padding: 0, display: "grid", placeItems: "center", flexShrink: 0, fontSize: 15 }}>✕</button>
               </div>
-
-              {/* 種目の差し替え(セットは新しい種目の前回記録から入れ直す) */}
-              {swapEx === ex.id && (
-                <div style={{ background: C.bg, borderRadius: 10, padding: 10, marginBottom: 10, border: `1px solid ${C.border}` }}>
-                  <div style={{ fontSize: 12, color: C.muted, marginBottom: 8 }}>
-                    {t("log.swapHint")}
-                  </div>
-                  <input value={swapSearch} onChange={e => setSwapSearch(e.target.value)} placeholder={t("log.searchExercise")}
-                    style={{ width: "100%", background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: "8px 10px", fontSize: 16, fontFamily: "inherit", marginBottom: 8 }} />
-                  {/* 部位フィルター(他の部位にも変更できる) */}
-                  <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 8, marginBottom: 4 }}>
-                    <button onClick={() => setSwapMuscle("")} style={{ ...chip(swapMuscle === ""), flexShrink: 0 }}>{t("common.all")}</button>
-                    {MUSCLES.map(m => (
-                      <button key={m} onClick={() => setSwapMuscle(m)} style={{ ...chip(swapMuscle === m), flexShrink: 0 }}>{muscleName(m)}</button>
-                    ))}
-                  </div>
-                  <div style={{ maxHeight: 180, overflowY: "auto" }}>
-                    {allExercises
-                      .filter(e => {
-                        const q = swapSearch.trim();
-                        if (e.n === ex.name) return false;
-                        // 今日の記録に既にある種目名には差し替えない(同名重複すると、履歴参照が
-                        // 名前ベースの.findのため一方のカードの記録が以後参照できなくなる)
-                        if (today.some(t => t.id !== ex.id && t.name === e.n)) return false;
-                        if (q) return exMatches(e, q);
-                        if (swapMuscle) return e.m === swapMuscle;
-                        return true; // 既定はすべての部位から選べる
-                      })
-                      .slice(0, 60)
-                      .map(e => (
-                        <button key={e.n} onClick={() => swapExercise(ex.id, e.n)}
-                          style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, width: "100%", textAlign: "left", background: "transparent", border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 10px", marginBottom: 5, cursor: "pointer", color: C.text, fontSize: 13, fontFamily: "inherit" }}>
-                          <span style={{ minWidth: 0 }}>{exName(e.n)}</span>
-                          <span style={{ color: C.muted, fontSize: 12, flexShrink: 0 }}>{muscleName(e.m)}{t("common.sep")}{eqName(e.eq)}</span>
-                        </button>
-                      ))}
-                  </div>
-                  <button onClick={() => { setSwapEx(null); setSwapSearch(""); }} style={{ ...btn("transparent", C.muted), width: "100%", fontSize: 13, padding: 6, marginTop: 2 }}>{t("common.cancel")}</button>
-                </div>
-              )}
 
               {/* 判断材料: 重量の停滞と推移。前回の各セットはセット行に並べて出すのでここでは繰り返さない */}
               {(() => {
@@ -3785,12 +3746,97 @@ function App() {
                 );
               })()}
 
+              {/* 種目の操作(改善要望 11)。1.2 では「⋯」に畳んでいたが、毎回1タップ余計にかかった。
+                  畳んだ理由(2段のボタンでカードが長くなり、入力欄が下に追いやられた)に配慮して、
+                  アイコン+短い文字の7マスを1段に収める。並べ替えとスーパーセットは使う頻度が低いので薄く。
+                  この行は折り返さないので .tapArea を付けてよい(set 行と同じ扱い) */}
+              {(() => {
+                const ssOn = inGroup && prevEx && prevEx.ssGroup === ex.ssGroup;
+                const copied = copiedIdx === `ex:${ex.id}`;
+                const cell = (on, faint) => ({
+                  ...btn("transparent", on ? C.yellow : faint ? C.grey : C.muted),
+                  flex: 1, minWidth: 0, padding: "4px 0", display: "flex", flexDirection: "column", alignItems: "center", gap: 3,
+                  fontSize: 10, fontWeight: 600, lineHeight: 1.1, whiteSpace: "nowrap",
+                });
+                const arrow = (disabled) => ({
+                  ...btn("transparent", disabled ? C.border : C.grey), flex: 1, minWidth: 0, padding: 0,
+                  display: "grid", placeItems: "center", cursor: disabled ? "default" : "pointer",
+                });
+                return (
+                  <div style={{ display: "flex", alignItems: "stretch", gap: 2, marginBottom: 10, marginTop: -2 }}>
+                    <div style={{ flex: 1, minWidth: 0, display: "flex" }}>
+                      <button onClick={() => moveExercise(ex.id, -1)} disabled={exIdx === 0} aria-label={t("log.moveUp")} className="tapArea" style={arrow(exIdx === 0)}>
+                        <Icon name="up" size={16} /></button>
+                      <button onClick={() => moveExercise(ex.id, 1)} disabled={exIdx === today.length - 1} aria-label={t("log.moveDown")} className="tapArea" style={arrow(exIdx === today.length - 1)}>
+                        <Icon name="down" size={16} /></button>
+                    </div>
+                    <button onClick={() => setOpenCfg({ ...openCfg, [ex.id]: !openCfg[ex.id] })} aria-label={t("log.exerciseConfig")} aria-expanded={!!openCfg[ex.id]} className="tapArea" style={cell(openCfg[ex.id])}>
+                      <Icon name="settings" size={16} />{t("act.config")}</button>
+                    <button onClick={() => openYouTube(ex.name)} aria-label={t("log.youtube")} className="tapArea" style={cell(false)}>
+                      <Icon name="youtube" size={16} />{t("act.form")}</button>
+                    <button onClick={() => consultAi(exerciseToText(ex), `ex:${ex.id}`)} aria-label={t("log.consultAi")} className="tapArea"
+                      style={{ ...cell(false), color: copied ? C.green : C.muted }}>
+                      <Icon name={copied ? "check" : "chat"} size={16} />{copied ? t("act.copied") : t("act.ai")}</button>
+                    <button onClick={() => { setSwapEx(swapEx === ex.id ? null : ex.id); setSwapSearch(""); setSwapMuscle(""); }} aria-label={t("log.swapAria")} aria-expanded={swapEx === ex.id} className="tapArea" style={cell(swapEx === ex.id)}>
+                      <Icon name="swap" size={16} />{t("log.swap")}</button>
+                    <button onClick={() => setOpenHist({ ...openHist, [ex.id]: !openHist[ex.id] })} aria-label={t("log.historyAria")} aria-expanded={!!openHist[ex.id]} className="tapArea" style={cell(openHist[ex.id])}>
+                      <Icon name="history" size={16} />{t("log.history")}</button>
+                    {/* 先頭の種目は上と組めない。マスは空けたまま残して、カードごとに位置がずれないようにする */}
+                    {exIdx > 0 ? (
+                      <button onClick={() => toggleSuperset(ex.id)} aria-label={ssOn ? t("log.supersetOff") : t("log.supersetOn")} aria-pressed={!!ssOn} className="tapArea"
+                        style={{ ...cell(false, !ssOn), color: ssOn ? C.blue : C.grey }}>
+                        <Icon name="link" size={16} />{t("act.superset")}</button>
+                    ) : <span style={{ flex: 1 }} />}
+                  </div>
+                );
+              })()}
+
+              {/* 種目の差し替え(セットは新しい種目の前回記録から入れ直す) */}
+              {swapEx === ex.id && (
+                <div style={{ background: C.bg, borderRadius: 10, padding: 10, marginBottom: 10, border: `1px solid ${C.border}` }}>
+                  <div style={{ fontSize: 12, color: C.muted, marginBottom: 8 }}>
+                    {t("log.swapHint")}
+                  </div>
+                  <input value={swapSearch} onChange={e => setSwapSearch(e.target.value)} placeholder={t("log.searchExercise")}
+                    style={{ width: "100%", background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: "8px 10px", fontSize: 16, fontFamily: "inherit", marginBottom: 8 }} />
+                  {/* 部位フィルター(他の部位にも変更できる) */}
+                  <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 8, marginBottom: 4 }}>
+                    <button onClick={() => setSwapMuscle("")} style={{ ...chip(swapMuscle === ""), flexShrink: 0 }}>{t("common.all")}</button>
+                    {MUSCLES.map(m => (
+                      <button key={m} onClick={() => setSwapMuscle(m)} style={{ ...chip(swapMuscle === m), flexShrink: 0 }}>{muscleName(m)}</button>
+                    ))}
+                  </div>
+                  <div style={{ maxHeight: 180, overflowY: "auto" }}>
+                    {allExercises
+                      .filter(e => {
+                        const q = swapSearch.trim();
+                        if (e.n === ex.name) return false;
+                        // 今日の記録に既にある種目名には差し替えない(同名重複すると、履歴参照が
+                        // 名前ベースの.findのため一方のカードの記録が以後参照できなくなる)
+                        if (today.some(t => t.id !== ex.id && t.name === e.n)) return false;
+                        if (q) return exMatches(e, q);
+                        if (swapMuscle) return e.m === swapMuscle;
+                        return true; // 既定はすべての部位から選べる
+                      })
+                      .slice(0, 60)
+                      .map(e => (
+                        <button key={e.n} onClick={() => swapExercise(ex.id, e.n)}
+                          style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, width: "100%", textAlign: "left", background: "transparent", border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 10px", marginBottom: 5, cursor: "pointer", color: C.text, fontSize: 13, fontFamily: "inherit" }}>
+                          <span style={{ minWidth: 0 }}>{exName(e.n)}</span>
+                          <span style={{ color: C.muted, fontSize: 12, flexShrink: 0 }}>{muscleName(e.m)}{t("common.sep")}{eqName(e.eq)}</span>
+                        </button>
+                      ))}
+                  </div>
+                  <button onClick={() => { setSwapEx(null); setSwapSearch(""); }} style={{ ...btn("transparent", C.muted), width: "100%", fontSize: 13, padding: 6, marginTop: 2 }}>{t("common.cancel")}</button>
+                </div>
+              )}
+
               {/* この種目の過去履歴 */}
               {openHist[ex.id] && (() => {
                 const hist = exerciseHistory(ex.name, 5);
                 return (
                   <div style={{ background: C.bg, borderRadius: 10, padding: 10, marginBottom: 10, border: `1px solid ${C.border}` }}>
-                    {/* 開くボタンは「⋯」の中にあるので、パネル側にも閉じるボタンを置く */}
+                    {/* 開くボタン(操作の行の「履歴」)から離れているので、パネル側にも閉じるボタンを置く */}
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 8 }}>
                       <span style={{ fontSize: 12, color: C.muted }}>{t("log.recentN", { name: exName(ex.name), n: hist.length })}</span>
                       <button onClick={() => setOpenHist({ ...openHist, [ex.id]: false })} aria-label={t("common.close")} className="tapArea"
@@ -3920,19 +3966,18 @@ function App() {
                 const done = s.warmup || (s.rir !== "" && s.rir != null); // 実施済みか
                 // このセットの推定1RM(ウォームアップ・補助は対象外)
                 const setW = fromU(s.weight), setR = Math.round(num(s.reps));
-                const set1RM = (!s.warmup && !s.assisted && setW > 0 && setR > 0 && s.rir !== "" && s.rir != null)
-                  ? est1RM(effWeight(setW, resolveIsDb(ex.name, ex.isDb), ex.bwFactor || 0, profile.bodyweight), setR)
-                  : 0;
+                const setEffW = effWeight(setW, resolveIsDb(ex.name, ex.isDb), ex.bwFactor || 0, profile.bodyweight);
+                const set1RM = (showsSet1RM(s, setEffW, setR) && s.rir !== "" && s.rir != null) ? est1RM(setEffW, setR) : 0;
                 const pastBest1RM = prMap[ex.name]?.best1RM || 0;
                 // このセットが自己ベストを更新しているか(同一セッション内では最も高い1セットのみに印を付ける)
+                // 対象は行に 1RM を出すセット(showsSet1RM)に揃える。13回以上を数えると、⚡がどの行にも出ないことがある(reviewer 指摘)
                 const bestIdxInSession = (() => {
                   let bi = -1, bv = 0;
                   ex.sets.forEach((x, xi) => {
-                    if (x.warmup || x.assisted) return;
                     if (x.rir === "" || x.rir == null) return; // 未実施は対象外
-                    const w = fromU(x.weight), r = Math.round(num(x.reps));
-                    if (w <= 0 || r <= 0) return;
-                    const v = est1RM(effWeight(w, resolveIsDb(ex.name, ex.isDb), ex.bwFactor || 0, profile.bodyweight), r);
+                    const w = effWeight(fromU(x.weight), resolveIsDb(ex.name, ex.isDb), ex.bwFactor || 0, profile.bodyweight), r = Math.round(num(x.reps));
+                    if (!showsSet1RM(x, w, r)) return;
+                    const v = est1RM(w, r);
                     if (v > bv) { bv = v; bi = xi; }
                   });
                   return bi;
@@ -3940,8 +3985,8 @@ function App() {
                 const isSetPR = set1RM > 0 && set1RM > pastBest1RM + 0.01 && i === bestIdxInSession;
                 // 行の右端に出す推定1RM。重量と回数が入っていれば RIR の前から出す(未実施の行は行ごと薄くなる)。
                 // 自己ベストを超えたら緑。初めての種目は比べる相手がいないので緑にしない(全部の行が緑になる)
-                const show1RM = showsSet1RM(s, setW, setR);
-                const row1RM = show1RM ? est1RM(effWeight(setW, resolveIsDb(ex.name, ex.isDb), ex.bwFactor || 0, profile.bodyweight), setR) : 0;
+                const show1RM = showsSet1RM(s, setEffW, setR);
+                const row1RM = show1RM ? est1RM(setEffW, setR) : 0;
                 const over1RM = pastBest1RM > 0 && row1RM > pastBest1RM + 0.01;
                 // 前回の同じ番手のワーキングセット。同じ重量×回数なら余力の伸びを差分で出す
                 const prevSet = s.warmup ? null : (ins?.sets?.[wsIndex - 1] || null);
@@ -4020,13 +4065,20 @@ function App() {
                         )}
                         <span style={{ marginLeft: "auto", display: "inline-flex", gap: 8, alignItems: "center" }}>
                           {delta && <span style={{ fontWeight: 800, color: delta[1] }}>{delta[0]}</span>}
-                          {show1RM && (
-                            <span title={isSetPR ? t("compare.setPR", { v: toU(set1RM - pastBest1RM).toFixed(1), unit: uLabel() }) : undefined}
-                              style={{ display: "inline-flex", alignItems: "center", gap: 2, whiteSpace: "nowrap", color: over1RM ? C.green : C.muted, fontWeight: over1RM ? 800 : 500 }}>
-                              {isSetPR && <Icon name="bolt" size={12} />}
-                              {t("set.oneRm", { v: toU(row1RM).toFixed(1) })}
-                            </span>
-                          )}
+                          {show1RM && (() => {
+                            // ⚡はその日の最高のセットで、かつ自己ベストを超えたときだけ(初めての種目には付けない)
+                            const pr = isSetPR && over1RM;
+                            const prText = pr ? t("compare.setPR", { v: toU(set1RM - pastBest1RM).toFixed(1), unit: uLabel() }) : null;
+                            return (
+                              <span title={prText || undefined}
+                                style={{ display: "inline-flex", alignItems: "center", gap: 2, whiteSpace: "nowrap", color: over1RM ? C.green : C.muted, fontWeight: over1RM ? 800 : 500 }}>
+                                {pr && <Icon name="bolt" size={12} />}
+                                {t("set.oneRm", { v: toU(row1RM).toFixed(1) })}
+                                {/* ⚡と色は読み上げられないので、以前のバッジの文言を読み上げにだけ残す */}
+                                {pr && <span style={srOnly}>{prText}</span>}
+                              </span>
+                            );
+                          })()}
                         </span>
                       </div>
                     );
