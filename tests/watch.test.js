@@ -29,6 +29,13 @@ describe("buildWatchSnapshot", () => {
     expect(buildWatchSnapshot({ now: 1, labels: LABELS, fmtW, restStartAt: 100, exercises: [bench([])] }).restStartAt).toBe(100);
   });
 
+  it("休憩の知らせの経過分と本文をそのまま送る(改善要望 4)", () => {
+    const { buildWatchSnapshot } = load();
+    const restNotices = [{ min: 1.5, body: "1分30秒経過しました。次のセットへ。" }];
+    expect(buildWatchSnapshot({ now: 1, labels: LABELS, fmtW, restNotices, exercises: [bench([])] }).restNotices).toEqual(restNotices);
+    expect(buildWatchSnapshot({ now: 1, labels: LABELS, fmtW }).restNotices).toEqual([]);
+  });
+
   it("完了画面の中身は記録していない間だけ送る(次の記録を始めたら外す。改善要望 12)", () => {
     const { buildWatchSnapshot } = load();
     const finished = { id: 1000, endAt: 2000, title: "お疲れ様でした", stats: [], volume: "1kg", lines: [], over: false, prTitle: "", prs: [], hrLabel: "" };
@@ -388,6 +395,16 @@ describe("Watch アプリのネイティブ設定", () => {
     const editor = views.slice(views.indexOf("private func stepWeight"), views.indexOf("private func crossed"));
     expect(editor.slice(0, editor.indexOf("private func stepReps"))).toContain(".fast");
     expect(editor.slice(editor.indexOf("private func stepReps"))).not.toContain(".fast");
+  });
+
+  it("Watch がワークアウトを記録している間は、iPhone の休憩の通知も Watch が出す(手首に二重に届かない。改善要望 4b)", () => {
+    const html = read("index.html");
+    expect(html).toMatch(/restStartAt !== restFromWatchRef\.current && !watchLive\)/);
+    const store = read("ios/App/KurabellWatch/SessionStore.swift");
+    expect(store).toMatch(/wm\.isRunning, let r = wm\.recordStartAt, r == snap\.recordStartAt[\s\S]*?scheduleRestNotifications\(from:/);
+    // 休憩画面を開いている間は、設定した経過時間に振動する(4a)
+    const views = read("ios/App/KurabellWatch/Views.swift");
+    expect(views).toMatch(/store\.restNoticeMinutes[\s\S]*?play\(\.notification\)/);
   });
 
   it("保存したら完了画面を一度だけ出し、タップか15秒で閉じる(改善要望 12)", () => {

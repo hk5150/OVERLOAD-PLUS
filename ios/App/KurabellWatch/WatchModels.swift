@@ -19,6 +19,12 @@ struct WatchSnapshot: Codable, Equatable {
     var lastSaved: LastSaved? = nil     // 直近に保存した記録。Watch のワークアウトを保存するか破棄するかの判断に使う
     var volume: Volume? = nil           // 今日のボリュームと基準(改善要望 8)。記録中で、比べる基準があるときだけ
     var finished: Finished? = nil       // 直近に保存した記録の完了画面の中身(改善要望 12)。記録していない間だけ
+    var restNotices: [RestNotice]? = nil // 休憩の知らせの経過分と本文(改善要望 4)。nil は古い iPhone(1・2・3分)、空は通知を切っている
+
+    struct RestNotice: Codable, Equatable {
+        var min: Double             // 経過分(1.5 = 1分30秒)
+        var body: String            // 通知の本文(iPhone のアプリ内の言語で作ってある)
+    }
 
     // 文言はすべて iPhone が作る(index.html の saveWorkout)。心拍とカロリーだけは Watch 自身の値を足す
     struct Finished: Codable, Equatable, Identifiable {

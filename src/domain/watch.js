@@ -36,8 +36,9 @@ const watchRir = (v) => (v === "" || v == null || isNaN(Number(v)) ? null : Numb
 //         計算と文言は iPhone で済ませる(Watch はリングと文字を並べるだけ)。基準が無ければ null
 // finished: 直近に保存した記録の完了画面の中身(改善要望 12)。{ id(記録の startAt), endAt, title, stats, volume, lines, over, prTitle, prs, hrLabel }。
 //           記録していない間だけ載せる(次の記録を始めたら外す)。Watch は id ごとに1回だけ出す
+// restNotices: 休憩の知らせ [{ min, body }](改善要望 4)。設定で選んだ経過分と、その通知の本文。通知を切っていれば空
 function buildWatchSnapshot({ now, exercises = [], restStartAt = null, dayName = null, menu = [], labels, applied = [], fmtW,
-  recordStartAt = null, lastSaved = null, volume = null, finished = null }) {
+  recordStartAt = null, lastSaved = null, volume = null, finished = null, restNotices = [] }) {
   const state = exercises.length > 0 ? "active" : menu.length > 0 ? "menu" : "idle";
   return {
     v: WATCH_SNAPSHOT_VERSION,
@@ -46,6 +47,7 @@ function buildWatchSnapshot({ now, exercises = [], restStartAt = null, dayName =
     restStartAt: state === "active" ? restStartAt : null,
     volume: state === "active" ? volume : null,
     finished: recordStartAt == null ? finished : null,
+    restNotices,
     // 種目を全部消して一時的に active でなくなっても、記録(startAt)が続いている間は載せ続ける。
     // Watch はこれが消えたときに「記録が終わった」と判断する
     recordStartAt,

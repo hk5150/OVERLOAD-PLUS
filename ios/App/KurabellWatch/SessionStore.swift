@@ -30,9 +30,13 @@ final class SessionStore: NSObject, ObservableObject {
     private let defaults = UserDefaults.standard
     private let baseKey = "watch.snapshot.v1"
     private let pendingKey = "watch.pending.v1"
-    // Watch で始めた休憩の通知ID。iPhone で始めた休憩は iPhone の通知(Watch に転送される)に任せる
-    private static let restNotifyMinutes = [1, 2, 3]
+    // Watch が予約する休憩の通知。Watch で始めた休憩と、Watch がワークアウトを記録している間の iPhone の休憩(改善要望 4b)。
+    // それ以外の iPhone の休憩は iPhone の通知(Watch に転送される)に任せる。
+    // 経過分は iPhone の設定(スナップショットの restNotices)。取り消しは選べる時間のすべてで行う
+    private static let restNotifyChoices: [Double] = [1, 1.5, 2, 2.5, 3, 4, 5]
     private static let restNotifyPrefix = "kurabell-watch-rest-"
+    // いま通知を予約してある休憩の開始時刻(ms)。同じ休憩で予約し直さないため
+    private var scheduledRestStartAt: Double?
     private let ownRestKey = "watch.ownRest.v1"
     // Watch で始めた休憩の開始時刻(ms)。iPhone 側で別の休憩が始まったら、こちらの通知を取り消す
     private var ownRestStartAt: Double? {
@@ -105,6 +109,7 @@ final class SessionStore: NSObject, ObservableObject {
         send(op)
         if startsRest {
             ownRestStartAt = now
+            scheduledRestStartAt = now
             scheduleRestNotifications(from: Date(timeIntervalSince1970: now / 1000))
         }
         return startsRest
@@ -163,7 +168,20 @@ final class SessionStore: NSObject, ObservableObject {
             if snap.restStartAt == nil || snap.restStartAt! > own {
                 cancelRestNotifications()
                 ownRestStartAt = nil
+                scheduledRestStartAt = nil
             }
+        }
+        // この記録のワークアウトを Watch が記録している間は、iPhone で始めた休憩の通知も Watch が予約する(改善要望 4b)。
+        // iPhone はその間、自分では予約しない(index.html の休憩の effect の watchLive)。手首に二重に届かないように
+        let wm = WorkoutManager.shared
+        if wm.isRunning, let r = wm.recordStartAt, r == snap.recordStartAt, ownRestStartAt == nil,
+           snap.restStartAt != scheduledRestStartAt {
+            if let t = snap.restStartAt {
+                scheduleRestNotifications(from: Date(timeIntervalSince1970: t / 1000))
+            } else {
+                cancelRestNotifications()
+            }
+            scheduledRestStartAt = snap.restStartAt
         }
     }
 
@@ -270,27 +288,38 @@ final class SessionStore: NSObject, ObservableObject {
         for op in pending where session.isReachable || !outstanding.contains(op.opId) { send(op) }
     }
 
-    // MARK: - 休憩の通知(Watch で始めた休憩だけ)
+    // MARK: - 休憩の通知
+
+    // 経過分と本文。古い iPhone(restNotices が無い)なら今までどおり 1・2・3分とラベルの本文
+    private func restNotices() -> [WatchSnapshot.RestNotice] {
+        if let n = snapshot?.restNotices { return n }
+        let labels = snapshot?.labels
+        return [1, 2, 3].map { m in
+            .init(min: Double(m), body: labels?.restBody.replacingOccurrences(of: "{n}", with: String(m))
+                  ?? String(format: NSLocalizedString("rest.elapsed", comment: ""), m))
+        }
+    }
+
+    // 休憩画面の振動(改善要望 4a)も同じ時間にする
+    var restNoticeMinutes: [Double] { restNotices().map(\.min) }
 
     private func scheduleRestNotifications(from start: Date) {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { granted, _ in
             guard granted else { return }
             Task { @MainActor in
                 self.cancelRestNotifications()
-                // 文言は iPhone のアプリ内言語設定に従わせるため、スナップショットのラベルを優先する
-                let labels = self.snapshot?.labels
-                for m in Self.restNotifyMinutes {
-                    let fire = start.addingTimeInterval(Double(m) * 60)
-                    let interval = fire.timeIntervalSinceNow
+                // 文言は iPhone のアプリ内言語設定に従わせるため、スナップショットのものを使う
+                let title = self.snapshot?.labels.rest ?? "Rest"
+                for n in self.restNotices() {
+                    let interval = start.addingTimeInterval(n.min * 60).timeIntervalSinceNow
                     guard interval > 0 else { continue }
                     let content = UNMutableNotificationContent()
-                    content.title = labels?.rest ?? "Rest"
-                    content.body = labels?.restBody.replacingOccurrences(of: "{n}", with: String(m))
-                        ?? String(format: NSLocalizedString("rest.elapsed", comment: ""), m)
+                    content.title = title
+                    content.body = n.body
                     content.sound = .default
                     content.interruptionLevel = .timeSensitive
                     let req = UNNotificationRequest(
-                        identifier: Self.restNotifyPrefix + String(m), content: content,
+                        identifier: Self.restNotifyPrefix + String(n.min), content: content,
                         trigger: UNTimeIntervalNotificationTrigger(timeInterval: interval, repeats: false))
                     try? await UNUserNotificationCenter.current().add(req)
                 }
@@ -299,8 +328,9 @@ final class SessionStore: NSObject, ObservableObject {
     }
 
     private func cancelRestNotifications() {
-        UNUserNotificationCenter.current().removePendingNotificationRequests(
-            withIdentifiers: Self.restNotifyMinutes.map { Self.restNotifyPrefix + String($0) })
+        // 1.2 までは "kurabell-watch-rest-1" のように整数で積んでいたので、そちらも消す
+        let ids = Self.restNotifyChoices.map { Self.restNotifyPrefix + String($0) } + [1, 2, 3].map { Self.restNotifyPrefix + String($0) }
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ids)
     }
 }
 

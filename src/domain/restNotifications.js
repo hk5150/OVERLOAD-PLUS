@@ -18,30 +18,40 @@
 // 同じプラグインでLive Activity(ロック画面・Dynamic Islandの経過表示)も同期する。
 // 設計判断は docs/休憩タイマー通知.md。
 
-// 通知を出す経過分。既存のbeep()が鳴るタイミング・下部ゲージの3分割と揃えてある。
-// ローカル通知は事前スケジュール制で無限には積めないため3分で打ち切る。
-// Apple Watchで3回叩かれるのがうるさければ [1, 3] に減らせばよい。
+// 通知を出す経過分の初期値。既存のbeep()が鳴るタイミング・下部ゲージの3分割と揃えてある。
+// 1.3 から設定で選べる(改善要望 4c。profile.restNotifyMinutes)。選べるのは REST_NOTIFY_CHOICES だけ。
 const REST_NOTIFY_MINUTES = [1, 2, 3];
+const REST_NOTIFY_CHOICES = [1, 1.5, 2, 2.5, 3, 4, 5];
 // 他の通知と衝突しない固定ID。確実にキャンセルするために動的採番にはしない。
 const REST_NOTIFICATION_ID_BASE = 4200;
 // 通知センターで束ねるためのグループ識別子。
 const REST_NOTIFICATION_THREAD = "kurabell-rest";
 
-const REST_NOTIFICATION_IDS = REST_NOTIFY_MINUTES.map((m) => REST_NOTIFICATION_ID_BASE + m);
+// 分ちょうどは今までと同じ 4200+分(1.2 までに予約された通知も同じIDで取り消せる)。
+// 30秒刻みは 4210+分の整数部(1:30 → 4211)
+const restNotifyId = (min) => REST_NOTIFICATION_ID_BASE + (Number.isInteger(min) ? min : 10 + Math.floor(min));
+const REST_NOTIFICATION_IDS = REST_NOTIFY_CHOICES.map(restNotifyId);
+
+// 保存値を選べる時間だけに揃える(並び替え・重複除去)。未設定なら初期値。空の配列は「通知しない」
+function normalizeRestNotifyMinutes(list) {
+  if (!Array.isArray(list)) return REST_NOTIFY_MINUTES.slice();
+  return REST_NOTIFY_CHOICES.filter((m) => list.includes(m));
+}
 
 // 予約する通知の配列を組み立てる純粋関数(テスト対象)。
 // texts: { title: string, body: (min:number) => string }
 //
 // now より後のものだけを返すのが要点。下書き復元でタイマーが途中から再開したとき
 // (例: 90秒経過した状態で復元)、既に過ぎた1分の通知を積むと即座に発火してしまう。
-function buildRestNotifications(restStartAt, now, texts) {
+// minutes: 通知する経過分(normalizeRestNotifyMinutes 済み)。省略すると初期値
+function buildRestNotifications(restStartAt, now, texts, minutes = REST_NOTIFY_MINUTES) {
   if (restStartAt == null) return [];
   const out = [];
-  for (const min of REST_NOTIFY_MINUTES) {
+  for (const min of minutes) {
     const at = restStartAt + min * 60000;
     if (at <= now) continue;
     out.push({
-      id: REST_NOTIFICATION_ID_BASE + min,
+      id: restNotifyId(min),
       title: texts.title,
       body: texts.body(min),
       threadIdentifier: REST_NOTIFICATION_THREAD,
@@ -137,11 +147,11 @@ async function cancelRestNotifications() {
 }
 
 // 予約し直す。先に必ずキャンセルしてから積む(同じIDで二重に積まれるのを防ぐ)。
-async function scheduleRestNotifications(restStartAt, now, texts) {
+async function scheduleRestNotifications(restStartAt, now, texts, minutes = REST_NOTIFY_MINUTES) {
   const plugin = capLocalNotifications();
   if (!plugin) return;
   await cancelRestNotifications();
-  const notifications = buildRestNotifications(restStartAt, now, texts);
+  const notifications = buildRestNotifications(restStartAt, now, texts, minutes);
   if (notifications.length === 0) return;
   const restTimer = capRestTimer();
   if (restTimer) {
@@ -191,6 +201,9 @@ async function clearDeliveredRestNotifications() {
 }
 
 globalThis.REST_NOTIFY_MINUTES = REST_NOTIFY_MINUTES;
+globalThis.REST_NOTIFY_CHOICES = REST_NOTIFY_CHOICES;
+globalThis.restNotifyId = restNotifyId;
+globalThis.normalizeRestNotifyMinutes = normalizeRestNotifyMinutes;
 globalThis.buildRestNotifications = buildRestNotifications;
 globalThis.restNotificationsAvailable = restNotificationsAvailable;
 globalThis.ensureRestNotificationPermission = ensureRestNotificationPermission;

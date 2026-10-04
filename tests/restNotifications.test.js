@@ -427,3 +427,29 @@ describe("休憩タイマーのネイティブ設定", () => {
     expect((pbx.match(/DEVELOPMENT_TEAM = LJR5Q5TU54;/g) || []).length).toBe(6);
   });
 });
+
+describe("通知する経過分を選べる(改善要望 4c)", () => {
+  const { buildRestNotifications, normalizeRestNotifyMinutes, restNotifyId, REST_NOTIFY_CHOICES } = loadDomainModule("src/domain/restNotifications.js");
+  const MIN = 60000;
+  const texts = { title: "t", body: (m) => `b${m}` };
+
+  it("選んだ経過分だけ積む(30秒刻みも)", () => {
+    const list = buildRestNotifications(0, 0, texts, [1.5, 4]);
+    expect(list.map((n) => n.schedule.at.getTime())).toEqual([1.5 * MIN, 4 * MIN]);
+    expect(list.map((n) => n.body)).toEqual(["b1.5", "b4"]);
+  });
+
+  it("ID は分ちょうどなら今までと同じ 4200+分、30秒刻みは 4210+分の整数部(全部違う)", () => {
+    expect(restNotifyId(1)).toBe(4201);
+    expect(restNotifyId(3)).toBe(4203);
+    expect(restNotifyId(1.5)).toBe(4211);
+    const ids = REST_NOTIFY_CHOICES.map(restNotifyId);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("保存値は選べる時間だけに揃え、未設定は 1・2・3分、空は通知しない", () => {
+    expect(normalizeRestNotifyMinutes(undefined)).toEqual([1, 2, 3]);
+    expect(normalizeRestNotifyMinutes([3, 1.5, 3, 7])).toEqual([1.5, 3]);
+    expect(normalizeRestNotifyMinutes([])).toEqual([]);
+  });
+});

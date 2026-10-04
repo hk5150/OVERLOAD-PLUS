@@ -249,6 +249,17 @@ struct RestTimerView: View {
             }
             // 後ろの画面(一覧の緑の数字など)が透けて見えないよう、背景は黒で塗る
             .background(Color.black.ignoresSafeArea())
+            // 休憩画面を開いている間は、設定した経過時間に強めに振動する(改善要望 4a。通知とは別に)。
+            // 休憩が替わったら(id が変わる)数え直す。過ぎた時間は鳴らさない
+            .task(id: r) {
+                for m in store.restNoticeMinutes.sorted() {
+                    let wait = startAt.addingTimeInterval(m * 60).timeIntervalSinceNow
+                    guard wait > 0 else { continue }
+                    try? await Task.sleep(nanoseconds: UInt64(wait * 1_000_000_000))
+                    if Task.isCancelled { return }
+                    WKInterfaceDevice.current().play(.notification)
+                }
+            }
         } else {
             // iPhone 側で休憩が止まった
             Image(systemName: "checkmark")

@@ -200,7 +200,7 @@
     { key:'insight',    urls:['src/domain/insight.js'],
       globals:['exerciseInsight','topSetOf'] },
     { key:'restNotifications', urls:['src/domain/restNotifications.js'],
-      globals:['REST_NOTIFY_MINUTES','buildRestNotifications','restNotificationsAvailable','ensureRestNotificationPermission','checkRestNotificationPermission','scheduleRestNotifications','cancelRestNotifications','clearDeliveredRestNotifications','toNativeRestNotifications','REST_ACTIVITY_STALE_MINUTES','buildRestActivityState','syncRestActivity'] },
+      globals:['REST_NOTIFY_MINUTES','REST_NOTIFY_CHOICES','restNotifyId','normalizeRestNotifyMinutes','buildRestNotifications','restNotificationsAvailable','ensureRestNotificationPermission','checkRestNotificationPermission','scheduleRestNotifications','cancelRestNotifications','clearDeliveredRestNotifications','toNativeRestNotifications','REST_ACTIVITY_STALE_MINUTES','buildRestActivityState','syncRestActivity'] },
     { key:'iap',        urls:['src/domain/iap.js'],
       globals:['TRIAL_WORKOUT_LIMIT','IAP_PRODUCT_ID','iapAvailable','isTrialLimitReached','refreshPurchaseState','readCachedPurchaseFlag','fetchUnlockProduct','purchaseUnlock','restorePurchase','onEntitlementsChanged'] },
     { key:'health',     urls:['src/domain/health.js'],
@@ -389,6 +389,8 @@ const defaultProfile = (p) => ({
   // ヘルスケア連携(iOSのみ)。healthBwAt は最後にヘルスケアと体重を同期した日時(エポックミリ秒)。
   // これより新しいヘルスケアの体重だけを反映する(pickHealthWeight、src/domain/health.js)。
   healthOn: p?.healthOn ?? false, healthBwAt: p?.healthBwAt ?? 0,
+  // 休憩の通知を出す経過分(改善要望 4c)。未設定は今までと同じ 1・2・3分。空の配列は「通知しない」
+  restNotifyMinutes: normalizeRestNotifyMinutes(p?.restNotifyMinutes),
 });
 
 // extractWorkoutsArray・validateWorkoutsShapeは src/domain/backupValidation.js へ移設(テストのため)。
@@ -880,7 +882,7 @@ class ErrorBoundary extends React.Component {
 // 新規インストール時、および全データ削除後の既定値(clearAllで再利用し、削除直後に古いprofileが復活しないようにする)
 // defaultProfile() と同じフィールドを持たせる。ここに書き忘れると、初回起動と
 // 「全データ削除」直後だけ値がundefinedになり、設定タブの選択状態が消える。
-const DEFAULT_PROFILE = { bodyweight: 70, soundOn: true, defTargetReps: 10, defIncrement: 2.5, lang: null, unit: null, aiService: DEFAULT_AI_SERVICE, healthOn: false, healthBwAt: 0 };
+const DEFAULT_PROFILE = { bodyweight: 70, soundOn: true, defTargetReps: 10, defIncrement: 2.5, lang: null, unit: null, aiService: DEFAULT_AI_SERVICE, healthOn: false, healthBwAt: 0, restNotifyMinutes: [1, 2, 3] };
 
 // ================= アプリ本体 =================
 // 文言中の「|」の位置だけで折り返す(日本語は語の途中でも折り返されるため、意味の切れ目を指定する)。
@@ -1554,6 +1556,11 @@ function App() {
     return () => { sub.remove(); document.removeEventListener("visibilitychange", onVisible); };
   }, [loaded]);
 
+  // 休憩の通知を出す経過分(設定。改善要望 4c)と、その表示(「1分30秒」「1:30」)
+  const restMinutes = normalizeRestNotifyMinutes(profile.restNotifyMinutes);
+  const restMinutesKey = restMinutes.join(",");
+  const restMinLabel = (m) => Number.isInteger(m) ? t("rest.minWhole", { n: m }) : t("rest.minHalf", { n: Math.floor(m) });
+
   // ---- インターバルタイマー(カウントアップ・1分ごとに知らせる) ----
   useEffect(() => {
     if (restStartAt == null) {
@@ -1564,8 +1571,10 @@ function App() {
     // 通知はOS側が発火するので、アプリがバックグラウンドでも届く(この機能の主目的)。
     // 許可要求はインターバルを実際に始めたときだけ、セッション中1回。設定トグルの操作で
     // 出すと、休憩中にトグルしたユーザーへ唐突にダイアログが出るため連動させない。
-    // Watchで始めた休憩は、Watchが自分で通知する(iPhoneからも出すと手首に二重に届く)
-    if (soundOn && restNotificationsAvailable() && restStartAt !== restFromWatchRef.current) {
+    // Watchで始めた休憩は、Watchが自分で通知する(iPhoneからも出すと手首に二重に届く)。
+    // Watchがこの記録のワークアウトを記録している間は、iPhoneで始めた休憩もWatchが通知する(改善要望 4b。
+    // スナップショットの restNotices を見て予約する)。Watchが途中でやめたら watchLive が降りて、ここで予約し直す
+    if (soundOn && restNotificationsAvailable() && restStartAt !== restFromWatchRef.current && !watchLive) {
       runNotify(async () => {
         let ok = notifyGranted;
         if (!ok && !askedNotifyRef.current) {
@@ -1585,8 +1594,8 @@ function App() {
         // 再実行(新しいrestStartAtでの呼び出し)が続くため、届く前に正しい内容へ上書きされる。
         await scheduleRestNotifications(restStartAt, Date.now(), {
           title: t("rest.notifyTitle"),
-          body: (n) => t("rest.notifyBody", { n }),
-        });
+          body: (n) => t("rest.notifyBodyAt", { t: restMinLabel(n) }),
+        }, restMinutes);
       });
     } else {
       runNotify(() => cancelRestNotifications());
@@ -1594,12 +1603,12 @@ function App() {
     const tick = () => {
       const sec = Math.floor((Date.now() - restStartAt) / 1000);
       setRestElapsed(sec);
-      const min = Math.floor(sec / 60);
-      // 1秒ごとの判定で分の境界を飛ばしても、未通知の分を確実に鳴らす
-      if (min > firedMinRef.current) {
-        firedMinRef.current = min;
+      // 設定で選んだ経過分(restMinutes)のうち、過ぎた数。判定の間隔で境界を飛ばしても、未通知の分を確実に鳴らす
+      const passed = restMinutes.filter(m => sec >= m * 60).length;
+      if (passed > firedMinRef.current) {
+        firedMinRef.current = passed;
         // 通知が届く環境では鳴らさない(通知と二重になるため)
-        if (!notifyGranted) beep(min === 1 ? 1 : Math.min(min, 3)); // 経過が長いほど回数を増やす
+        if (!notifyGranted) beep(Math.min(passed, 3)); // 経過が長いほど回数を増やす
       }
     };
     // 500msごとに判定して1分の取りこぼしを減らす(表示は秒単位)
@@ -1615,7 +1624,7 @@ function App() {
     // cleanupで通知はキャンセルしない。バックグラウンド化はunmountを起こさないが、
     // 万一unmountで消すと「アプリを閉じていても知らせる」という目的そのものを損なう。
     return () => { clearInterval(id); document.removeEventListener("visibilitychange", onVisible); };
-  }, [restStartAt, soundOn, notifyGranted]);
+  }, [restStartAt, soundOn, notifyGranted, watchLive, restMinutesKey, lang]);
 
   const startRest = () => { setRestStartAt(Date.now()); setRestElapsed(0); firedMinRef.current = 0; }; // 記録入力のたびに0から再スタート
   const stopRest = () => { setRestStartAt(null); setRestElapsed(0); firedMinRef.current = 0; setRestFull(false); };
@@ -2204,6 +2213,9 @@ function App() {
         recordStartAt: startAt,
         lastSaved: watchLastSaved,
         finished: watchFinished,
+        // 休憩の知らせの経過分と本文(改善要望 4)。Watch は自分で始めた休憩と、自分がワークアウトを記録している間の
+        // iPhone の休憩にこれで通知を予約し、休憩画面を開いている間はこの時間に振動する。通知を切っていれば空
+        restNotices: soundOn ? restMinutes.map(m => ({ min: m, body: t("rest.notifyBodyAt", { t: restMinLabel(m) }) })) : [],
         // 記録画面の固定バーと同じ基準・同じ文言(volumeGoalKey)。Watch で入れたセットは、iPhone が合流させて
         // 送り直すまでリングに入らない(Watch はボリュームを計算しない)
         volume: compareBase && compareBase.avg > 0 ? (() => {
@@ -2225,7 +2237,7 @@ function App() {
       syncWatchSnapshot(snap);
     }, 400);
     return () => clearTimeout(timer);
-  }, [loaded, today, restStartAt, todayDay, autoMenu, watchApplied, workouts, lang, unit, customExercises, exerciseOverrides, startAt, watchLastSaved, watchFinished, profile.bodyweight]);
+  }, [loaded, today, restStartAt, todayDay, autoMenu, watchApplied, workouts, lang, unit, customExercises, exerciseOverrides, startAt, watchLastSaved, watchFinished, profile.bodyweight, soundOn, restMinutesKey]);
 
   // カロリー(METs×体重×時間, 目安)
   const estimateKcal = (min) => Math.round(5.0 * profile.bodyweight * (min / 60));
@@ -5395,6 +5407,24 @@ function App() {
               <summary style={{ color: C.muted, fontSize: 12, cursor: "pointer" }}>{t("common.details")}</summary>
               <p style={{ color: C.muted, fontSize: 13, margin: "6px 0 0", lineHeight: 1.6 }}>{t("settings.soundDesc2")}</p>
             </details>
+            {/* 知らせる経過分(改善要望 4c)。複数選べる。Watch の休憩の通知・振動も同じ時間 */}
+            {soundOn && (
+              <div style={{ marginTop: 12 }}>
+                <div style={{ fontSize: 13, color: C.muted, marginBottom: 6 }}>{t("settings.restMinutes")}</div>
+                <div role="group" aria-label={t("settings.restMinutes")} style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                  {REST_NOTIFY_CHOICES.map(m => {
+                    const on = restMinutes.includes(m);
+                    return (
+                      <button key={m} aria-pressed={on}
+                        onClick={() => persist({ profile: { ...profile, restNotifyMinutes: normalizeRestNotifyMinutes(on ? restMinutes.filter(x => x !== m) : [...restMinutes, m]) } })}
+                        style={{ ...chip(on), fontVariantNumeric: "tabular-nums" }}>
+                        {`${Math.floor(m)}:${Number.isInteger(m) ? "00" : "30"}`}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
             {/* 一度拒否されるとiOSは再度ダイアログを出さないため、設定アプリへ誘導するしかない */}
             {soundOn && notifyPerm === "denied" && (
               <p style={{ color: C.yellow, fontSize: 13, margin: "10px 0 0", lineHeight: 1.6 }}>

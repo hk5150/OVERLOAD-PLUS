@@ -286,6 +286,10 @@ const STRINGS = {
   "watch.addSet":      { ja: "セットを追加",           en: "Add set" },
   "rest.notifyTitle":  { ja: "インターバル",           en: "Rest timer" },
   "rest.notifyBody":   { ja: "{n}分経過しました。次のセットへ。", en: "{n} min elapsed. Time for your next set." },
+  // 1.3 から経過分を選べる(1:30 など)ので、経過の表し方を別にした。rest.notifyBody は古い Watch アプリの予備に残す
+  "rest.notifyBodyAt": { ja: "{t}経過しました。次のセットへ。", en: "{t} elapsed. Time for your next set." },
+  "rest.minWhole":     { ja: "{n}分", en: "{n} min" },
+  "rest.minHalf":      { ja: "{n}分30秒", en: "{n}:30" },
 
   // ---- 使い方ガイド ----
   "guide.title":       { ja: "アプリの使い方ガイド",   en: "How to use this app" },
@@ -446,7 +450,8 @@ const STRINGS = {
   "settings.equipment": { ja: "器具",                  en: "Equipment" },
   "settings.other":    { ja: "その他",                 en: "Other" },
   "settings.sound":    { ja: "インターバルの通知",     en: "Rest timer alerts" },
-  "settings.soundDesc": { ja: "インターバル中、1分・2分・3分の経過時に知らせます。通知を許可しておくと、アプリを閉じていても届き、Apple Watchを着けていれば手元でも気づけます。", en: "Alerts you at 1, 2 and 3 minutes into your rest. If you allow notifications, they arrive even when the app is closed — and on your wrist if you wear an Apple Watch." },
+  "settings.restMinutes": { ja: "知らせる経過時間(複数選べます)", en: "Alert after (choose any)" },
+  "settings.soundDesc": { ja: "インターバル中、下で選んだ経過時間に知らせます。通知を許可しておくと、アプリを閉じていても届き、Apple Watchを着けていれば手元でも気づけます。", en: "Alerts you at the times you pick below during your rest. If you allow notifications, they arrive even when the app is closed — and on your wrist if you wear an Apple Watch." },
   // 通知音もアプリ内の音も、iPhoneのサイレントスイッチには従う。以前は「許可していない場合」に
   // だけ掛かる書き方で、通知の方はサイレントでも鳴ると読めてしまっていた。
   // 「バナーとWatchのハプティックは届く」は通知を許可した側にだけ掛ける。未許可側はbeep()だけで、
