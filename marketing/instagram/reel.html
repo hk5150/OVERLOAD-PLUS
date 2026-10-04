@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>KURABELL Reel</title>
+<!-- リール(9:16、1080×1920)。render(t) で t 秒目の1コマを描く。scripts は scratchpad の reel.cjs が30fpsで撮って ffmpeg で束ねる。
+     文字はリールのUI(上~250px、下~420px、右端のボタン列)を避けて置く -->
+<style>
+@font-face { font-family: "Barlow C"; font-weight: 800; src: url("assets/barlow-condensed-800-latin.woff2") format("woff2"); }
+:root { --bg: #141517; --line: #2E3237; --text: #F2F0EB; --muted: #A3A8B0; --yellow: #E8B33C; --green: #4CAF6E; }
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { width: 1080px; height: 1920px; background: var(--bg); overflow: hidden; }
+body { color: var(--text); font-family: "Hiragino Sans", "Hiragino Kaku Gothic ProN", sans-serif; }
+.scene { position: absolute; inset: 0; opacity: 0; }
+.num { font-family: "Barlow C"; font-weight: 800; }
+h1 { position: absolute; left: 84px; right: 140px; top: 330px; font-weight: 800; font-size: 96px; line-height: 1.22; letter-spacing: -.01em; }
+h1 em { font-style: normal; color: var(--yellow); }
+.lead { position: absolute; left: 84px; right: 140px; font-size: 42px; line-height: 1.6; color: var(--muted); font-weight: 600; }
+.lead b { color: var(--text); }
+.ui { position: absolute; left: 40px; width: 1000px; display: block; }
+
+/* 1: 前回と今日 */
+.cmp { position: absolute; left: 84px; right: 84px; top: 720px; }
+.cmp .row { display: grid; grid-template-columns: 130px 1fr auto; align-items: baseline; padding: 22px 0; border-bottom: 2px solid var(--line); }
+.cmp .lbl { font-size: 42px; color: var(--muted); font-weight: 700; }
+.cmp .val { font-size: 136px; line-height: 1; }
+.cmp .val small { font-family: "Hiragino Sans", sans-serif; font-size: 42px; font-weight: 700; color: var(--muted); margin: 0 10px 0 4px; }
+.cmp .today .lbl { color: var(--text); }
+.cmp .today .val { color: var(--green); }
+.cmp .diff { font-size: 76px; color: var(--green); display: inline-block; }
+#s1 .ui { top: 1180px; }
+
+/* 2: 頭打ち */
+#s2 .lead { top: 590px; }
+#s2 .ui { top: 820px; left: 60px; width: 960px; }
+#s2 .note { position: absolute; left: 84px; right: 140px; top: 1110px; font-size: 42px; line-height: 1.6; font-weight: 700; }
+#s2 .ring { position: absolute; left: 75px; top: 903px; width: 820px; height: 76px; border: 6px solid var(--yellow); border-radius: 50px; }
+
+/* 3: Watch */
+#s3 .lead { top: 590px; }
+#s3 .watch { top: 830px; }
+.watch { position: absolute; left: 50%; top: 790px; width: 560px; height: 668px; margin-left: -280px;
+  padding: 30px; border-radius: 130px; background: #0B0B0C; border: 12px solid #2A2C30; box-shadow: 0 30px 80px rgba(0,0,0,.5); }
+.watch img { width: 100%; height: 100%; border-radius: 96px; display: block; object-fit: cover; }
+.crown { position: absolute; right: -38px; top: 220px; width: 24px; height: 104px; border-radius: 10px; background: #2A2C30; }
+
+/* 4: 原則 */
+#s4 .term { position: absolute; left: 84px; top: 760px; font-size: 36px; color: var(--yellow); font-weight: 700; letter-spacing: .02em; }
+#s4 .chartwrap { position: absolute; left: 84px; top: 850px; width: 840px; overflow: hidden; }
+#s4 .chartwrap img { width: 840px; display: block; }
+
+/* 5: 行動 */
+.store { position: absolute; left: 84px; top: 880px; display: flex; align-items: center; gap: 36px; }
+.store img { width: 180px; height: 180px; border-radius: 40px; }
+.store .name { font-family: "Barlow C"; font-weight: 800; font-size: 92px; letter-spacing: .03em; line-height: 1; }
+.store .where { font-size: 40px; color: var(--muted); margin-top: 14px; }
+#s5 .lead { top: 660px; }
+.cta { position: absolute; left: 84px; top: 1150px; font-size: 44px; font-weight: 800; color: var(--bg); background: var(--yellow); padding: 18px 36px; border-radius: 999px; }
+</style>
+</head>
+<body>
+
+<section class="scene" id="s1">
+  <h1>前回を<em>超えたか</em>、<br>一目で分かる。</h1>
+  <div class="cmp">
+    <div class="row"><span class="lbl">前回</span><span class="val num">70<small>kg ×</small>10<small>回</small></span><span></span></div>
+    <div class="row today"><span class="lbl">今日</span><span class="val num"><span id="w">70</span><small>kg ×</small>10<small>回</small></span><span class="diff num" id="diff">+2.5</span></div>
+  </div>
+  <img class="ui" id="row" src="assets/row1.png" alt="">
+</section>
+
+<section class="scene" id="s2">
+  <h1>伸びが止まったら、<br><em>教えてくれる。</em></h1>
+  <p class="lead">上げるかどうかを決めるのは、<b>あなた。</b></p>
+  <img class="ui" src="assets/plateau.png" alt="">
+  <div class="ring" id="ring"></div>
+  <p class="note" id="note">記録が教えてくれるのは、<br>事実だけ。</p>
+</section>
+
+<section class="scene" id="s3">
+  <h1>手首でも、<br><em>前回が見える。</em></h1>
+  <p class="lead">Apple Watch で −/+ を押すだけ。<br>iPhone の記録に、そのまま合流。</p>
+  <div class="watch" id="watch"><img src="assets/watch2x.png" alt=""><div class="crown"></div></div>
+</section>
+
+<section class="scene" id="s4">
+  <h1>前回より、<br><em>少しだけ重く。</em><br><em>少しだけ多く。</em></h1>
+  <p class="term">プログレッシブオーバーロード(漸進性過負荷)</p>
+  <div class="chartwrap" id="chart"><img src="assets/chart.png" alt=""></div>
+</section>
+
+<section class="scene" id="s5">
+  <h1>最初の<em class="num" style="font-size:132px">10</em>回は、<br>全部無料。</h1>
+  <p class="lead">買い切り・サブスクなし・登録なし</p>
+  <div class="store">
+    <img src="assets/icon.png" alt="">
+    <div>
+      <div class="name">KURABELL</div>
+      <div class="where">iPhone / Apple Watch</div>
+    </div>
+  </div>
+  <p class="cta" id="cta">プロフィールのリンクから</p>
+</section>
+
+<script>
+// 各場面の [開始, 終了] 秒。前後0.35秒で重ねてフェードする
+const SCENES = [["s1", 0, 4.2], ["s2", 4.2, 7.4], ["s3", 7.4, 10.4], ["s4", 10.4, 13.4], ["s5", 13.4, 17]];
+const DURATION = 17, FADE = 0.35;
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const ease = x => 1 - Math.pow(1 - clamp(x), 3);
+const $ = id => document.getElementById(id);
+
+function render(t) {
+  for (const [id, a, b] of SCENES) {
+    const el = $(id);
+    const op = Math.min(a === 0 ? 1 : clamp((t - a) / FADE), b === DURATION ? 1 : clamp((b - t) / FADE));
+    el.style.opacity = op;
+    // 入ってくる場面は少し下から上がる
+    el.style.transform = `translateY(${(1 - ease((t - a) / 0.6)) * (a === 0 ? 0 : 40)}px)`;
+  }
+  // 1: 今日の重量が 70 → 72.5 に上がり、+2.5 が弾む。続いてアプリの行が出る
+  const k = ease((t - 0.6) / 1.2);
+  $("w").textContent = (70 + 2.5 * k).toFixed(t > 1.0 ? 1 : 0);
+  const d = clamp((t - 1.9) / 0.35);
+  $("diff").style.opacity = d;
+  $("diff").style.transform = `scale(${0.6 + 0.4 * ease(d) + 0.12 * Math.sin(Math.PI * d)})`;
+  const r = ease((t - 2.5) / 0.6);
+  $("row").style.opacity = r;
+  $("row").style.transform = `translateY(${(1 - r) * 60}px)`;
+  // 2: 黄色の枠が脈打つ
+  $("ring").style.opacity = 0.55 + 0.45 * Math.abs(Math.sin((t - 4.2) * Math.PI * 1.2));
+  const n = ease((t - 5.4) / 0.5);
+  $("note").style.opacity = n;
+  // 3: Watch が少し大きくなりながら出る
+  const w = ease((t - 7.4) / 0.8);
+  $("watch").style.transform = `scale(${0.9 + 0.1 * w})`;
+  // 4: グラフが左から右へ描かれる
+  $("chart").style.clipPath = `inset(0 ${(1 - ease((t - 10.8) / 1.6)) * 100}% 0 0)`;
+  // 5: 行動ボタンを最後に出す
+  const c = ease((t - 14.3) / 0.5);
+  $("cta").style.opacity = c;
+  $("cta").style.transform = `translateY(${(1 - c) * 30}px)`;
+}
+window.render = render;
+window.DURATION = DURATION;
+render(Number(new URLSearchParams(location.search).get("t") || 0));
+</script>
+</body>
+</html>
