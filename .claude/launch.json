@@ -4,14 +4,36 @@
     {
       "name": "kurabell-dev",
       "runtimeExecutable": "python3",
-      "runtimeArgs": ["-m", "http.server", "8765"],
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8765"
+      ],
       "port": 8765
     },
     {
       "name": "kurabell-www",
       "runtimeExecutable": "python3",
-      "runtimeArgs": ["-m", "http.server", "8766", "--directory", "www"],
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8766",
+        "--directory",
+        "www"
+      ],
       "port": 8766
+    },
+    {
+      "name": "kurabell-13",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8775",
+        "--directory",
+        "/Users/hajimekitamura/OVERLOAD-PLUS-13"
+      ],
+      "port": 8775
     }
   ]
 }

@@ -2,7 +2,7 @@
 - [チップ→ジャンプ の母集団不一致](kurabell-chip-jump-pool-mismatch.md) — 絞り込みチップをジャンプ用に転用する際、表示母集団とジャンプ先存在条件がずれると無反応になる
 - [ゲージ幅の片側クランプ](kurabell-gauge-width-clamp.md) — `${x*100}%` を片側しかクランプしないと負値/NaNで幅autoになり満杯に見える
 - [固定px paddingとsafe-area](kurabell-fixed-padding-vs-safe-area.md) — fixed要素避けの実測px paddingBottomはenv()分iOSで不足。タブバー56px決め打ち4箇所(v136)
-- [1RMのフィルタ不一致](kurabell-1rm-filter-divergence.md) — 推定1RMの算出が4箇所、除外条件が3種類。workingSetsはassistedを除かない
+- [1RMのフィルタ不一致](kurabell-1rm-filter-divergence.md) — 推定1RMの算出箇所ごとに除外条件が違う。4e49dc6でセット行と⚡は揃ったが liveBest1RM/prMap は13回以上を数える
 - [版上げ時のvite移行.md節](kurabell-version-entry-in-vite-doc.md) — v116で節が途絶。v117以降は小さな版上げで指摘しない
 - [拡張ターゲットの版・Archive設定](kurabell-extension-version-sync.md) — v112以降RestActivity拡張あり。App/拡張の版一致・SKIP_INSTALL・埋め込み順を差分で確認
 - [SWの新旧混在とv114キャッシュ優先](kurabell-sw-nonatomic-shell.md) — v114でnavigate全部index.html化。privacy/support.html・起動中claim・SW非制御時の混在窓(v131)
@@ -10,7 +10,7 @@
 - [エラー帯は1枠共有](kurabell-error-banner-single-slot.md) — setError("")は無関係なエラーと再試行ボタンまで消す。saveStatusはクロージャ値(v117)。persistはv119から成否を返す。v124でloadFailedガード
 - [Watchワークアウトの書き手の所有権](kurabell-watch-workout-ownership.md) — v122: started op後にWatchが保存失敗してもiPhoneに戻らない。未対応付けセッションの後始末
 - [findExerciseと別名](kurabell-findexercise-alias.md) — findExercise(q)が真でもqは正規名とは限らない(ALIASES)。保存するのは.nか確認
-- [レビュー中の追加編集](kurabell-mid-review-edits.md) — 報告前にgit statusを取り直す。`?? ios/App/.claude/`はレビュアーのメモ置き忘れ
+- [レビュー中の追加編集](kurabell-mid-review-edits.md) — 報告前にgit statusを取り直す。v1.3 worktreeでは別の改善要望の作業がレビュー中に混ざった。`?? ios/App/.claude/`はメモ置き忘れ
 - [WatchのHK許可をiPhoneが代行](kurabell-watch-hk-auth-proxy.md) — 1.1(7): iPhone/Watchのrequestの型を揃える・審査メモ/docsの追随・iPhone単体にも心拍シート
 - [iOS書き出しの共有シート](kurabell-share-sheet-export.md) — v125: completionWithItemsHandlerの複数回呼び出し・Copyでcompleted・await後の古いpersist
 - [保存済みrirの空文字](kurabell-stored-rir-empty-string.md) — 保存済みの未実施はrirキー無し。rir:""は s.rir!=null 箇所とWatchのPrev.rir(Int?)デコードを壊す(v128)
@@ -18,3 +18,6 @@
 - [LIBSのglobals起動検査](kurabell-boot-globals-check.md) — v133: Web版だけで効く。公開名の増減はglobalsとセット。誤検知の前提と再読み込みがキャッシュを破らない件
 - [await跨ぎのsetState分割](kurabell-await-split-setstate.md) — saveWorkoutでawait前後に分けたsetStateが中間renderでLive Activity等のeffectを一瞬走らせる(v134)
 - [UISceneライフサイクル](kurabell-uiscene-lifecycle.md) — 1.1.1(12)でscene化。AppDelegateのdidBecomeActive/windowは死ぬ。Capacitor 6.2.1コアはkeyWindow不使用(確認済)
+- [spanのaria-label](kurabell-aria-label-on-span.md) — role無しspanのaria-labelは無視されうる。分割+aria-hiddenで読み上げが欠ける(v1.3改善要望9)
+- [種目削除の元に戻す](kurabell-remove-undo.md) — v1.3の✕削除のundoは1枠・Day名で照合・保存後も残る。連打で前の削除のDay登録が戻らない
+- [Day名は履歴のキー](kurabell-day-name-is-history-key.md) — sessionで履歴を引く。自動改名・同名Dayで前回が切れる/混ざる。プリセットDayは登録0件のまま(v1.3)
