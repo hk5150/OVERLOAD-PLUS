@@ -1956,11 +1956,15 @@ function App() {
   // 分割タブで並べ替え・外せるようにし、記録中に足した種目は登録に入り、カードの ✕ で消すと登録からも外れる
   // ので、登録を最優先に戻した(北村さんの判断、2026-10-05)。セットの中身は種目ごとに前回の同じ Day から引く(buildMenuItem)。
   // 登録が0件の Day(プリセットのまま記録している Day)は、今までどおり前回の記録の順。
+  // 記録中にカードを並べ替えたら、保存のときに登録の順も合わせる(saveWorkout。1.2 まではそれで次回の順が変わっていた)。
   const autoMenu = useMemo(() => {
     if (!todayDay) return [];
     let names = [];
     if (todayDay.exercises && todayDay.exercises.length) {
-      names = [...todayDay.exercises];
+      // 登録の順のあとに、前回やっていて登録に無い種目を前回の順で足す(記録のある Day に1件だけ登録したときに、
+      // メニューがその1件だけにならないように。reviewer 指摘)。やめた種目は前回に無いので出ない
+      names = [...todayDay.exercises,
+        ...(lastSameSession ? lastSameSession.exercises.map(e => e.name).filter(n => !todayDay.exercises.includes(n)) : [])];
     } else if (lastSameSession) {
       names = lastSameSession.exercises.map(e => e.name);
     } else {
@@ -2070,7 +2074,15 @@ function App() {
     if (!split || !todayDay) return;
     const dayIdx = split.cursor % split.days.length;
     const day = split.days[dayIdx];
-    if (!day.exercises || !day.exercises.includes(oldName)) return; // 登録種目でなければ何もしない
+    if (!day.exercises || !day.exercises.length) return; // 登録0件の Day は登録しない(addExercise と同じ)
+    if (!day.exercises.includes(oldName)) {
+      // 登録に無い種目を差し替えた: 差し替え先を登録に足す(addExercise と同じ。足さないと、今日のメニューは
+      // 登録を優先するので次回に出ない。reviewer 指摘)
+      if (newName && !day.exercises.includes(newName)) {
+        persist({ split: { ...split, days: split.days.map((d, i) => i === dayIdx ? { ...d, exercises: [...d.exercises, newName] } : d) } });
+      }
+      return;
+    }
     const nextExercises = newName
       ? day.exercises.map(x => x === oldName ? newName : x)
       : day.exercises.filter(x => x !== oldName);
@@ -2335,7 +2347,19 @@ function App() {
       startAt: new Date(start).toISOString(), endAt: new Date(end).toISOString(),
       durationMin, totalVolume, kcal: estimateKcal(durationMin), exercises,
     };
-    const nextSplit = split ? { ...split, cursor: (split.cursor + 1) % split.days.length } : split;
+    // 記録中にカードを並べ替えたら、今日の Day の登録の順も合わせる(今日のメニューは登録の順を優先するので、
+    // 合わせないと並べ替えが次回に残らない。reviewer 指摘)。今日やらなかった登録種目は元の位置のまま、
+    // 今日やった登録種目が占めていた位置に、今日の順で入れ直す
+    const reorderedDays = (() => {
+      if (!split || !todayDay || !(todayDay.exercises || []).length) return split?.days;
+      const reg = todayDay.exercises;
+      const done = [...new Set(exercises.map(e => e.name))].filter(n => reg.includes(n));
+      let k = 0;
+      const next = reg.map(n => done.includes(n) ? done[k++] : n);
+      const dayIdx = split.cursor % split.days.length;
+      return next.join("\u0000") === reg.join("\u0000") ? split.days : split.days.map((d, i) => i === dayIdx ? { ...d, exercises: next } : d);
+    })();
+    const nextSplit = split ? { ...split, days: reorderedDays, cursor: (split.cursor + 1) % split.days.length } : split;
     // 分割が無い状態での初めての記録だけ、終了後に「メニューとして保存しますか?」と尋ねる
     // (2回目以降は出さない。workouts.length===0の時点=これが最初の記録、で判定する)
     if (!split && workouts.length === 0) {
@@ -2780,13 +2804,14 @@ function App() {
       inc: `${wU(ex.increment ?? profile.defIncrement)}${uLabel()}`,
     }));
     const pr = prMap[ex.name];
-    if (pr && pr.best1RM > 0) {
-      lines.push(t("share.exPr", {
+    if (pr && (pr.best1RM > 0 || pr.bestWeight > 0)) {
+      // 13回以上しか記録していない種目は推定1RMが無いので、最大重量だけ渡す
+      lines.push(pr.best1RM > 0 ? t("share.exPr", {
         // 推定1RMは計算値で端数が出る(39.199999999999996 のような値になる)。
         // 画面側と同じく小数1桁に丸める。
         rm: `${toU(pr.best1RM).toFixed(1)}${uLabel()}`, rmDate: shortDate(pr.date),
         top: `${toU(pr.bestWeight).toFixed(1)}${uLabel()}`, topDate: shortDate(pr.weightDate),
-      }));
+      }) : t("share.exPrTop", { top: `${toU(pr.bestWeight).toFixed(1)}${uLabel()}`, topDate: shortDate(pr.weightDate) }));
       // prMapの値は実効重量(ダンベルは両手合計・自重は体重込み)。セット行は片手/加重の生値なので、
       // 但し書きが無いとAIが「自己ベスト44kgに対して今日22kgは大幅減」と誤読する。
       if (unitNote) lines.push(t("share.exPrEff"));
@@ -3897,13 +3922,15 @@ function App() {
                 const daysSincePR = pr?.date ? Math.floor((Date.now() - new Date(pr.date).getTime()) / 86400000) : null;
                 const unit = ex.bwFactor > 0 ? t("share.withBw", { unit: uLabel() }) : resolveIsDb(ex.name, ex.isDb) ? t("share.bothHands", { unit: uLabel() }) : uLabel();
                 const f1 = (v) => toU(v).toFixed(1);
-                let main;
+                // 13回以上しか記録していない種目は、最大重量はあっても推定1RMが無い(est1RM が 0)。
+                // そのときは「過去のベスト 推定1RM 0.0」や「初回記録」を出さない(reviewer 指摘)
+                let main = null;
                 if (live1RM > 0 && best1RM > 0) {
                   const d = live1RM - best1RM;
                   main = t("compare.line", { now: f1(live1RM), diff: `${d >= 0 ? "+" : "−"}${f1(Math.abs(d))}`, unit: uLabel() });
                 } else if (live1RM > 0) {
-                  main = t("compare.lineFirst", { v: f1(live1RM), unit: uLabel() });
-                } else {
+                  main = hasHistory ? t("compare.lineNow", { v: f1(live1RM), unit: uLabel() }) : t("compare.lineFirst", { v: f1(live1RM), unit: uLabel() });
+                } else if (best1RM > 0) {
                   main = t("compare.lineBest", { v: f1(best1RM), unit: uLabel() });
                 }
                 return (
@@ -3912,7 +3939,7 @@ function App() {
                     padding: "7px 10px", borderRadius: 10, background: C.bg,
                     border: `1px solid ${isPR1RM && best1RM > 0 ? C.green : "transparent"}`,
                   }}>
-                    <span style={{ fontSize: 13, fontWeight: isPR1RM ? 800 : 600, color: isPR1RM ? C.green : C.text }}>{main}</span>
+                    {main && <span style={{ fontSize: 13, fontWeight: isPR1RM ? 800 : 600, color: isPR1RM ? C.green : C.text }}>{main}</span>}
                     {isPR1RM && best1RM > 0 && <span style={{ fontSize: 12, color: C.green }}>{t("compare.win")}</span>}
                     <span style={{ marginLeft: "auto", display: "inline-flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                       {isPRw ? (
@@ -4791,7 +4818,9 @@ function App() {
                       <Tooltip contentStyle={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 13, color: C.text }} formatter={(v, n) => [n === "最大重量" ? `${v}${uLabel()}` : `${v.toLocaleString()}${uLabel()}`, n === "最大重量" ? t("chart.maxWeight") : t("chart.est1RM")]} />
                       <Legend verticalAlign="top" align="right" height={26} iconSize={10} wrapperStyle={{ fontSize: 12, color: C.muted }} formatter={v => v === "最大重量" ? t("chart.maxWeight") : t("chart.est1RM")} />
                       <Line type="monotone" dataKey="最大重量" stroke={C.red} strokeWidth={2.5} dot={lastDot(chartData.length, C.red)} />
-                      <Line type="monotone" dataKey="推定1RM" stroke={C.yellow} strokeWidth={2} strokeDasharray="4 3" dot={lastDot(chartData.length, C.yellow)} />
+                      {/* 13回以上しかない日は値が無い(null)。線はつなぎ、点は値のある最後の日に打つ */}
+                      <Line type="monotone" dataKey="推定1RM" stroke={C.yellow} strokeWidth={2} strokeDasharray="4 3" connectNulls
+                        dot={lastDot(chartData.map(d => d.推定1RM != null).lastIndexOf(true) + 1, C.yellow)} />
                     </LineChart>
                   </ResponsiveContainer>
                 ) : <div style={{ color: C.muted, fontSize: 13, textAlign: "center", padding: "24px 0" }}>{t("chart.need2Exercise")}</div>}
@@ -5141,7 +5170,8 @@ function App() {
                       {toU(pr.bestWeight).toFixed(1)}<span style={{ fontSize: 11, color: C.muted }}>{uLabel()}</span>
                     </span>
                     <span style={{ width: 68, textAlign: "right", fontFamily: "'Barlow Condensed', sans-serif", fontSize: 15, color: C.muted }}>
-                      {toU(pr.best1RM).toFixed(1)}<span style={{ fontSize: 11 }}>{uLabel()}</span>
+                      {/* 13回以上しか記録していない種目は推定1RMが無い */}
+                      {pr.best1RM > 0 ? <>{toU(pr.best1RM).toFixed(1)}<span style={{ fontSize: 11 }}>{uLabel()}</span></> : "—"}
                     </span>
                   </div>
                   {days != null && (
