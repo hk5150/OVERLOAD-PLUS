@@ -31,3 +31,8 @@ https://apps.apple.com/app/apple-store/id6816090624?pt=129352960&ct=instagram&mt
 ## アイコン
 
 アプリアイコン(1.2 の新アイコン、`assets/icon.png`)。
+
+## 設定の状態(2026-10-04 確認)
+
+- リンク欄: `ct=instagram` のキャンペーンリンクが表示されている
+- プロアカウント(ビジネス)に切り替え済み。アプリから設定した
