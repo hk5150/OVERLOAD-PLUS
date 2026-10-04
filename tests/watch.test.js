@@ -36,6 +36,14 @@ describe("buildWatchSnapshot", () => {
     expect(buildWatchSnapshot({ now: 1, labels: LABELS, fmtW }).restNotices).toEqual([]);
   });
 
+  it("Watch が休憩の通知を受け持てるかは、その記録の started の restNotify で決める(古い Watch には無い)", () => {
+    const { watchRestCapableFromOps } = load();
+    const started = (extra) => ({ kind: "workout", status: "started", recordStartAt: 100, at: 1, ...extra });
+    expect(watchRestCapableFromOps([started({ restNotify: true })], 100)).toBe(true);
+    expect(watchRestCapableFromOps([started({})], 100)).toBe(false);
+    expect(watchRestCapableFromOps([started({ restNotify: true })], 200)).toBe(false);
+  });
+
   it("完了画面の中身は記録していない間だけ送る(次の記録を始めたら外す。改善要望 12)", () => {
     const { buildWatchSnapshot } = load();
     const finished = { id: 1000, endAt: 2000, title: "お疲れ様でした", stats: [], volume: "1kg", lines: [], over: false, prTitle: "", prs: [], hrLabel: "" };
@@ -399,9 +407,15 @@ describe("Watch アプリのネイティブ設定", () => {
 
   it("Watch がワークアウトを記録している間は、iPhone の休憩の通知も Watch が出す(手首に二重に届かない。改善要望 4b)", () => {
     const html = read("index.html");
-    expect(html).toMatch(/restStartAt !== restFromWatchRef\.current && !watchLive\)/);
+    // 受け持てると知らせてきた Watch(started の restNotify)のときだけ iPhone は予約をやめる
+    expect(html).toMatch(/restStartAt !== restFromWatchRef\.current && !watchOwnsRest\)/);
+    expect(html).toContain("const watchOwnsRest = watchLive && watchRestFor === startAt;");
     const store = read("ios/App/KurabellWatch/SessionStore.swift");
     expect(store).toMatch(/wm\.isRunning, let r = wm\.recordStartAt, r == snap\.recordStartAt[\s\S]*?scheduleRestNotifications\(from:/);
+    expect(store).toContain('restNotify: status == "started" ? true : nil');
+    // 記録が終わった・Watch のワークアウトが終わったら、iPhone の休憩のために予約した分を消す
+    expect(store).toMatch(/else if scheduledRestKey != nil \{[\s\S]*?releaseForeignRestNotifications\(\)/);
+    expect(read("ios/App/KurabellWatch/WorkoutManager.swift")).toMatch(/func cleanUp\(\)[\s\S]*?releaseForeignRestNotifications\(\)/);
     // 休憩画面を開いている間は、設定した経過時間に振動する(4a)
     const views = read("ios/App/KurabellWatch/Views.swift");
     expect(views).toMatch(/store\.restNoticeMinutes[\s\S]*?play\(\.notification\)/);

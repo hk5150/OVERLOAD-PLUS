@@ -206,7 +206,7 @@
     { key:'health',     urls:['src/domain/health.js'],
       globals:['healthAvailable','healthSupported','healthRequestAuthorization','healthAuthDecided','healthAuthorizationStatus','healthWorkoutKey','HEALTH_MAX_WORKOUT_MS','healthWorkoutRange','healthSaveWorkout','healthDeleteWorkout','healthStartWatchWorkout','healthLatestBodyMass','healthSaveBodyMass','pickHealthWeight','healthWeightToWrite'] },
     { key:'watch',      urls:['src/domain/watch.js'],
-      globals:['WATCH_APPLIED_KEEP','watchWeightStep','buildWatchSnapshot','applyWatchOps','watchWorkoutFromOps','watchWorkoutStopped','settleWatchHealth','WATCH_HEALTH_CONFIRM_MS','syncWatchSnapshot','peekWatchOps','ackWatchOps','onWatchOps'] },
+      globals:['WATCH_APPLIED_KEEP','watchWeightStep','buildWatchSnapshot','applyWatchOps','watchWorkoutFromOps','watchRestCapableFromOps','watchWorkoutStopped','settleWatchHealth','WATCH_HEALTH_CONFIRM_MS','syncWatchSnapshot','peekWatchOps','ackWatchOps','onWatchOps'] },
     { key:'fileExport', urls:['src/domain/fileExport.js'],
       globals:['fileExportAvailable','shareTextFile'] },
     { key:'review',     urls:['src/domain/review.js'],
@@ -1048,6 +1048,10 @@ function App() {
   // Watch がワークアウトを記録している間に iPhone の Live Activity を出すと、watchOS がそれを Watch にも出して
   // KURABELL の画面を隠す(1.1 の実機で踏んだ)。refは保存時の判定に使うので、そちらはそのまま残す
   const [watchLiveFor, setWatchLiveFor] = useState(null);
+  // Watch がこの記録の休憩の通知を受け持つと知らせてきたら、その記録の startAt(改善要望 4b。watchRestCapableFromOps)。
+  // 受け持つ間は iPhone は休憩の通知を予約しない。watchLiveFor と一緒に降ろす。下書きにも残す
+  const [watchRestFor, setWatchRestFor] = useState(null);
+  const watchRestForRef = useRef(null);
   // 直近に保存した記録 { key, startAt, endAt }。Watchはこれを見て自分のワークアウトを保存するか破棄するか決める。
   // 保存直後にアプリが終了されても届くよう、store にも残す(WATCH_LAST_SAVED_KEY)
   const [watchLastSaved, setWatchLastSaved] = useState(null);
@@ -1074,7 +1078,7 @@ function App() {
           } else {
             await store.set(DRAFT_KEY, JSON.stringify({
               today, startAt, restStartAt, watchApplied, restFromWatch: restFromWatchRef.current,
-              watchWorkoutFor: watchWorkoutForRef.current, savedAt: Date.now(),
+              watchWorkoutFor: watchWorkoutForRef.current, watchRestFor: watchRestForRef.current, savedAt: Date.now(),
             }));
           }
           // 合流させたWatchの操作は、下書きに残せてから(または記録が無く捨てた後に)キューから消す
@@ -1091,7 +1095,7 @@ function App() {
       if (today.length === 0 && !startAt) return;
       try {
         // 同期的に書けるlocalStorageへ直接退避
-        localStorage.setItem(DRAFT_KEY, JSON.stringify({ today, startAt, restStartAt, watchApplied, restFromWatch: restFromWatchRef.current, watchWorkoutFor: watchWorkoutForRef.current, savedAt: Date.now() }));
+        localStorage.setItem(DRAFT_KEY, JSON.stringify({ today, startAt, restStartAt, watchApplied, restFromWatch: restFromWatchRef.current, watchWorkoutFor: watchWorkoutForRef.current, watchRestFor: watchRestForRef.current, savedAt: Date.now() }));
       } catch { /* noop */ }
     };
     const onHide = () => { if (document.visibilityState === "hidden") flush(); };
@@ -1165,6 +1169,7 @@ function App() {
             if (draft.restStartAt) setRestStartAt(draft.restStartAt);
             if (draft.restFromWatch) restFromWatchRef.current = draft.restFromWatch;
             if (draft.watchWorkoutFor) { watchWorkoutForRef.current = draft.watchWorkoutFor; setWatchLiveFor(draft.watchWorkoutFor); }
+            if (draft.watchRestFor) { watchRestForRef.current = draft.watchRestFor; setWatchRestFor(draft.watchRestFor); }
             if (Array.isArray(draft.watchApplied)) {
               watchAppliedRef.current = draft.watchApplied;
               setWatchApplied(draft.watchApplied);
@@ -1365,7 +1370,9 @@ function App() {
   // 壊れていたら作り直す方式にして、鳴らなくなるのを防ぐ。
   const soundOn = profile.soundOn !== false;
   const audioRef = useRef(null);
-  const firedMinRef = useRef(0); // 何分の通知まで鳴らしたか(再レンダーでも保持)
+  const firedMinRef = useRef(0); // 最後に鳴らした経過秒(設定で選んだ時間。再レンダーでも保持)
+  // firedMinRef がどの休憩のものか。Watch から合流した休憩は startRest を通らず、前の休憩の値が残っていた(reviewer 指摘)
+  const firedForRef = useRef(null);
 
   // ---- 休憩タイマーのローカル通知 ----
   // 通知が使えるなら分刻みのbeep()は鳴らさず通知に一本化する(前面でもバナーが出るため
@@ -1502,6 +1509,8 @@ function App() {
   // 前面復帰(visibilitychange)では呼ばない: ロック画面でスワイプして消した表示を復活させないため。
   // Watch がこの記録のワークアウトを記録している間は出さない(Watch の画面を隠すため。休憩は Watch 側が表示・通知する)。
   const watchLive = watchLiveFor != null && watchLiveFor === startAt;
+  // Watch がこの記録の休憩の通知を受け持っている(1.3 以降の Watch で、ワークアウトを記録中)
+  const watchOwnsRest = watchLive && watchRestFor === startAt;
   useEffect(() => {
     if (!loaded) return;
     runNotify(() => syncRestActivity(watchLive ? null : restStartAt, Date.now(), t("rest.title")));
@@ -1532,10 +1541,16 @@ function App() {
       // 今の記録の知らせだけ採用する(遅れて届いた前の記録の知らせで上書きしない)
       const wk = watchWorkoutFromOps(fresh);
       if (wk != null && wk === startAtRef.current) { watchWorkoutForRef.current = wk; setWatchLiveFor(wk); }
+      if (startAtRef.current != null && watchRestCapableFromOps(fresh, startAtRef.current)) {
+        watchRestForRef.current = startAtRef.current; setWatchRestFor(startAtRef.current);
+      }
       // Watch が途中でワークアウトをやめた(ほかのアプリに替えた等)ら、Watch はこの記録にもう何も返さない。
       // ref も降ろす: 保存時は iPhone がすぐヘルスケアに書き、下書きの復元で抑止が戻らない(discarded は最後の状態)。
       // 休憩の Live Activity は出す側に戻る
-      if (watchWorkoutStopped(fresh, startAtRef.current)) { watchWorkoutForRef.current = null; setWatchLiveFor(null); }
+      if (watchWorkoutStopped(fresh, startAtRef.current)) {
+        watchWorkoutForRef.current = null; setWatchLiveFor(null);
+        watchRestForRef.current = null; setWatchRestFor(null);
+      }
       setToday(t => applyWatchOps(t, fresh).today);
       if (r.applied.length > 0) {
         const ids = [...watchAppliedRef.current, ...r.applied].slice(-WATCH_APPLIED_KEEP * 2);
@@ -1573,8 +1588,10 @@ function App() {
     // 出すと、休憩中にトグルしたユーザーへ唐突にダイアログが出るため連動させない。
     // Watchで始めた休憩は、Watchが自分で通知する(iPhoneからも出すと手首に二重に届く)。
     // Watchがこの記録のワークアウトを記録している間は、iPhoneで始めた休憩もWatchが通知する(改善要望 4b。
-    // スナップショットの restNotices を見て予約する)。Watchが途中でやめたら watchLive が降りて、ここで予約し直す
-    if (soundOn && restNotificationsAvailable() && restStartAt !== restFromWatchRef.current && !watchLive) {
+    // スナップショットの restNotices を見て予約する)。受け持てると知らせてきた Watch(1.3 以降)のときだけ。
+    // Watchが途中でやめたら watchOwnsRest が降りて、ここで予約し直す。
+    // Watch のアプリが落ちて discarded も届かないと、保存・破棄まで通知がどこからも出ない(Live Activity と同じ弱点)
+    if (soundOn && restNotificationsAvailable() && restStartAt !== restFromWatchRef.current && !watchOwnsRest) {
       runNotify(async () => {
         let ok = notifyGranted;
         if (!ok && !askedNotifyRef.current) {
@@ -1600,15 +1617,18 @@ function App() {
     } else {
       runNotify(() => cancelRestNotifications());
     }
+    if (firedForRef.current !== restStartAt) { firedForRef.current = restStartAt; firedMinRef.current = 0; }
     const tick = () => {
       const sec = Math.floor((Date.now() - restStartAt) / 1000);
       setRestElapsed(sec);
-      // 設定で選んだ経過分(restMinutes)のうち、過ぎた数。判定の間隔で境界を飛ばしても、未通知の分を確実に鳴らす
-      const passed = restMinutes.filter(m => sec >= m * 60).length;
-      if (passed > firedMinRef.current) {
-        firedMinRef.current = passed;
-        // 通知が届く環境では鳴らさない(通知と二重になるため)
-        if (!notifyGranted) beep(Math.min(passed, 3)); // 経過が長いほど回数を増やす
+      // 設定で選んだ経過分(restMinutes)のうち、最後に鳴らした時刻より後で、もう過ぎたもの。
+      // 「過ぎた数」で数えると、休憩中に印を外したときに後の分が鳴らなくなる(reviewer 指摘)。
+      // firedMinRef は最後に鳴らした経過秒。判定の間隔で境界を飛ばしても、未通知の分を確実に鳴らす
+      const due = restMinutes.filter(m => m * 60 <= sec && m * 60 > firedMinRef.current);
+      if (due.length > 0) {
+        firedMinRef.current = due[due.length - 1] * 60;
+        // 通知が届く環境では鳴らさない(通知と二重になるため)。経過が長いほど回数を増やす
+        if (!notifyGranted) beep(Math.min(restMinutes.indexOf(due[due.length - 1]) + 1, 3));
       }
     };
     // 500msごとに判定して1分の取りこぼしを減らす(表示は秒単位)
@@ -1624,7 +1644,7 @@ function App() {
     // cleanupで通知はキャンセルしない。バックグラウンド化はunmountを起こさないが、
     // 万一unmountで消すと「アプリを閉じていても知らせる」という目的そのものを損なう。
     return () => { clearInterval(id); document.removeEventListener("visibilitychange", onVisible); };
-  }, [restStartAt, soundOn, notifyGranted, watchLive, restMinutesKey, lang]);
+  }, [restStartAt, soundOn, notifyGranted, watchOwnsRest, restMinutesKey, lang]);
 
   const startRest = () => { setRestStartAt(Date.now()); setRestElapsed(0); firedMinRef.current = 0; }; // 記録入力のたびに0から再スタート
   const stopRest = () => { setRestStartAt(null); setRestElapsed(0); firedMinRef.current = 0; setRestFull(false); };
@@ -3638,6 +3658,7 @@ function App() {
                 if (!window.confirm(t("log.discardDraft"))) return;
                 setToday([]); setStartAt(null); setElapsed(0); stopRest(); setDraftRestored(false); clearNotice();
                 watchWorkoutForRef.current = null; setWatchLiveFor(null);
+                watchRestForRef.current = null; setWatchRestFor(null);
                 clearErrorIf("log.noValidSets", "err.workoutSaveFailed"); // 破棄したので「入力した内容は残っています」も消す
                 try { await store.del(DRAFT_KEY); localStorage.removeItem(DRAFT_KEY); } catch { /* noop */ }
               }} style={{ ...btn("transparent", C.muted), padding: "6px 10px", fontSize: 13 }}>{t("log.discard")}</button>
@@ -5415,7 +5436,8 @@ function App() {
                   {REST_NOTIFY_CHOICES.map(m => {
                     const on = restMinutes.includes(m);
                     return (
-                      <button key={m} aria-pressed={on}
+                      // 最後の1つは外せない(全部外すと、トグルはオンのまま何も知らせなくなる)
+                      <button key={m} aria-pressed={on} disabled={on && restMinutes.length === 1}
                         onClick={() => persist({ profile: { ...profile, restNotifyMinutes: normalizeRestNotifyMinutes(on ? restMinutes.filter(x => x !== m) : [...restMinutes, m]) } })}
                         style={{ ...chip(on), fontVariantNumeric: "tabular-nums" }}>
                         {`${Math.floor(m)}:${Number.isInteger(m) ? "00" : "30"}`}

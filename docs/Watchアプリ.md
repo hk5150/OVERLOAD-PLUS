@@ -187,13 +187,18 @@ Watch で −/+ を押していない値は、iPhone で入力されたままの
     - 目標 RIR は出さない。「前回を見せて判断は委ねる」というアプリの考え方に合わせ、ユーザーが前回の RIR を選んだ。
   - 46mm の画面で、スクロールせずに前回の行まで見えるよう詰めてある。
   - × で閉じるとセット一覧に戻る。一覧の上の小さい休憩表示をタップしても開ける。
-- Watch で RIR を確定し、その種目が `restAfter`(スーパーセットの途中ではない)なら、Watch 上で休憩を始める。1・2・3分のローカル通知も Watch 自身が予約する(Time Sensitive)。
+- Watch で RIR を確定し、その種目が `restAfter`(スーパーセットの途中ではない)なら、Watch 上で休憩を始める。iPhone の設定で選んだ経過時間(スナップショットの `restNotices`)のローカル通知も Watch 自身が予約する(Time Sensitive)。
 - iPhone は op の `restStartAt` を受け取り、`restStartAt` と Live Activity を合わせる。
   - 使うのは**実際に適用できた op の休憩だけ**。捨てた・保留にした op の休憩は使わない。
   - 30分より古い休憩も無視する。保存後に遅れて届いた op や、下書きの期限切れの後に残っていた op で、終わった休憩を走らせないため。
   - **iPhone 側の通知は予約しない**(`restFromWatchRef`)。予約すると、ロック中の iPhone の通知が Watch に転送され、手首に二重に届くため。この値は下書きにも保存する(OS にアプリを終了されて再起動したときに、抑止が外れないように)。
 - Watch は自分で始めた休憩の開始時刻を覚えておく。その op が iPhone で確認された後に、iPhone 側で休憩が止まった・新しい休憩が始まったら、Watch の通知を取り消す。
-- iPhone で始めた休憩の通知は、これまでどおり iPhone が出す(ロック中は Watch に転送される)。
+- iPhone で始めた休憩の通知は iPhone が出す(ロック中は Watch に転送される)。**ただし 1.3 から、Watch がこの記録のワークアウトを
+  記録している間は Watch が予約し、iPhone は予約しない**(改善要望 4b。`watchOwnsRest`)。iPhone が予約をやめるのは、Watch が
+  started の知らせに `restNotify: true` を載せてきた記録だけ(古い Watch アプリは iPhone の休憩を予約しないため)。
+  記録が終わった・Watch のワークアウトが終わったら、Watch はその分を取り消す(`releaseForeignRestNotifications`)。
+  弱点: Watch のアプリが落ちて discarded も届かないと、保存・破棄まで iPhone の休憩の通知はどこからも出ない
+- Watch の休憩画面を開いている間は、同じ経過時間に強めに振動する(改善要望 4a。通知とは別)
 - **Watch がこの記録のワークアウトを記録している間は、iPhone の休憩の Live Activity を出さない**(v134)。
   出すと watchOS がそれを Watch のスマートスタックにも自動で出し、KURABELL の画面を隠す
   (1.1 の実機で「トレーニング中に Watch のアプリが消えた」。ワークアウトは裏で続いていた)。
@@ -201,7 +206,7 @@ Watch で −/+ を押していない値は、iPhone で入力されたままの
   - Watch が途中でワークアウトをやめた(`discarded`、`watchWorkoutStopped`)ら、出す側に戻す。`watchWorkoutForRef` も降ろすので、
     保存時は iPhone がすぐヘルスケアに書き、下書きの復元でも抑止は戻らない(Watch は discarded の後に同じ記録で started を送らない)
   - 保存では `watchLiveFor` を降ろさない(`startAt` が null になれば外れる)。`await` の前に降ろすと、間の render で Live Activity が一瞬出る(reviewer 重大1)
-  - 代わりに、この間は iPhone のロック画面・Dynamic Island に休憩の経過が出ない。iPhone の1分ごとの通知と Watch の休憩画面・通知は残る
+  - 代わりに、この間は iPhone のロック画面・Dynamic Island に休憩の経過が出ない。Watch の休憩画面・通知は残る(1.3 からは iPhone の休憩の通知も Watch が出す。上の項)
 
 ### 入力は −/+ ボタン(Digital Crown は使わない)
 
@@ -330,7 +335,7 @@ iPhone から Watch アプリを起動できる公式の方法は `HKHealthStore
 1. iPhone で記録を開始すると、Watch に種目の一覧が出る
 2. Watch で RIR を押すとタイマー画面に切り替わり、iPhone のセットにも RIR が入る
 3. iPhone をロックしたまま Watch で数セット入力し、iPhone を開くと合流している(重複なし)
-4. Watch で始めた休憩の通知が、1・2・3分で1回ずつ届く
+4. Watch で始めた休憩の通知が、1・2・3分で1回ずつ届く(1.3 からは設定で選んだ時間)
 5. Watch のワークアウト(フィットネス集中モード)中でも休憩の通知が届く
 6. iPhone で保存すると、Watch が今日のメニューまたは待機画面に戻る
 7. −/+ と RIR のボタンが押しやすく、スクロールせずに RIR まで見える(46mm 以外の画面サイズは未確認)

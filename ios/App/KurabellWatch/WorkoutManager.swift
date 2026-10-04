@@ -161,6 +161,7 @@ final class WorkoutManager: NSObject, ObservableObject {
         builder = nil
         recordStartAt = nil
         isRunning = false
+        SessionStore.shared.releaseForeignRestNotifications()
     }
 }
 

@@ -118,6 +118,9 @@ struct WatchOp: Codable, Equatable {
     // kind "workout" のときだけ: Watch がワークアウトを始めた知らせ(iPhone はその記録をヘルスケアに書かない)
     var status: String? = nil
     var recordStartAt: Double? = nil
+    // started のときだけ true: この Watch は iPhone の休憩の通知も受け持てる(1.3 から。改善要望 4b)。
+    // 印が無い(古い Watch)と、iPhone は自分で予約し続ける
+    var restNotify: Bool? = nil
 }
 
 extension WatchSnapshot.SetRow {

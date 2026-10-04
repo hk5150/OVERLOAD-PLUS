@@ -142,6 +142,14 @@ function watchWorkoutFromOps(ops) {
   return found ? found.recordStartAt : null;
 }
 
+// Watch が記録 recordStartAt の休憩の通知を受け持てるか(純粋関数。改善要望 4b)。
+// 1.3 の Watch は started の知らせに restNotify: true を載せる。古い Watch(1.2)は iPhone の休憩を予約しないので、
+// 印が無ければ iPhone が予約し続ける(iPhone だけ先に更新されたとき、休憩の通知がどこからも出なくならないように)
+function watchRestCapableFromOps(ops, recordStartAt) {
+  return (ops || []).some(op => op && op.kind === "workout" && op.status === "started"
+    && op.recordStartAt === recordStartAt && op.restNotify === true);
+}
+
 // Watch が記録 recordStartAt のワークアウトを途中でやめたか(純粋関数)。
 // "discarded" は、ほかのワークアウトアプリに替えた・システムに止められた・保存に失敗した、のどれか。
 // iPhone は Watch が記録している間だけ休憩の Live Activity を止めているので、やめたら出す側に戻す。
@@ -242,6 +250,7 @@ globalThis.watchWeightStep = watchWeightStep;
 globalThis.buildWatchSnapshot = buildWatchSnapshot;
 globalThis.applyWatchOps = applyWatchOps;
 globalThis.watchWorkoutFromOps = watchWorkoutFromOps;
+globalThis.watchRestCapableFromOps = watchRestCapableFromOps;
 globalThis.watchWorkoutStopped = watchWorkoutStopped;
 globalThis.settleWatchHealth = settleWatchHealth;
 globalThis.WATCH_HEALTH_CONFIRM_MS = WATCH_HEALTH_CONFIRM_MS;

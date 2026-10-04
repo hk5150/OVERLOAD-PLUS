@@ -35,8 +35,10 @@ final class SessionStore: NSObject, ObservableObject {
     // 経過分は iPhone の設定(スナップショットの restNotices)。取り消しは選べる時間のすべてで行う
     private static let restNotifyChoices: [Double] = [1, 1.5, 2, 2.5, 3, 4, 5]
     private static let restNotifyPrefix = "kurabell-watch-rest-"
-    // いま通知を予約してある休憩の開始時刻(ms)。同じ休憩で予約し直さないため
+    // いま iPhone の休憩のために予約してある通知の中身(開始時刻と経過分・本文)。同じ内容で予約し直さないため。
+    // 休憩中に iPhone で通知を切った・時間や言語を変えたときは中身が変わるので予約し直す(reviewer 指摘)
     private var scheduledRestStartAt: Double?
+    private var scheduledRestKey: String?
     private let ownRestKey = "watch.ownRest.v1"
     // Watch で始めた休憩の開始時刻(ms)。iPhone 側で別の休憩が始まったら、こちらの通知を取り消す
     private var ownRestStartAt: Double? {
@@ -112,6 +114,7 @@ final class SessionStore: NSObject, ObservableObject {
         if startsRest {
             ownRestStartAt = now
             scheduledRestStartAt = now
+            scheduledRestKey = nil
             scheduleRestNotifications(from: Date(timeIntervalSince1970: now / 1000))
         }
         return startsRest
@@ -173,19 +176,29 @@ final class SessionStore: NSObject, ObservableObject {
                 cancelRestNotifications()
                 ownRestStartAt = nil
                 scheduledRestStartAt = nil
+                scheduledRestKey = nil
             }
         }
         // この記録のワークアウトを Watch が記録している間は、iPhone で始めた休憩の通知も Watch が予約する(改善要望 4b)。
         // iPhone はその間、自分では予約しない(index.html の休憩の effect の watchLive)。手首に二重に届かないように
         let wm = WorkoutManager.shared
-        if wm.isRunning, let r = wm.recordStartAt, r == snap.recordStartAt, ownRestStartAt == nil,
-           snap.restStartAt != scheduledRestStartAt {
-            if let t = snap.restStartAt {
-                scheduleRestNotifications(from: Date(timeIntervalSince1970: t / 1000))
-            } else {
-                cancelRestNotifications()
+        if ownRestStartAt == nil {
+            if wm.isRunning, let r = wm.recordStartAt, r == snap.recordStartAt {
+                let key = snap.restStartAt.map { t in "\(t)|" + restNotices().map { "\($0.min):\($0.body)" }.joined(separator: ",") }
+                if key != scheduledRestKey {
+                    if let t = snap.restStartAt {
+                        scheduleRestNotifications(from: Date(timeIntervalSince1970: t / 1000))
+                    } else {
+                        cancelRestNotifications()
+                    }
+                    scheduledRestStartAt = snap.restStartAt
+                    scheduledRestKey = key
+                }
+            } else if scheduledRestKey != nil {
+                // 記録が終わった(保存・破棄)・Watch のワークアウトが別の記録になった。iPhone の休憩のために
+                // 予約した分を消す(残すと保存の後に「1分経過」が鳴る。reviewer 指摘)
+                releaseForeignRestNotifications()
             }
-            scheduledRestStartAt = snap.restStartAt
         }
     }
 
@@ -235,7 +248,8 @@ final class SessionStore: NSObject, ObservableObject {
         let op = WatchOp(opId: UUID().uuidString, kind: "workout", exId: "", setIndex: 0,
                          weight: "", reps: "", rir: nil, restStartAt: nil,
                          at: Date().timeIntervalSince1970 * 1000,
-                         status: status, recordStartAt: recordStartAt)
+                         status: status, recordStartAt: recordStartAt,
+                         restNotify: status == "started" ? true : nil)
         pending.append(op) // 届くまで送り直す(iPhone が合流済みにしたら外れる)
         save()
         send(op)
@@ -293,6 +307,15 @@ final class SessionStore: NSObject, ObservableObject {
     }
 
     // MARK: - 休憩の通知
+
+    // iPhone の休憩のために予約した分を消す。Watch のワークアウトが終わったとき(WorkoutManager.cleanUp)にも呼ぶ。
+    // 終わると iPhone が予約し直す(discarded で watchOwnsRest が降りる)ので、残すと手首に二重に届く
+    func releaseForeignRestNotifications() {
+        guard ownRestStartAt == nil, scheduledRestKey != nil else { return }
+        cancelRestNotifications()
+        scheduledRestStartAt = nil
+        scheduledRestKey = nil
+    }
 
     // 経過分と本文。古い iPhone(restNotices が無い)なら今までどおり 1・2・3分とラベルの本文
     private func restNotices() -> [WatchSnapshot.RestNotice] {
