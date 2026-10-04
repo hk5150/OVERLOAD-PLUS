@@ -157,8 +157,6 @@ const STRINGS = {
   "log.setsHint":      { ja: "※「あと何回できた?」を入力したセットが実施済みとして記録されます(薄いセットは未実施)。", en: "A set counts as done once you enter the reps you had left (faded sets are not done yet)." },
   "log.setsHint2":     { ja: "左の番号をタップすると ウォームアップ(W) → 補助あり(補) → 通常 と切り替わります。", en: "Tap the number on the left to cycle warm-up (W) → assisted (A) → normal." },
   "log.superset":      { ja: "スーパーセット",         en: "Superset" },
-  "log.supersetOn":    { ja: "⛓ 上の種目とスーパーセットにする", en: "⛓ Superset with the exercise above" },
-  "log.supersetOff":   { ja: "⛓ 上の種目とスーパーセット中(解除)", en: "⛓ Superset active (tap to unlink)" },
   "log.offDay":        { ja: "今日の部位外",           en: "Not today's muscle" },
   "log.moveUp":        { ja: "上へ移動",               en: "Move up" },
   "log.moveDown":      { ja: "下へ移動",               en: "Move down" },
@@ -177,15 +175,18 @@ const STRINGS = {
   "log.exerciseConfig": { ja: "種目の詳細設定",        en: "Exercise settings" },
   "log.removeExercise": { ja: "種目を削除",            en: "Remove exercise" },
   // 種目カードの操作の行(7マス・各45px前後に収まる長さ)
-  "act.config":        { ja: "設定",     en: "Setup" },
+  "act.config":        { ja: "設定",     en: "Settings" },
   "act.form":          { ja: "フォーム", en: "Form" },
   "act.ai":            { ja: "AI相談",   en: "Ask AI" },
   "act.copied":        { ja: "コピー済", en: "Copied" },
   "act.superset":      { ja: "SS",       en: "SS" },
+  "log.supersetAria":  { ja: "上の種目とスーパーセット", en: "Superset with the exercise above" },
   "log.swapAria":      { ja: "別の種目に変更",   en: "Swap for another exercise" },
   "log.historyAria":   { ja: "この種目の履歴",   en: "History of this exercise" },
   "log.confirmRemove": { ja: "「{name}」には実施済みのセットがあります。種目ごと削除しますか?", en: "\"{name}\" has completed sets. Remove the whole exercise?" },
   "log.removed":       { ja: "「{name}」を削除しました", en: "Removed \"{name}\"" },
+  "log.addedToDay":    { ja: "Day「{day}」にも登録しました", en: "Also added to \"{day}\"" },
+  "log.undoAdd":       { ja: "取り消す", en: "Undo" },
   "log.undo":          { ja: "元に戻す", en: "Undo" },
   "log.swapHint":      { ja: "別の種目に差し替えます(入力中のセットは、差し替え先の種目の前回記録に入れ替わります)。", en: "Swap in another exercise. Sets in progress are replaced with that exercise's last session." },
   "log.searchExercise": { ja: "種目を検索",            en: "Search exercises" },
@@ -219,6 +220,7 @@ const STRINGS = {
   "menu.weighted":     { ja: "加重",                   en: "added" },
   "menu.perHandShort": { ja: "片手",                   en: "/hand" },
   "menu.savePrompt":   { ja: "次回から今日の種目と前回記録を表示できます。この内容をメニューとして保存しますか?", en: "Save today's exercises as your menu so next time they appear with your last numbers?" },
+  "menu.saveToDayPrompt": { ja: "この内容を Day「{day}」の種目として登録しますか?次からは「今日のメニュー」に並びます。", en: "Register these exercises to \"{day}\"? They'll appear in Today's menu next time." },
   "menu.saveYes":      { ja: "保存する",               en: "Save" },
   "menu.saveNo":       { ja: "今回はしない",           en: "Not now" },
 
@@ -320,6 +322,11 @@ const STRINGS = {
   "split.exerciseList": { ja: "種目: {list}",          en: "Exercises: {list}" },
   "split.tapToLog":    { ja: "タップして記録を始める →", en: "Tap to start logging →" },
   "split.deleteDay":   { ja: "このDayを削除",          en: "Delete this day" },
+  "split.autoFill":     { ja: "おまかせで入れる", en: "Fill with the basics" },
+  "split.aiPick":       { ja: "AIに相談して決める", en: "Ask AI to choose" },
+  "split.pickMuscleFirst": { ja: "先に部位を選ぶと、その部位の種目が並びます。", en: "Pick the muscles first to see exercises for them." },
+  "split.removeExerciseAria": { ja: "{name}を登録から外す", en: "Remove {name} from this day" },
+  "split.addDayAfter":  { ja: "この後ろにDayを追加", en: "Add a day after this" },
   "split.addDay":      { ja: "＋ Dayを追加",           en: "＋ Add day" },
   "split.session":     { ja: "今日のセッション(Day {n}/{total}・{name})", en: "Today's session (day {n}/{total} · {name})" },
   "split.dayHistory":  { ja: "{day}の履歴",            en: "{day} history" },
@@ -501,6 +508,9 @@ const STRINGS = {
   "share.dayExercises":  { ja: "登録種目: {list}", en: "Registered exercises: {list}" },
   "share.dayNoExercises":{ ja: "(この日にはまだ種目を登録していません)", en: "(No exercises registered for this day yet.)" },
   "share.dayHistory":    { ja: "■ この日の直近の実績(古い順)", en: "■ Recent sessions for this day (oldest first)" },
+  "share.dayPickPrompt": { ja: "以下は私のトレーニング分割の1日分「{name}」です。この日の部位に合う種目を4〜5個、行う順番つきで提案してください。", en: "Below is one day (\"{name}\") of my training split. Please suggest 4-5 exercises that fit this day's muscles, in the order I should do them." },
+  "share.dayPickList":   { ja: "■ アプリにある種目(この中から選んでください)", en: "■ Exercises available in my app (please choose from these)" },
+  "share.dayPickRule":   { ja: "※種目名は上の一覧のとおりに書いてください(アプリで検索して登録するため)。", en: "※Please write the exercise names exactly as listed above (I'll search for them in the app)." },
   "share.dayNoHistory":  { ja: "(この日の記録はまだありません)", en: "(No sessions recorded for this day yet.)" },
   "csv.date":          { ja: "日付",                   en: "Date" },
   "csv.session":       { ja: "セッション",             en: "Session" },
@@ -726,6 +736,7 @@ const DAY_NAMES_EN = {
   "脚": "Legs",
   "肩": "Shoulders",
   "腕": "Arms",
+  "腹": "Abs",
 };
 
 // 曜日の頭文字。fmtDateが `9/3 (水)` を組み立てるのに使う。
@@ -742,7 +753,15 @@ const exName     = (name) => lookupName(EX_NAMES_EN, name);
 const muscleName = (name) => lookupName(MUSCLE_NAMES_EN, name);
 const eqName     = (name) => lookupName(EQ_NAMES_EN, name);
 const splitName  = (name) => lookupName(SPLIT_NAMES_EN, name);
-const dayName    = (name) => lookupName(DAY_NAMES_EN, name);
+// 部位から自動で付けた名前(「胸・肩」、src/domain/dayPlan.js の autoDayName)は、1語ずつ訳して繋ぐ
+const dayName    = (name) => {
+  const parts = typeof name === "string" && name.includes("・") ? name.split("・") : null;
+  if (LANG === "en" && parts && parts.every(p => DAY_NAMES_EN[p])) {
+    const en = parts.map(p => DAY_NAMES_EN[p]);
+    return en.length > 2 ? `${en.slice(0, -1).join(", ")} & ${en[en.length - 1]}` : en.join(" & ");
+  }
+  return lookupName(DAY_NAMES_EN, name);
+};
 const weekdayLabel = (dow) => (WEEKDAYS[LANG] || WEEKDAYS.ja)[dow];
 
 // 種目の検索対象テキスト。英語UIでも日本語名で引けるように、常に両方を含める

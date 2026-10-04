@@ -193,6 +193,8 @@
       globals:['extractWorkoutsArray','validateWorkoutsShape','CURRENT_BACKUP_FORMAT_VERSION','validateBackupPayload','SET_VALUE_LIMITS','isSetValueInRange'] },
     { key:'volume',     urls:['src/domain/volume.js'],
       globals:['workingSets','setVolume','exVolume','nextSetType','volumeGoalKey'] },
+    { key:'dayPlan',    urls:['src/domain/dayPlan.js'],
+      globals:['STARTER_PICKS','STARTER_FULL_BODY','STARTER_MAX','starterPicks','DAY_GROUP_OF','autoDayName','nextDayName'] },
     { key:'coefficients', urls:['src/domain/coefficients.js'],
       globals:['resolveCoefficients'] },
     { key:'insight',    urls:['src/domain/insight.js'],
@@ -660,7 +662,6 @@ function NumInput({ value, onChange, onFocus, onBlur, inputMode = "decimal", sty
 // 線画アイコン。絵文字(🏆⚡📌💾🗑など)は端末によって見た目が変わり、暗い画面で浮くので置き換えた。
 // 初回ガイドの GuideArt と同じく、自前の SVG で持つ(外部のアイコンフォントは読み込まない)。
 const ICON_PATHS = {
-  more:    <><circle cx="5" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.6" fill="currentColor" stroke="none"/></>,
   pin:     <><path d="M9 4h6l-1 6 3 3H7l3-3z"/><path d="M12 13v7"/></>,
   bolt:    <path d="M13 3 5 14h6l-1 7 8-11h-6z"/>,
   trophy:  <><path d="M8 4h8v5a4 4 0 0 1-8 0z"/><path d="M8 6H5a3 3 0 0 0 3 4M16 6h3a3 3 0 0 1-3 4M12 13v4M8 20h8"/></>,
@@ -980,8 +981,6 @@ function App() {
   const [swapMuscle, setSwapMuscle] = useState("");  // 種目差し替え時の部位フィルター
   const [openSetKey, setOpenSetKey] = useState(null); // 展開中のセット "exId:index"
   const [openHist, setOpenHist] = useState({});       // 種目カードの履歴パネル開閉
-  // 種目カードの「⋯」(並べ替え・AI相談・変更・履歴・設定・YouTube・削除)。セットを打つ間は使わない操作なので
-  // 普段は畳んでおく(以前は毎カードで1行を占め、赤い YouTube が「開始」「削除」と同格に見えていた)
   const [restFull, setRestFull] = useState(false);    // インターバルの全画面表示
   const [showSplitHistory, setShowSplitHistory] = useState(false); // 上部バーのボリュームタップ→同一分割の履歴一覧
   const splitHistoryModalRef = useRef(null);
@@ -1806,6 +1805,11 @@ function App() {
     const rank = (e) => { const r = recentNames.indexOf(e.n); return r >= 0 ? r : 1000; };
     return [...list].sort((a, b) => rank(a) - rank(b));
   }, [editingDay, daySearch, recentNames, allExercises]);
+  // 部位ごとの見出しで区切る(改善要望 3b)。並びは MUSCLES の順、部位の中は最近使った順(上の sort)のまま
+  const dayPickerGroups = useMemo(() => {
+    const groups = [...MUSCLES, ""].map(m => ({ m, items: dayPickerList.filter(e => (e.m || "") === m) }));
+    return groups.filter(g => g.items.length);
+  }, [dayPickerList]);
   // 別のDayを開いたら、前のDayで入れていた検索語とカスタム種目の設定は捨てる
   useEffect(() => { setDaySearch(""); setDayDraft({ muscle: "", eq: "" }); }, [editDay]);
   // 追加したDayのカードは一覧の一番下で画面の外になりやすい。「編集」を押したときまで
@@ -1989,6 +1993,7 @@ function App() {
       if (day.exercises && day.exercises.length && !day.exercises.includes(n)) {
         const days = split.days.map((d, i) => i === dayIdx ? { ...d, exercises: [...d.exercises, n] } : d);
         splitPatch = { split: { ...split, days } };
+        showNotice({ kind: "dayAdded", name: n, ...noticeDay() });
       }
     }
     persist({ recentNames: nextRecent, ...(known ? {} : { customExercises: nextCustom }), ...splitPatch });
@@ -2040,35 +2045,59 @@ function App() {
     if (ex) updateSplitDayExercise(ex.name, null);
     if (today.every(e => e.id === id)) clearErrorIf("log.noValidSets", "err.workoutSaveFailed"); // 最後の種目を消した(入力はもう残っていない)
   };
-  // カードの ✕ からの削除(改善要望 11)。実施済みのセットがあるときだけ確認し、消した直後の5秒は元に戻せる。
-  // removeExercise は今日の Day の登録種目からも外すので、戻すときは登録も同じ位置に戻す。
-  const [removedEx, setRemovedEx] = useState(null); // { ex, idx, dayName, dayPos }
-  const removedTimerRef = useRef(null);
+  // 記録画面の固定バーの直下に5秒だけ出す、取り消せる知らせ(改善要望 11・3d)。
+  //   removed:  カードの ✕ で種目を消した。実施済みのセットがあるときだけ確認し、戻すと Day の登録も同じ位置に戻す
+  //            (removeExercise は今日の Day の登録種目からも外すため)
+  //   dayAdded: 記録中に足した種目を、今日の Day の登録にも足した(以前は黙って足していた)。取り消すと登録だけ外す
+  // 取り消しは、押した時点の split を見て直す(知らせを出した時点の split を握らない。間に別の変更が入りうる)。
+  // Day は名前ではなく、知らせを出した時点の位置と cursor で特定する(保存で次の Day に進んだ後、
+  // 同じ名前の Day に足してしまわないように)。保存・下書きの破棄では知らせごと消す。
+  // 取り消しても、消していた間に Watch から来たその種目への入力は戻らない(applyWatchOps が
+  // 無い種目への op を捨てて ack するため)。5秒の間に Watch で打つことは稀なので、ここでは扱わない。
+  const [notice, setNotice] = useState(null);
+  const noticeTimerRef = useRef(null);
+  const lastRemoveAtRef = useRef(0);
+  const showNotice = (n) => {
+    setNotice(n);
+    clearTimeout(noticeTimerRef.current);
+    noticeTimerRef.current = setTimeout(() => setNotice(null), 5000);
+  };
+  useEffect(() => () => clearTimeout(noticeTimerRef.current), []);
   const removeExerciseUndoable = (ex) => {
-    const entered = ex.sets.some(s => s.rir !== "" && s.rir != null);
+    // ✕ は見出しの右端の同じ位置にあるので、素早く2回押すと、繰り上がってきた次の種目まで消える
+    // (取り消せるのは最後の1つだけ)。直前の削除から0.4秒以内は無視する(reviewer 指摘)
+    if (Date.now() - lastRemoveAtRef.current < 400) return;
+    const entered = ex.sets.some(s => !s.warmup && s.rir !== "" && s.rir != null);
     if (entered && !window.confirm(t("log.confirmRemove", { name: exName(ex.name) }))) return;
     const idx = today.findIndex(e => e.id === ex.id);
     const dayPos = todayDay?.exercises ? todayDay.exercises.indexOf(ex.name) : -1;
     removeExercise(ex.id);
-    setRemovedEx({ ex, idx, dayName: todayDay?.name ?? null, dayPos });
-    clearTimeout(removedTimerRef.current);
-    removedTimerRef.current = setTimeout(() => setRemovedEx(null), 5000);
+    lastRemoveAtRef.current = Date.now();
+    showNotice({ kind: "removed", ex, idx, ...noticeDay(), dayPos });
   };
-  const undoRemoveExercise = () => {
-    const r = removedEx;
+  // 今日の Day の位置と cursor(取り消すときに、同じ Day のままかを確かめるため)
+  const noticeDay = () => split && todayDay
+    ? { dayIdx: split.cursor % split.days.length, cursor: split.cursor, dayName: todayDay.name }
+    : { dayIdx: -1, cursor: null, dayName: null };
+  const clearNotice = () => { clearTimeout(noticeTimerRef.current); setNotice(null); };
+  const undoNotice = () => {
+    const r = notice;
     if (!r) return;
-    clearTimeout(removedTimerRef.current);
-    setRemovedEx(null);
-    // 5秒の間に同じ種目を足し直していたら戻さない(同名が2枚あると、名前で引く前回の記録が片方にしか付かない)
-    setToday(t => t.some(e => e.id === r.ex.id || e.name === r.ex.name) ? t : [...t.slice(0, r.idx), r.ex, ...t.slice(r.idx)]);
-    if (r.dayPos >= 0 && split && todayDay && todayDay.name === r.dayName && !(todayDay.exercises || []).includes(r.ex.name)) {
-      const dayIdx = split.cursor % split.days.length;
-      const list = [...(todayDay.exercises || [])];
-      list.splice(Math.min(r.dayPos, list.length), 0, r.ex.name);
-      persist({ split: { ...split, days: split.days.map((d, i) => i === dayIdx ? { ...d, exercises: list } : d) } });
+    clearNotice();
+    const dayIdx = split && todayDay && r.dayIdx >= 0 && split.cursor === r.cursor && split.days[r.dayIdx] === todayDay ? r.dayIdx : -1;
+    const dayEx = dayIdx >= 0 ? (todayDay.exercises || []) : null;
+    if (r.kind === "removed") {
+      // 5秒の間に同じ種目を足し直していたら戻さない(同名が2枚あると、名前で引く前回の記録が片方にしか付かない)
+      setToday(t => t.some(e => e.id === r.ex.id || e.name === r.ex.name) ? t : [...t.slice(0, r.idx), r.ex, ...t.slice(r.idx)]);
+      if (dayEx && r.dayPos >= 0 && !dayEx.includes(r.ex.name)) {
+        const list = [...dayEx];
+        list.splice(Math.min(r.dayPos, list.length), 0, r.ex.name);
+        persist({ split: { ...split, days: split.days.map((d, i) => i === dayIdx ? { ...d, exercises: list } : d) } });
+      }
+    } else if (r.kind === "dayAdded" && dayEx && dayEx.includes(r.name)) {
+      persist({ split: { ...split, days: split.days.map((d, i) => i === dayIdx ? { ...d, exercises: dayEx.filter(x => x !== r.name) } : d) } });
     }
   };
-  useEffect(() => () => clearTimeout(removedTimerRef.current), []);
   // 種目の並べ替え(dir: -1=上へ, +1=下へ)
   // 種目の差し替え(セット内容は維持したまま種目だけ変更)
   const swapExercise = (id, newName) => {
@@ -2239,6 +2268,11 @@ function App() {
       const muscles = [...new Set(exercises.map(ex => ex.muscle).filter(Boolean))];
       setOfferSaveAsMenu({ exercises: exercises.map(ex => ex.name), muscles });
     }
+    // 登録種目が0件の Day で記録したら、その内容を Day の種目にするか尋ねる(改善要望 3d)。
+    // 記録中に足した種目が Day に登録されるのは、登録が1件以上あるときだけなので、0件の Day はずっと空のままになる
+    if (split && todayDay && !(todayDay.exercises || []).length) {
+      setOfferSaveAsMenu({ exercises: [...new Set(exercises.map(ex => ex.name))], dayIdx: split.cursor % split.days.length, dayName: todayDay.name });
+    }
     // 書き込めなかったら、入力中の記録・下書き・開始時刻はそのまま残す(2026-09-29に実機で、保存に失敗した
     // 記録を画面から消して失わせた)。persistは画面の状態を先に進めるので、履歴と分割は保存前に戻す
     // (戻さないと、もう一度「保存」を押したときに同じ記録が2件になる)。先に出した
@@ -2278,7 +2312,7 @@ function App() {
     // 待たない(ヘルスケアへの書き込みが遅れても失敗しても、記録の保存とは無関係)
     if (healthOn && !watchRecorded) healthSaveWorkout(entry);
     // 終了コメント
-    setToday([]); setSaving(false);
+    setToday([]); setSaving(false); clearNotice();
     setStartAt(null); setElapsed(0); stopRest();
     setDraftRestored(false);
     try { await store.del(DRAFT_KEY); localStorage.removeItem(DRAFT_KEY); } catch { /* noop */ }
@@ -2305,9 +2339,17 @@ function App() {
 
   // 「分割未設定で初めて記録した内容をメニューとして保存するか」の申し出への応答
   const applyOfferedMenu = () => {
-    if (!offerSaveAsMenu) return;
-    persist({ split: { name: "マイメニュー", days: [{ name: "Day 1", muscles: offerSaveAsMenu.muscles, exercises: offerSaveAsMenu.exercises }], cursor: 0 } });
+    const o = offerSaveAsMenu;
+    if (!o) return;
     setOfferSaveAsMenu(null);
+    if (o.dayIdx != null) {
+      // 尋ねてから押すまでに Day を消した・並べ替えた・手で登録した場合は何もしない
+      const d = split?.days[o.dayIdx];
+      if (!d || d.name !== o.dayName || (d.exercises || []).length) return;
+      persist({ split: { ...split, days: split.days.map((x, i) => i === o.dayIdx ? { ...x, exercises: o.exercises } : x) } });
+      return;
+    }
+    persist({ split: { name: "マイメニュー", days: [{ name: "Day 1", muscles: o.muscles, exercises: o.exercises }], cursor: 0 } });
   };
   const dismissOfferedMenu = () => setOfferSaveAsMenu(null);
 
@@ -2324,7 +2366,26 @@ function App() {
   };
   const updSplit = (patch) => persist({ split: { ...split, ...patch } });
   const updDay = (i, patch) => updSplit({ days: split.days.map((d, j) => j === i ? { ...d, ...patch } : d) });
-  const toggleDayMuscle = (i, m) => { const d = split.days[i]; updDay(i, { muscles: d.muscles.includes(m) ? d.muscles.filter(x => x !== m) : [...d.muscles, m] }); };
+  // 部位を変えたら、まだ手で名前を付けていない Day は名前も付け直す(「胸・肩」、src/domain/dayPlan.js)
+  const toggleDayMuscle = (i, m) => {
+    const d = split.days[i];
+    const muscles = d.muscles.includes(m) ? d.muscles.filter(x => x !== m) : [...d.muscles, m];
+    updDay(i, { muscles, name: nextDayName(d, muscles, i) });
+  };
+  // 登録種目の並べ替え。この順が「今日のメニュー」の並びになる(改善要望 3c)
+  const moveDayExercise = (i, name, dir) => {
+    const ex = [...(split.days[i].exercises || [])];
+    const a = ex.indexOf(name), b = a + dir;
+    if (a < 0 || b < 0 || b >= ex.length) return;
+    [ex[a], ex[b]] = [ex[b], ex[a]];
+    updDay(i, { exercises: ex });
+  };
+  // 「おまかせで入れる」(改善要望 2)。登録が0件の Day にだけ出すボタンから呼ぶ
+  const fillDayStarter = (i) => {
+    const d = split.days[i];
+    const cur = d.exercises || [];
+    updDay(i, { exercises: [...cur, ...starterPicks(d.muscles).filter(n => !cur.includes(n))] });
+  };
   const toggleDayExercise = (i, name) => { const d = split.days[i]; const ex = d.exercises || []; updDay(i, { exercises: ex.includes(name) ? ex.filter(x => x !== name) : [...ex, name] }); };
   // Dayのカスタム種目を作って、そのDayに登録する。今日の記録には入れない。
   // customExercises と split を1回の persist で書く(別々に書くと、後の方が古い値を元にして前の方を消す)。
@@ -2337,11 +2398,15 @@ function App() {
     persist({ customExercises: nextCustom, split: { ...split, days } });
     setDaySearch(""); setDayDraft({ muscle: "", eq: "" });
   };
-  const addDay = () => {
-    const i = split.days.length;
-    updSplit({ days: [...split.days, { name: `Day ${i + 1}`, muscles: [] }] });
-    setEditDay(i);
-    scrollToDayRef.current = i;
+  // at を省くと末尾に足す。編集中の Day の「この後ろに Day を追加」(改善要望 3e)は at = i + 1。
+  // 「今日」の Day がずれないよう、足した位置より後ろにあれば cursor も1つ進める
+  const addDay = (at = split.days.length) => {
+    const days = [...split.days];
+    days.splice(at, 0, { name: `Day ${at + 1}`, muscles: [] });
+    const cur = split.cursor % split.days.length;
+    updSplit({ days, cursor: cur >= at ? cur + 1 : cur });
+    setEditDay(at);
+    scrollToDayRef.current = at;
   };
   const removeDay = (i) => { const days = split.days.filter((_, j) => j !== i); if (!days.length) { persist({ split: null }); setEditDay(null); return; } updSplit({ days, cursor: Math.min(split.cursor, days.length - 1) }); setEditDay(null); };
   // Dayの並べ替え(dir: -1=上へ, +1=下へ)。「今日」の位置がずれないようcursorも追従させる。
@@ -2672,6 +2737,7 @@ function App() {
   // 他の日が何を担当しているか)が無いと、AIは「胸の日に背中も入れては」のような、
   // 分割の設計と衝突する助言をしてくる。
   const dayToText = (d, i) => {
+    if (!(d.exercises || []).length && d.muscles.length) return dayPickText(d, i);
     const dName = dayName(d.name);
     const lines = [t("share.dayPrompt", { name: dName }), ""];
     lines.push(t("share.dayMeta", { split: splitName(split.name), n: i + 1, total: split.days.length, name: dName }));
@@ -2727,6 +2793,28 @@ function App() {
     }
 
     lines.push("", t("share.rirNote"), "— KURABELL Workout Log");
+    return lines.join("\n");
+  };
+
+  // 登録種目が0件の Day の相談(改善要望 2)。見直しではなく「選んで」と頼む。
+  // その部位のアプリ内の種目名を渡して、その中から選ばせる(アプリに無い名前を返されると、
+  // 検索しても見つからず登録できない)。
+  const dayPickText = (d, i) => {
+    const dName = dayName(d.name);
+    const lines = [t("share.dayPickPrompt", { name: dName }), ""];
+    lines.push(t("share.dayMeta", { split: splitName(split.name), n: i + 1, total: split.days.length, name: dName }));
+    lines.push(t("share.dayMuscles", { muscles: d.muscles.map(m => muscleName(m)).join(" / ") }));
+    const others = split.days
+      .map((o, oi) => oi === i ? null : `${dayName(o.name)}(${(o.muscles || []).map(m => muscleName(m)).join(", ") || "-"})`)
+      .filter(Boolean);
+    if (others.length) lines.push(t("share.dayOthers", { list: others.join(" / ") }));
+    lines.push("", t("share.dayPickList"));
+    const cands = allExercises.filter(e => muscleMatchesDay(e.m, d));
+    [...MUSCLES, ""].forEach(m => {
+      const names = cands.filter(e => (e.m || "") === m).map(e => exName(e.n));
+      if (names.length) lines.push(`${m ? muscleName(m) : t("settings.other")}: ${names.join(" / ")}`);
+    });
+    lines.push("", t("share.dayPickRule"), "— KURABELL Workout Log");
     return lines.join("\n");
   };
 
@@ -3058,7 +3146,7 @@ function App() {
   });
 
   // 現在の種目が画面に見えているならボタンは出さない。固定ボタンは右下に居座るので、
-  // 出しっぱなしにすると種目名の行の「⋯」やセット行の×を覆って押せなくする
+  // 出しっぱなしにすると種目名の行の ✕ やセット行の ✕ を覆って押せなくする
   // (実際に覆っているのを確認した)。見えていれば戻る必要もない。
   const [currentExVisible, setCurrentExVisible] = useState(true);
   useEffect(() => {
@@ -3400,25 +3488,29 @@ function App() {
           {/* 種目を消した直後の「元に戻す」と、AI相談のあとの貼り付けの案内(改善要望 11)。
               バーの直下に重ねて出す。カードの中に出すと、消えるときに下の入力欄がずれる。
               画面の下側は「ワークアウトを保存」と重なり、押し間違えを招く */}
-          {view === "log" && (removedEx || (copiedIdx || "").startsWith("ex:")) && (
-            <div role="status" style={{
-              position: "absolute", left: 0, right: 0, top: "calc(100% + 8px)", maxWidth: 520, margin: "0 auto", padding: "0 16px", pointerEvents: "none",
-            }}>
+          {/* role="status" は常駐させ、中身だけを出し入れする(出すたびにライブリージョンごと挿入すると、
+              VoiceOver では読まれないことが多い)。貼り付けの案内はボタンが無いので、下のタップを通す */}
+          <div role="status" style={{
+            position: "absolute", left: 0, right: 0, top: "calc(100% + 8px)", maxWidth: 520, margin: "0 auto", padding: "0 16px", pointerEvents: "none",
+          }}>
+            {view === "log" && (notice || (copiedIdx || "").startsWith("ex:")) && (
               <div style={{
-                display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 12, pointerEvents: "auto",
+                display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 12, pointerEvents: notice ? "auto" : "none",
                 background: C.surface2, border: `1px solid ${C.border}`, boxShadow: "0 6px 20px rgba(0,0,0,0.5)", fontSize: 13,
               }}>
-                {removedEx ? (
+                {notice ? (
                   <>
-                    <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t("log.removed", { name: exName(removedEx.ex.name) })}</span>
-                    <button onClick={undoRemoveExercise} style={{ ...btn("transparent", C.yellow), padding: "4px 2px", fontSize: 13, fontWeight: 800, flexShrink: 0 }}>{t("log.undo")}</button>
+                    <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {notice.kind === "removed" ? t("log.removed", { name: exName(notice.ex.name) }) : t("log.addedToDay", { day: dayName(notice.dayName) })}
+                    </span>
+                    <button onClick={undoNotice} style={{ ...btn("transparent", C.yellow), padding: "4px 2px", fontSize: 13, fontWeight: 800, flexShrink: 0 }}>{notice.kind === "removed" ? t("log.undo") : t("log.undoAdd")}</button>
                   </>
                 ) : (
                   <span style={{ color: C.green }}>{t("log.pasteHint")}</span>
                 )}
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       )}
 
@@ -3476,7 +3568,7 @@ function App() {
               <button onClick={() => setDraftRestored(false)} style={{ ...btn(C.green, "#fff"), padding: "6px 14px", fontSize: 13 }}>OK</button>
               <button onClick={async () => {
                 if (!window.confirm(t("log.discardDraft"))) return;
-                setToday([]); setStartAt(null); setElapsed(0); stopRest(); setDraftRestored(false);
+                setToday([]); setStartAt(null); setElapsed(0); stopRest(); setDraftRestored(false); clearNotice();
                 watchWorkoutForRef.current = null; setWatchLiveFor(null);
                 clearErrorIf("log.noValidSets", "err.workoutSaveFailed"); // 破棄したので「入力した内容は残っています」も消す
                 try { await store.del(DRAFT_KEY); localStorage.removeItem(DRAFT_KEY); } catch { /* noop */ }
@@ -3756,7 +3848,7 @@ function App() {
                 const cell = (on, faint) => ({
                   ...btn("transparent", on ? C.yellow : faint ? C.grey : C.muted),
                   flex: 1, minWidth: 0, padding: "4px 0", display: "flex", flexDirection: "column", alignItems: "center", gap: 3,
-                  fontSize: 10, fontWeight: 600, lineHeight: 1.1, whiteSpace: "nowrap",
+                  fontSize: 10, fontWeight: 600, lineHeight: 1.1, whiteSpace: "nowrap", overflow: "hidden", // 320px 幅で隣のマスに重ならないように
                 });
                 const arrow = (disabled) => ({
                   ...btn("transparent", disabled ? C.border : C.grey), flex: 1, minWidth: 0, padding: 0,
@@ -3783,7 +3875,7 @@ function App() {
                       <Icon name="history" size={16} />{t("log.history")}</button>
                     {/* 先頭の種目は上と組めない。マスは空けたまま残して、カードごとに位置がずれないようにする */}
                     {exIdx > 0 ? (
-                      <button onClick={() => toggleSuperset(ex.id)} aria-label={ssOn ? t("log.supersetOff") : t("log.supersetOn")} aria-pressed={!!ssOn} className="tapArea"
+                      <button onClick={() => toggleSuperset(ex.id)} aria-label={t("log.supersetAria")} aria-pressed={!!ssOn} className="tapArea"
                         style={{ ...cell(false, !ssOn), color: ssOn ? C.blue : C.grey }}>
                         <Icon name="link" size={16} />{t("act.superset")}</button>
                     ) : <span style={{ flex: 1 }} />}
@@ -4312,7 +4404,7 @@ function App() {
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, minWidth: 0 }}>
                         <span style={{ color: C.muted, fontSize: 13, flexShrink: 0 }}>Day {i + 1}</span>
-                        {editing ? <input value={d.name} onChange={e => updDay(i, { name: e.target.value })} onFocus={selectOnFocus} aria-label={t("split.dayNameAria")} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: "4px 8px", fontSize: 16, fontFamily: "inherit", width: "100%" }} /> : <strong style={{ fontSize: 15 }}>{dayName(d.name)}</strong>}
+                        {!editing && <strong style={{ fontSize: 15 }}>{dayName(d.name)}</strong>}
                         {isNext && <span style={{ background: C.red, color: "#fff", borderRadius: 999, padding: "2px 8px", fontSize: 11, fontWeight: 800, flexShrink: 0 }}>{t("common.today")}</span>}
                       </div>
                       <div style={{ display: "flex", gap: 4, flexShrink: 0, alignItems: "center" }} onClick={e => e.stopPropagation()}>
@@ -4324,16 +4416,35 @@ function App() {
                         <button onClick={() => setEditDay(editing ? null : i)} style={{ ...btn(C.surface2, C.muted), padding: "4px 10px", fontSize: 13 }}>{editing ? t("common.done") : t("common.edit")}</button>
                       </div>
                     </div>
+                    {/* 名前の欄は見出しの行に置くと▲▼・今日にする・完了に押されて70px ほどしか残らず、
+                        部位から付けた「胸・肩・腕」が切れて見えた。編集中は1行使う */}
+                    {editing && <input value={d.name} onChange={e => updDay(i, { name: e.target.value })} onFocus={selectOnFocus} aria-label={t("split.dayNameAria")} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: "6px 10px", fontSize: 16, fontFamily: "inherit", width: "100%", marginTop: 10 }} />}
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 10 }}>
                       {editing ? MUSCLES.map(m => <button key={m} onClick={() => toggleDayMuscle(i, m)} style={chip(d.muscles.includes(m))}>{muscleName(m)}</button>)
                         : d.muscles.length ? d.muscles.map(m => <span key={m} style={{ ...chip(false), cursor: "default" }}>{muscleName(m)}</span>)
                           : <span style={{ color: C.muted, fontSize: 13 }}>{t("split.muscleUnset")}</span>}
                     </div>
 
-                    {/* ヘッダー行は▲▼・今日にする・編集で埋まっているので、この行に置く。
+                    {(d.exercises || []).length === 0 && d.muscles.length > 0 ? (
+                      // 登録0件の Day(改善要望 2)。最初の種目設定のときだけ、定番を入れるか AI に選ばせるかを出す。
+                      // 貼り付けの案内は下の行に高さを取っておく(このカードは登録すれば出なくなるので、常時取っても数枚だけ)
+                      <div style={{ marginTop: 10 }} onClick={e => e.stopPropagation()}>
+                        <div style={{ display: "flex", gap: 8 }}>
+                          <button onClick={() => fillDayStarter(i)} style={{ ...btn(C.red), flex: 1, padding: "10px 6px", fontSize: 13 }}>{t("split.autoFill")}</button>
+                          <button onClick={() => consultAi(dayToText(d, i), `day:${i}`)}
+                            style={{ ...btn(C.surface2, copiedIdx === `day:${i}` ? C.green : C.text), flex: 1, padding: "10px 6px", fontSize: 13, border: `1px solid ${C.border}` }}>
+                            {copiedIdx === `day:${i}` ? t("log.consultAiDone") : t("split.aiPick")}
+                          </button>
+                        </div>
+                        <div role="status" style={{ fontSize: 12, color: C.green, height: 17, marginTop: 6 }}>
+                          {copiedIdx === `day:${i}` ? t("log.pasteHint") : ""}
+                        </div>
+                      </div>
+                    ) : (
+                    /* ヘッダー行は▲▼・今日にする・編集で埋まっているので、この行に置く。
                         ペースト注記はボタンの左に横並びにする(下に出すと、Dayの数だけ
                         高さを常時確保することになる)。カードは丸ごとタップで記録画面へ
-                        飛ぶ領域なので、伝播を止めないと押した瞬間に画面が変わる。 */}
+                        飛ぶ領域なので、伝播を止めないと押した瞬間に画面が変わる。 */
                     <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 8, marginTop: 10 }}
                       onClick={e => e.stopPropagation()}>
                       <span role="status" style={{ fontSize: 12, color: C.green, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
@@ -4347,15 +4458,29 @@ function App() {
                         {copiedIdx === `day:${i}` ? t("log.consultAiDone") : t("log.consultAi")}
                       </button>
                     </div>
+                    )}
 
                     {/* 種目の登録(この日の固定メニュー) */}
                     {editing ? (
                       <div style={{ marginTop: 12, background: C.bg, borderRadius: 10, padding: 10 }}>
                         <div style={{ fontSize: 13, color: C.muted, marginBottom: 8 }}>{t("split.dayExercises")}</div>
+                        {/* 登録種目は縦の一覧で、▲▼ で並べ替える。この順が今日のメニューの並び(改善要望 3c)。
+                            以前はチップで、押すと消えるだけだった(順番を変えられなかった) */}
                         {(d.exercises && d.exercises.length > 0) && (
-                          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
-                            {d.exercises.map(n => (
-                              <button key={n} onClick={() => toggleDayExercise(i, n)} style={{ ...chip(true, C.red) }}>{exName(n)} ✕</button>
+                          <div style={{ marginBottom: 10 }}>
+                            {d.exercises.map((n, k) => (
+                              <div key={n} style={{ display: "flex", alignItems: "center", gap: 4, padding: "6px 0", borderBottom: k < d.exercises.length - 1 ? `1px solid ${C.border}` : "none" }}>
+                                <span style={{ color: C.muted, fontSize: 12, width: 18, flexShrink: 0 }}>{k + 1}</span>
+                                <span style={{ flex: 1, minWidth: 0, fontSize: 14 }}>{exName(n)}</span>
+                                <button onClick={() => moveDayExercise(i, n, -1)} disabled={k === 0} aria-label={t("log.moveUp")} className="tapArea"
+                                  style={{ ...btn("transparent", k === 0 ? C.border : C.muted), width: 30, height: 30, padding: 0, display: "grid", placeItems: "center", cursor: k === 0 ? "default" : "pointer" }}>
+                                  <Icon name="up" size={16} /></button>
+                                <button onClick={() => moveDayExercise(i, n, 1)} disabled={k === d.exercises.length - 1} aria-label={t("log.moveDown")} className="tapArea"
+                                  style={{ ...btn("transparent", k === d.exercises.length - 1 ? C.border : C.muted), width: 30, height: 30, padding: 0, display: "grid", placeItems: "center", cursor: k === d.exercises.length - 1 ? "default" : "pointer" }}>
+                                  <Icon name="down" size={16} /></button>
+                                <button onClick={() => toggleDayExercise(i, n)} aria-label={t("split.removeExerciseAria", { name: exName(n) })} className="tapArea"
+                                  style={{ ...btn("transparent", C.muted), width: 30, height: 30, padding: 0, fontSize: 14 }}>✕</button>
+                              </div>
                             ))}
                           </div>
                         )}
@@ -4371,21 +4496,33 @@ function App() {
                           }}
                           placeholder={t("picker.searchPlaceholder")}
                           style={{ width: "100%", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 12px", color: C.text, fontSize: 16, fontFamily: "inherit", marginBottom: 8 }} />
-                        <div style={{ maxHeight: 240, overflowY: "auto" }}>
-                          {dayPickerList.map(e => {
-                            const on = (d.exercises || []).includes(e.n);
-                            return (
-                              <button key={e.n} onClick={() => toggleDayExercise(i, e.n)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, width: "100%", textAlign: "left", background: on ? C.surface2 : "transparent", border: `1px solid ${on ? C.text : C.border}`, borderRadius: 8, padding: "8px 10px", marginBottom: 5, cursor: "pointer", color: C.text, fontSize: 13, fontFamily: "inherit" }}>
-                                <span style={{ minWidth: 0 }}>{on ? "✓ " : ""}{exName(e.n)}{recentNames.includes(e.n) && <span style={{ color: C.muted, fontSize: 11, marginLeft: 6 }}>{t("common.recent")}</span>}</span>
-                                <span style={{ color: C.muted, fontSize: 12, flexShrink: 0 }}>{muscleName(e.m)}{t("common.sep")}{eqName(e.eq)}</span>
-                              </button>
-                            );
-                          })}
-                          {/* 検索で0件なら下の作成パネルが同じことを言うので、ここは部位で絞って0件のときだけ */}
-                          {dayPickerList.length === 0 && !daySearch.trim() && (
-                            <div style={{ color: C.muted, fontSize: 13, textAlign: "center", padding: 8 }}>{t("split.noBuiltIn")}</div>
-                          )}
-                        </div>
+                        {/* 以前は 240px の枠の中でスクロールさせていた(枠の中と画面の2重のスクロールになっていた)。
+                            画面ごとスクロールさせ、部位の見出しで区切る(改善要望 3b)。
+                            部位も検索語も無いときは全種目が並んで長くなるだけなので、先に部位を選んでもらう(3a) */}
+                        {!daySearch.trim() && d.muscles.length === 0 ? (
+                          <div style={{ color: C.muted, fontSize: 13, padding: "4px 0 8px" }}>{t("split.pickMuscleFirst")}</div>
+                        ) : (
+                          <div>
+                            {dayPickerGroups.map(g => (
+                              <div key={g.m || "-"}>
+                                <div style={{ fontSize: 12, fontWeight: 700, color: C.muted, margin: "10px 0 6px" }}>{g.m ? muscleName(g.m) : t("settings.other")}</div>
+                                {g.items.map(e => {
+                                  const on = (d.exercises || []).includes(e.n);
+                                  return (
+                                    <button key={e.n} onClick={() => toggleDayExercise(i, e.n)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, width: "100%", textAlign: "left", background: on ? C.surface2 : "transparent", border: `1px solid ${on ? C.text : C.border}`, borderRadius: 8, padding: "8px 10px", marginBottom: 5, cursor: "pointer", color: C.text, fontSize: 13, fontFamily: "inherit" }}>
+                                      <span style={{ minWidth: 0 }}>{on ? "✓ " : ""}{exName(e.n)}{recentNames.includes(e.n) && <span style={{ color: C.muted, fontSize: 11, marginLeft: 6 }}>{t("common.recent")}</span>}</span>
+                                      <span style={{ color: C.muted, fontSize: 12, flexShrink: 0 }}>{eqName(e.eq)}</span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            ))}
+                            {/* 検索で0件なら下の作成パネルが同じことを言うので、ここは部位で絞って0件のときだけ */}
+                            {dayPickerList.length === 0 && !daySearch.trim() && (
+                              <div style={{ color: C.muted, fontSize: 13, textAlign: "center", padding: 8 }}>{t("split.noBuiltIn")}</div>
+                            )}
+                          </div>
+                        )}
                         {daySearch.trim() && !findExercise(daySearch.trim()) && (
                           <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 10, marginTop: 4 }}>
                             <div style={{ fontSize: 13, color: C.muted, marginBottom: 8 }}>{t("picker.addCustom", { name: daySearch.trim() })}</div>
@@ -4408,11 +4545,17 @@ function App() {
                     )}
 
                     {goToLog && <div style={{ marginTop: 10, fontSize: 13, color: C.red, fontWeight: 700 }}>{t("split.tapToLog")}</div>}
-                    {editing && <button onClick={() => removeDay(i)} style={{ ...btn("transparent", "#FF5A4E"), fontSize: 13, padding: "8px 0 0" }}>{t("split.deleteDay")}</button>}
+                    {editing && (
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginTop: 12 }}>
+                        <button onClick={() => removeDay(i)} style={{ ...btn("transparent", "#FF5A4E"), fontSize: 13, padding: "8px 0" }}>{t("split.deleteDay")}</button>
+                        {/* 末尾の「＋ Dayを追加」まで戻らずに、間に Day を挟めるように(改善要望 3e) */}
+                        <button onClick={() => addDay(i + 1)} style={{ ...btn(C.surface2, C.text), fontSize: 13, padding: "8px 12px", border: `1px dashed ${C.border}` }}>{t("split.addDayAfter")}</button>
+                      </div>
+                    )}
                   </div>
                 );
               })}
-              <button onClick={addDay} style={{ ...btn(C.surface2, C.text), width: "100%", padding: 12, fontSize: 13, border: `1px dashed ${C.border}` }}>{t("split.addDay")}</button>
+              <button onClick={() => addDay()} style={{ ...btn(C.surface2, C.text), width: "100%", padding: 12, fontSize: 13, border: `1px dashed ${C.border}` }}>{t("split.addDay")}</button>
 
               <div style={{ background: C.surface, borderRadius: 14, padding: 14, border: `1px solid ${C.border}`, marginTop: 16 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
@@ -4466,7 +4609,7 @@ function App() {
           {offerSaveAsMenu && (
             <div style={{ background: C.surface, borderRadius: 14, padding: 14, border: `1px solid ${C.yellow}`, marginBottom: 12 }}>
               <div style={{ fontSize: 13, lineHeight: 1.7, marginBottom: 10 }}>
-                {t("menu.savePrompt")}
+                {offerSaveAsMenu.dayIdx != null ? t("menu.saveToDayPrompt", { day: dayName(offerSaveAsMenu.dayName) }) : t("menu.savePrompt")}
               </div>
               <div style={{ display: "flex", gap: 8 }}>
                 <button onClick={applyOfferedMenu} style={{ ...btn(C.red), flex: 1, padding: 10, fontSize: 14 }}>{t("menu.saveYes")}</button>

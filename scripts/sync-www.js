@@ -38,6 +38,7 @@ const DOMAIN_FILES = [
   "storage.js",
   "backupValidation.js",
   "volume.js",
+  "dayPlan.js",
   "coefficients.js",
   "insight.js",
   "restNotifications.js",
