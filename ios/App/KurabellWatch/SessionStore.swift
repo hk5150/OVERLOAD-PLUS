@@ -14,6 +14,18 @@ final class SessionStore: NSObject, ObservableObject {
 
     @Published private(set) var base: WatchSnapshot?
     @Published private(set) var pending: [WatchOp] = []
+    // 完了画面(改善要望 12)。出している間だけ値が入る。閉じたら id を覚えて、同じ記録では二度と出さない
+    @Published var showingFinished: WatchSnapshot.Finished?
+    // この Watch がワークアウトを記録していたときの心拍の平均と消費カロリー(WorkoutManager.finish が入れる)
+    @Published var workoutStats: WorkoutStats?
+    struct WorkoutStats: Equatable {
+        var recordStartAt: Double
+        var avgHeartRate: Double?
+        var kcal: Double?
+    }
+    private let finishedShownKey = "watch.finishedShown.v1"
+    // 保存から時間がたったものは出さない(何日も後に Watch のアプリを開いて「お疲れ様でした」は変なので)
+    private static let finishedMaxAge: Double = 12 * 3600 * 1000
 
     private let defaults = UserDefaults.standard
     private let baseKey = "watch.snapshot.v1"
@@ -38,6 +50,12 @@ final class SessionStore: NSObject, ObservableObject {
         super.init()
         if ProcessInfo.processInfo.arguments.contains("-KurabellSample") {
             base = SampleData.snapshot(now: Date())
+            // スクリーンショット用: -KurabellFinished 1 で完了画面を出した状態から始める
+            if SampleData.launchValue("-KurabellFinished") != nil {
+                let f = SampleData.finished(now: Date())
+                showingFinished = f
+                workoutStats = .init(recordStartAt: f.id, avgHeartRate: 118, kcal: 286)
+            }
             return
         }
         if let data = defaults.data(forKey: baseKey) {
@@ -46,6 +64,22 @@ final class SessionStore: NSObject, ObservableObject {
         if let data = defaults.data(forKey: pendingKey) {
             pending = (try? JSONDecoder().decode([WatchOp].self, from: data)) ?? []
         }
+        // アプリが開いていない間に保存の知らせが届いていたら、開いたときに一度だけ出す
+        presentFinishedIfNeeded()
+    }
+
+    // MARK: - 完了画面
+
+    private func presentFinishedIfNeeded() {
+        guard showingFinished == nil, let f = base?.finished else { return }
+        let shown = defaults.object(forKey: finishedShownKey) as? Double
+        guard f.id != shown, Date().timeIntervalSince1970 * 1000 - f.endAt < Self.finishedMaxAge else { return }
+        showingFinished = f
+    }
+
+    func finishedDismissed(_ f: WatchSnapshot.Finished) {
+        defaults.set(f.id, forKey: finishedShownKey)
+        if showingFinished?.id == f.id { showingFinished = nil }
     }
 
     func activate() {
@@ -122,6 +156,7 @@ final class SessionStore: NSObject, ObservableObject {
         if snap.state != .active { pending.removeAll { $0.kind != "workout" } }
         save()
         syncWorkout(with: snap)
+        presentFinishedIfNeeded()
         // Watch で始めた休憩が iPhone で確認された後に、iPhone 側で止まった・別の休憩が始まったら、
         // Watch の通知を取り消す(確認前の古いスナップショットでは判断しない)
         if let own = ownRestStartAt, !pending.contains(where: { $0.restStartAt == own }) {

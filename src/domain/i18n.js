@@ -277,6 +277,12 @@ const STRINGS = {
   "rest.finish":       { ja: "終了",                   en: "Finish" },
   "watch.startOnPhone": { ja: "iPhoneで記録を開始すると、ここで入力できます", en: "Start a workout on your iPhone to log sets here" },
   "watch.next":        { ja: "次",                     en: "Next" },
+  // Watch の完了画面(改善要望 12)
+  "watch.finishedTitle": { ja: "お疲れ様でした", en: "Great work" },
+  "watch.finishedMin":   { ja: "{n}分", en: "{n} min" },
+  "watch.finishedCounts": { ja: "{e}種目・{s}セット", en: "{e} exercises · {s} sets" },
+  "watch.prTitle":       { ja: "1RM更新", en: "New 1RM" },
+  "watch.avgHr":         { ja: "平均心拍", en: "Avg HR" },
   "watch.addSet":      { ja: "セットを追加",           en: "Add set" },
   "rest.notifyTitle":  { ja: "インターバル",           en: "Rest timer" },
   "rest.notifyBody":   { ja: "{n}分経過しました。次のセットへ。", en: "{n} min elapsed. Time for your next set." },

@@ -314,6 +314,7 @@ const DRAFT_KEY = "workout-draft-v1"; // 入力途中の記録(アプリが落�
 // Apple Watch のワークアウトとヘルスケアの書き込みの受け渡し(docs/Watchアプリ.md の「ワークアウト」)
 const WATCH_HEALTH_PENDING_KEY = "watch-health-pending-v1";
 const WATCH_LAST_SAVED_KEY = "watch-last-saved-v1";
+const WATCH_FINISHED_KEY = "watch-finished-v1"; // 保存したら Watch に出す完了画面の中身(改善要望 12)
 const PRE_IMPORT_BACKUP_KEY = "workout-log-v1-pre-import"; // バックアップ復元前のデータ退避(復元に失敗した場合の保険)
 // ヘッダーのバージョンバッジとバックアップのappVersionで共有する単一の定数。
 // sw.js の CACHE 定数とは tests/version.test.js が数字の一致を機械的に縛っている(CLAUDE.md参照)。
@@ -1048,6 +1049,9 @@ function App() {
   // 直近に保存した記録 { key, startAt, endAt }。Watchはこれを見て自分のワークアウトを保存するか破棄するか決める。
   // 保存直後にアプリが終了されても届くよう、store にも残す(WATCH_LAST_SAVED_KEY)
   const [watchLastSaved, setWatchLastSaved] = useState(null);
+  // 直近に保存した記録の「お疲れ様でした」の中身(改善要望 12)。Watch は id ごとに1回だけ出す。
+  // Watch のアプリが開いていないと次に開いたときに出すので、iPhone を再起動しても送り続けられるよう store にも残す
+  const [watchFinished, setWatchFinished] = useState(null);
   // Watchに任せたヘルスケアの書き込み。Watchが "saved" を返すまで残し、"discarded" や
   // 1時間の無応答なら iPhone が時刻だけ書く(settleWatchHealth。store に残す)
   const watchHealthPendingRef = useRef([]);
@@ -1143,6 +1147,8 @@ function App() {
         if (p?.value) watchHealthPendingRef.current = JSON.parse(p.value) || [];
         const ls = await store.get(WATCH_LAST_SAVED_KEY);
         if (ls?.value) setWatchLastSaved(JSON.parse(ls.value));
+        const fin = await store.get(WATCH_FINISHED_KEY);
+        if (fin?.value) setWatchFinished(JSON.parse(fin.value));
       } catch { /* 無ければ空 */ }
 
       // 入力途中の記録を復元(24時間以内のものだけ)
@@ -2197,6 +2203,7 @@ function App() {
         applied: watchApplied,
         recordStartAt: startAt,
         lastSaved: watchLastSaved,
+        finished: watchFinished,
         // 記録画面の固定バーと同じ基準・同じ文言(volumeGoalKey)。Watch で入れたセットは、iPhone が合流させて
         // 送り直すまでリングに入らない(Watch はボリュームを計算しない)
         volume: compareBase && compareBase.avg > 0 ? (() => {
@@ -2218,7 +2225,7 @@ function App() {
       syncWatchSnapshot(snap);
     }, 400);
     return () => clearTimeout(timer);
-  }, [loaded, today, restStartAt, todayDay, autoMenu, watchApplied, workouts, lang, unit, customExercises, exerciseOverrides, startAt, watchLastSaved, profile.bodyweight]);
+  }, [loaded, today, restStartAt, todayDay, autoMenu, watchApplied, workouts, lang, unit, customExercises, exerciseOverrides, startAt, watchLastSaved, watchFinished, profile.bodyweight]);
 
   // カロリー(METs×体重×時間, 目安)
   const estimateKcal = (min) => Math.round(5.0 * profile.bodyweight * (min / 60));
@@ -2271,6 +2278,23 @@ function App() {
       return best > 0 && liveBest1RM(ex) > best + 0.01;
     });
     const totalVolume = exercises.reduce((a, ex) => a + exVolume(ex), 0);
+    // Watch の完了画面(改善要望 12)。比べる基準(compareBase)と自己ベスト(prMap)は保存前の履歴から作られているので、
+    // persist より前に作る。文言はすべてここで作り、Watch は並べるだけ(心拍とカロリーだけは Watch 自身の値)
+    const finishedSummary = (() => {
+      const diff = compareBase && compareBase.avg > 0 ? totalVolume - compareBase.avg : null;
+      return {
+        id: start, endAt: end,
+        title: t("watch.finishedTitle"),
+        stats: [t("watch.finishedMin", { n: durationMin }),
+          t("watch.finishedCounts", { e: exercises.length, s: exercises.reduce((a, ex) => a + ex.sets.filter(x => !x.warmup).length, 0) })],
+        volume: `${Math.round(toU(totalVolume)).toLocaleString()}${uLabel()}`,
+        lines: diff == null ? [] : t(volumeGoalKey(compareBase, diff >= 0), { n: compareBase.n, v: Math.round(toU(Math.abs(diff))).toLocaleString(), unit: uLabel() }).split("|"),
+        over: diff != null && diff >= 0,
+        prTitle: t("watch.prTitle"),
+        prs: today.filter(ex => { const best = prMap[ex.name]?.best1RM || 0; return best > 0 && liveBest1RM(ex) > best + 0.01; }).map(ex => exName(ex.name)),
+        hrLabel: t("watch.avgHr"),
+      };
+    })();
     const entry = {
       date: new Date(end).toISOString(), session: todayDay ? todayDay.name : undefined,
       startAt: new Date(start).toISOString(), endAt: new Date(end).toISOString(),
@@ -2319,6 +2343,8 @@ function App() {
     // watchLiveFor はここでは降ろさない。startAt が null になれば watchLive は false になる。ここで降ろすと、
     // 下の await の間の render で startAt・restStartAt が残ったまま抑止だけ外れ、Live Activity が一瞬出る
     try { await store.set(WATCH_LAST_SAVED_KEY, JSON.stringify(lastSaved)); } catch { /* noop */ }
+    setWatchFinished(finishedSummary);
+    try { await store.set(WATCH_FINISHED_KEY, JSON.stringify(finishedSummary)); } catch { /* noop */ }
     if (handToWatch) {
       watchHealthPendingRef.current = [...watchHealthPendingRef.current,
         { recordStartAt: start, startAt: entry.startAt, endAt: entry.endAt, savedAt: Date.now() }];

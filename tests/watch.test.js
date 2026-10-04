@@ -29,6 +29,13 @@ describe("buildWatchSnapshot", () => {
     expect(buildWatchSnapshot({ now: 1, labels: LABELS, fmtW, restStartAt: 100, exercises: [bench([])] }).restStartAt).toBe(100);
   });
 
+  it("完了画面の中身は記録していない間だけ送る(次の記録を始めたら外す。改善要望 12)", () => {
+    const { buildWatchSnapshot } = load();
+    const finished = { id: 1000, endAt: 2000, title: "お疲れ様でした", stats: [], volume: "1kg", lines: [], over: false, prTitle: "", prs: [], hrLabel: "" };
+    expect(buildWatchSnapshot({ now: 1, labels: LABELS, fmtW, finished }).finished).toEqual(finished);
+    expect(buildWatchSnapshot({ now: 1, labels: LABELS, fmtW, finished, recordStartAt: 5000 }).finished).toBeNull();
+  });
+
   it("ボリュームのリングの値は記録中だけ送る(改善要望 8)", () => {
     const { buildWatchSnapshot } = load();
     const volume = { ratio: 0.6, now: "1,200kg", lines: ["過去3回平均まで", "あと800kg"], over: false };
@@ -381,6 +388,18 @@ describe("Watch アプリのネイティブ設定", () => {
     const editor = views.slice(views.indexOf("private func stepWeight"), views.indexOf("private func crossed"));
     expect(editor.slice(0, editor.indexOf("private func stepReps"))).toContain(".fast");
     expect(editor.slice(editor.indexOf("private func stepReps"))).not.toContain(".fast");
+  });
+
+  it("保存したら完了画面を一度だけ出し、タップか15秒で閉じる(改善要望 12)", () => {
+    const views = read("ios/App/KurabellWatch/Views.swift");
+    const fin = views.slice(views.indexOf("struct FinishedView"));
+    expect(fin).toContain("play(.success)");
+    expect(fin).toContain("Task.sleep(nanoseconds: 15_000_000_000)");
+    expect(fin).toContain(".onTapGesture { close() }");
+    const store = read("ios/App/KurabellWatch/SessionStore.swift");
+    expect(store).toMatch(/func finishedDismissed[\s\S]*?defaults\.set\(f\.id, forKey: finishedShownKey\)/);
+    // 心拍とカロリーは Watch がそのワークアウトを保存するときに読む
+    expect(read("ios/App/KurabellWatch/WorkoutManager.swift")).toMatch(/averageQuantity\(\)[\s\S]*?finishWorkout\(\)/);
   });
 
   it("iPhone から起動されたワークアウトを受けられる(HealthKit・バックグラウンド・利用目的の文言)", () => {

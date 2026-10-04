@@ -47,6 +47,85 @@ struct RootView: View {
                 IdleView()
             }
         }
+        // 保存したら「お疲れ様でした」(改善要望 12)。閉じ方を問わず、閉じたら同じ記録では二度と出さない
+        .sheet(item: $store.showingFinished, onDismiss: {}) { f in
+            FinishedView(finished: f, stats: store.workoutStats?.recordStartAt == f.id ? store.workoutStats : nil) {
+                store.finishedDismissed(f)
+            }
+        }
+    }
+}
+
+// MARK: - 完了画面
+
+// タップか15秒で閉じる。出たときに成功の振動を返す。
+// 心拍とカロリーは、この Watch がその記録のワークアウトを記録していたときだけ(iPhone は知らないので Watch の値)
+struct FinishedView: View {
+    let finished: WatchSnapshot.Finished
+    let stats: SessionStore.WorkoutStats?
+    let close: () -> Void
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(finished.title)
+                    .font(.system(size: 20, weight: .bold))
+                    .foregroundStyle(Palette.text)
+                Text(finished.stats.joined(separator: "  "))
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Palette.muted)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(finished.volume).numeric(26)
+                        .foregroundStyle(Palette.text)
+                    if !finished.lines.isEmpty {
+                        Text(finished.lines.joined(separator: " "))
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(finished.over ? Palette.green : Palette.muted)
+                            .lineLimit(2)
+                    }
+                }
+                .padding(.top, 2)
+                if !finished.prs.isEmpty {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Label(finished.prTitle, systemImage: "bolt.fill")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(Palette.green)
+                        ForEach(finished.prs, id: \.self) { name in
+                            Text(name).font(.system(size: 14, weight: .semibold)).foregroundStyle(Palette.text).lineLimit(1)
+                        }
+                    }
+                    .padding(.top, 2)
+                }
+                if let s = stats, s.avgHeartRate != nil || s.kcal != nil {
+                    HStack(spacing: 12) {
+                        if let hr = s.avgHeartRate {
+                            VStack(alignment: .leading, spacing: 0) {
+                                Text(finished.hrLabel).font(.system(size: 11, weight: .semibold)).foregroundStyle(Palette.muted)
+                                Text("\(Int(hr.rounded()))").numeric(20).foregroundStyle(Palette.text)
+                            }
+                        }
+                        if let kcal = s.kcal {
+                            VStack(alignment: .leading, spacing: 0) {
+                                Text("kcal").font(.system(size: 11, weight: .semibold)).foregroundStyle(Palette.muted)
+                                Text("\(Int(kcal.rounded()))").numeric(20).foregroundStyle(Palette.text)
+                            }
+                        }
+                    }
+                    .padding(.top, 2)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 4)
+        }
+        .contentShape(Rectangle())
+        .onTapGesture { close() }
+        .onAppear { WKInterfaceDevice.current().play(.success) }
+        .task {
+            try? await Task.sleep(nanoseconds: 15_000_000_000)
+            if !Task.isCancelled { close() }
+        }
+        .onDisappear { close() } // × やスワイプで閉じたときも、出したことにする
+        .background(Color.black.ignoresSafeArea())
     }
 }
 
