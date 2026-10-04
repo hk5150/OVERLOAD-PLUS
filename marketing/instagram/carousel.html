@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>KURABELL Carousel</title>
+<!-- フィード用カルーセル(4:5、1080×1350)。?s=1〜5 で1枚ずつ表示し、Playwrightでスクリーンショットを撮る -->
+<style>
+@font-face { font-family: "Barlow C"; font-weight: 800; src: url("assets/barlow-condensed-800-latin.woff2") format("woff2"); }
+:root { --bg: #141517; --line: #2E3237; --text: #F2F0EB; --muted: #A3A8B0; --yellow: #E8B33C; --green: #4CAF6E; }
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { width: 1080px; height: 1350px; background: var(--bg); overflow: hidden; }
+body { color: var(--text); font-family: "Hiragino Sans", "Hiragino Kaku Gothic ProN", sans-serif; }
+.scene { display: none; position: relative; width: 1080px; height: 1350px; overflow: hidden; }
+.scene.on { display: block; }
+.num { font-family: "Barlow C"; font-weight: 800; }
+h1 { position: absolute; left: 84px; right: 60px; top: 120px; font-weight: 800; font-size: 92px; line-height: 1.22; letter-spacing: -.01em; }
+h1 em { font-style: normal; color: var(--yellow); }
+.lead { position: absolute; left: 84px; right: 84px; font-size: 38px; line-height: 1.6; color: var(--muted); font-weight: 600; }
+.lead b { color: var(--text); }
+.ui { position: absolute; left: 40px; width: 1000px; display: block; }
+/* ページ送り。左下に「n / 5」と、最後以外は「→」 */
+.pager { position: absolute; left: 84px; bottom: 64px; font-size: 34px; color: var(--muted); letter-spacing: .04em; }
+.pager b { color: var(--text); }
+.logo { position: absolute; right: 84px; bottom: 60px; font-family: "Barlow C"; font-weight: 800; font-size: 40px; letter-spacing: .08em; color: var(--muted); }
+
+/* 1: 原則(表紙) */
+#s1 .term { position: absolute; left: 84px; top: 520px; font-size: 32px; color: var(--yellow); font-weight: 700; letter-spacing: .02em; }
+#s1 .ui { top: 590px; left: 84px; width: 720px; }
+
+/* 2: 前回比較 */
+#s2 .lead { top: 470px; }
+.cmp { position: absolute; left: 84px; right: 84px; top: 580px; }
+.cmp .row { display: grid; grid-template-columns: 120px 1fr auto; align-items: baseline; padding: 16px 0; border-bottom: 2px solid var(--line); }
+.cmp .lbl { font-size: 38px; color: var(--muted); font-weight: 700; }
+.cmp .val { font-size: 112px; line-height: 1; }
+.cmp .val small { font-family: "Hiragino Sans", sans-serif; font-size: 38px; font-weight: 700; color: var(--muted); margin: 0 10px 0 4px; }
+.cmp .today .lbl { color: var(--text); }
+.cmp .today .val { color: var(--green); }
+.cmp .diff { font-size: 60px; color: var(--green); }
+#s2 .ui { top: 940px; }
+
+/* 3: Watch。見出しを左、Watchを右に置いて縦を節約する */
+#s3 .lead { top: 360px; }
+.watch { position: absolute; left: 50%; transform: translateX(-50%); top: 520px; width: 560px; height: 668px;
+  padding: 30px; border-radius: 130px; background: #0B0B0C; border: 12px solid #2A2C30; box-shadow: 0 30px 80px rgba(0,0,0,.5); }
+.watch img { width: 100%; height: 100%; border-radius: 96px; display: block; object-fit: cover; }
+.crown { position: absolute; left: calc(50% + 288px); top: 740px; width: 24px; height: 104px; border-radius: 10px; background: #2A2C30; }
+
+/* 4: 頭打ち */
+#s4 .lead { top: 360px; }
+#s4 .ui { top: 620px; left: 60px; width: 960px; }
+#s4 .ring { position: absolute; left: 75px; top: 703px; width: 820px; height: 76px; border: 6px solid var(--yellow); border-radius: 50px; }
+#s4 .note b { color: var(--text); }
+#s4 .note { position: absolute; left: 84px; right: 84px; top: 980px; font-size: 36px; line-height: 1.7; color: var(--muted); font-weight: 600; }
+
+/* 5: 行動 */
+.photo { position: absolute; inset: 0; background-size: cover; background-position: center 70%; }
+.shade { position: absolute; inset: 0; background: linear-gradient(rgba(20,21,23,.94) 0%, rgba(20,21,23,.7) 45%, rgba(20,21,23,.1) 80%); }
+#s5 .lead { top: 450px; color: #D6D3CC; }
+.store { position: absolute; left: 84px; top: 620px; display: flex; align-items: center; gap: 32px; }
+.store img { width: 150px; height: 150px; border-radius: 34px; }
+.store .name { font-family: "Barlow C"; font-weight: 800; font-size: 72px; letter-spacing: .03em; line-height: 1; }
+.store .where { font-size: 34px; color: #D6D3CC; margin-top: 12px; }
+#s5 .pager { color: #D6D3CC; }
+</style>
+</head>
+<body>
+
+<section class="scene" id="s1">
+  <h1>前回より、<br><em>少しだけ重く。</em><br><em>少しだけ多く。</em></h1>
+  <p class="term">プログレッシブオーバーロード(漸進性過負荷)</p>
+  <img class="ui" src="assets/chart.png" alt="">
+  <p class="pager"><b>1</b> / 5  →</p>
+</section>
+
+<section class="scene" id="s2">
+  <h1>KURABELLは、<br><em>前回を超えるための</em><br>記録アプリ。</h1>
+  <p class="lead">重量・回数・余力まで、前回と比べる。</p>
+  <div class="cmp">
+    <div class="row"><span class="lbl">前回</span><span class="val num">70<small>kg ×</small>10<small>回</small></span><span></span></div>
+    <div class="row today"><span class="lbl">今日</span><span class="val num">72.5<small>kg ×</small>10<small>回</small></span><span class="diff num">+2.5</span></div>
+  </div>
+  <img class="ui" src="assets/row1.png" alt="">
+  <p class="pager"><b>2</b> / 5  →</p>
+</section>
+
+<section class="scene" id="s3">
+  <h1>手首でも、<br><em>前回が見える。</em></h1>
+  <p class="lead">Apple Watch で −/+ を押すだけ。<br>iPhone で始めると、自動で開く。</p>
+  <div class="watch"><img src="assets/watch2x.png" alt=""></div>
+  <div class="crown"></div>
+  <p class="pager"><b>3</b> / 5  →</p>
+</section>
+
+<section class="scene" id="s4">
+  <h1>伸びが止まったら、<br><em>教えてくれる。</em></h1>
+  <p class="lead">上げるかどうかを決めるのは、<b>あなた。</b></p>
+  <img class="ui" src="assets/plateau.png" alt="">
+  <div class="ring"></div>
+  <p class="note">同じ重量が3回続き、回数も落ちていないときに表示。<br><b>記録が教えてくれるのは、事実だけ。</b></p>
+  <p class="pager"><b>4</b> / 5  →</p>
+</section>
+
+<section class="scene" id="s5">
+  <div class="photo" style="background-image:url(assets/plates.png)"></div>
+  <div class="shade"></div>
+  <h1>最初の<em class="num" style="font-size:124px">10</em>回は、<br>全部無料。</h1>
+  <p class="lead">買い切り・サブスクなし・登録なし</p>
+  <div class="store">
+    <img src="assets/icon.png" alt="">
+    <div>
+      <div class="name">KURABELL</div>
+      <div class="where">プロフィールのリンクから</div>
+    </div>
+  </div>
+  <p class="pager"><b>5</b> / 5</p>
+</section>
+
+<script>
+  const n = new URLSearchParams(location.search).get("s") || "1";
+  document.getElementById("s" + n).classList.add("on");
+</script>
+</body>
+</html>
