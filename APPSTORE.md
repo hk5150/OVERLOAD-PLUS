@@ -187,7 +187,7 @@ This app requires no account. Logging, totals, charts and backups run entirely o
 
 In-app purchase: the app is free for the first 10 saved workouts. Saving the 11th workout shows a paywall offering a one-time non-consumable unlock (com.hajime5150.kurabellplus.unlock). Previously saved workouts, charts and backups remain accessible without purchasing. "Restore Purchases" is available in the Settings tab.
 
-Each exercise card has a "YouTube" item in its "⋯" menu that optionally opens the system browser to YouTube search results, passing only the exercise name. The "Ask AI" button copies the user's log to the clipboard and opens the AI chat site selected in Settings; nothing is placed in the URL and nothing is transmitted by the app itself. Unless the reviewer taps one of these buttons, the app makes no network requests (apart from StoreKit).
+Each exercise card has a "Form" button (in its row of actions) that optionally opens the system browser to YouTube search results, passing only the exercise name. The "Ask AI" button copies the user's log to the clipboard and opens the AI chat site selected in Settings; nothing is placed in the URL and nothing is transmitted by the app itself. Unless the reviewer taps one of these buttons, the app makes no network requests (apart from StoreKit).
 
 HealthKit: off by default. When the user turns on "Connect to Apple Health" in the Settings tab, the app asks for permission and then (1) saves each workout the user logs as Traditional Strength Training with its start and end times only (no calories), (2) reads the latest body weight to calculate bodyweight exercises, and (3) saves the body weight the user enters in Settings. Deleting a workout in the app also deletes the workout the app wrote to Health. Health data stays on the device; it is never sent to a server or used for advertising.
 
@@ -221,7 +221,7 @@ App Store Connectの「App Privacy」セクションでは、以下の方針で�
   - 入力されたトレーニング記録は端末のローカルストレージにのみ保存され、アプリ自身が外部サーバーへ送信することはありません。
   - アナリティクス・広告・トラッキングSDK、サードパーティ連携は組み込んでいません。
   - 外部サービスを開く機能が2つありますが、いずれも `window.open()` によるOS標準の外部リンク遷移で、SDK埋め込みではありません。どちらもアプリから外部へデータを送信しないため、「収集なし」の回答で問題ありません。
-    - **YouTube検索**: 種目カードの「⋯」メニューの「YouTube」。種目名 + 固定の検索語のみをURLに載せます。トレーニング記録は渡しません。
+    - **YouTube検索**: 種目カードの操作の行の「フォーム」(1.3 から。1.2 までは「⋯」メニューの「YouTube」)。種目名 + 固定の検索語のみをURLに載せます。トレーニング記録は渡しません。
     - **AIに相談**: 記録タブの「AI相談」ボタンと履歴タブの「AIに相談」ボタン。押すと記録を**端末のクリップボードにコピー**し、設定で選んだAIチャットのページ(ChatGPT / Claude / Gemini / Perplexity / Grok)を開くだけです。**URLのクエリには記録を一切載せていません**(この方式を意図的に避けています。理由は `docs/vite移行.md` を参照)。記録がAIサービスに渡るのは、ユーザー自身がチャット欄へ貼り付けたときだけで、アプリの送信行為ではありません。
   - **ヘルスケア(HealthKit)連携**(iOS、既定オフ): ワークアウトと体重をヘルスケアと端末内でやりとりするだけで、外部へは送信しません。
     Appleの定義上「収集」は端末の外へ送ることなので、これも「収集なし」のままでよい。
@@ -272,7 +272,7 @@ Web版で撮っているので、iOSのネイティブ版と見た目が違う�
 
 App内課金: 記録の保存10回までは無料で、11回目の保存時に買い切りのフル解除(非消耗型)を案内します。購入しなくても、それまでの記録・グラフ・バックアップは閲覧できます。「購入を復元」は設定タブにあります。
 
-種目カードの「⋯」メニューに「YouTube」があり、任意でOS標準の外部ブラウザを開いてYouTube検索結果を表示します(種目名のみを検索語として渡します)。「AI相談」ボタンは記録をクリップボードにコピーし、設定で選んだAIチャットのページを開くだけで、URLに記録は載せず、アプリから送信もしません。これらの操作を行わない限り、アプリは(StoreKitを除き)通信を発生させません。
+種目カードの操作の行に「フォーム」ボタンがあり、任意でOS標準の外部ブラウザを開いてYouTube検索結果を表示します(種目名のみを検索語として渡します)。「AI相談」ボタンは記録をクリップボードにコピーし、設定で選んだAIチャットのページを開くだけで、URLに記録は載せず、アプリから送信もしません。これらの操作を行わない限り、アプリは(StoreKitを除き)通信を発生させません。
 
 ヘルスケア(HealthKit)連携: 既定はオフです。設定タブの「ヘルスケアと連携」をオンにすると権限を求め、(1)記録したワークアウトを「従来型筋力トレーニング」として開始・終了時刻のみ書き込み(消費カロリーは書きません)、(2)自重種目の計算のため最新の体重を読み込み、(3)設定で入力した体重を書き込みます。アプリで記録を削除すると、アプリが書き込んだワークアウトもヘルスケアから削除します。ヘルスケアのデータは端末内だけで扱い、外部への送信や広告目的の利用はしません。
 ```

@@ -1,6 +1,6 @@
 ---
 name: kurabell-day-name-is-history-key
-description: Day名はworkoutsのsessionで履歴を引くキー。自動改名・同名Dayで前回比較が切れる/混ざる。プリセットDayは登録0件のまま。autoMenuは前回記録優先
+description: Day名はworkoutsのsessionで履歴を引くキー。自動改名・同名Dayで前回比較が切れる/混ざる。プリセットDayは登録0件のまま。autoMenuはv1.3で登録優先(0→1件の崖)
 metadata:
   type: project
 ---
@@ -15,7 +15,8 @@ v1.3(39ab907)の nextDayName は「名前が autoDayName(muscles) と一致す�
 **Why:** プリセット(SPLIT_PRESETS)は exercises を持たず、addExercise は登録1件以上の Day にしか足さないので、
 プリセット利用者の Day は記録が何十回あっても「登録0件」。「0件 = 最初の種目設定」という前提の機能
 (おまかせ・選ばせるAI依頼文・保存時の登録の申し出)が既存利用者にも出る。
-また autoMenu は lastSameSession > 登録種目 の順なので、記録のある Day では登録種目の並べ替えが今日のメニューに効かない。
+autoMenu は v1.3(975a580)で 登録種目 > lastSameSession に戻った。記録のあるプリセットDayで分割タブから1件だけ登録すると、
+今日のメニューがその1件に縮む(0→1の崖)。記録中の▲▼並べ替えは登録に書かれないので次回に持ち越されなくなった。
 
 **How to apply:** Day 名を変える/新しく付ける差分、「登録0件」で分岐する差分、登録種目の順に意味を持たせる差分では、
 履歴の有無(workouts に session===name があるか)とプリセット利用者を必ず想定する。関連: [[kurabell-remove-undo]]
