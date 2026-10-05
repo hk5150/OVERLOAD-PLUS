@@ -32,14 +32,22 @@ const watchRir = (v) => (v === "" || v == null || isNaN(Number(v)) ? null : Numb
 // recordStartAt: 記録中なら、その記録の startAt(ms)。Watch のワークアウトとこの記録を対応付ける
 // lastSaved: 直近に保存した記録 { key(ヘルスケアの紐づけキー), startAt, endAt }。Watch はこれを見て、
 //            自分のワークアウトを保存する(一致)か破棄する(不一致=破棄された記録)かを決める
+// volume: 今日のボリュームと基準(改善要望 8)。{ ratio(基準に対する割合), now(表示用), lines(「過去3回平均まで」「あと480kg」), over }。
+//         計算と文言は iPhone で済ませる(Watch はリングと文字を並べるだけ)。基準が無ければ null
+// finished: 直近に保存した記録の完了画面の中身(改善要望 12)。{ id(記録の startAt), endAt, title, stats, volume, lines, over, prTitle, prs, hrLabel }。
+//           記録していない間だけ載せる(次の記録を始めたら外す)。Watch は id ごとに1回だけ出す
+// restNotices: 休憩の知らせ [{ min, body }](改善要望 4)。設定で選んだ経過分と、その通知の本文。通知を切っていれば空
 function buildWatchSnapshot({ now, exercises = [], restStartAt = null, dayName = null, menu = [], labels, applied = [], fmtW,
-  recordStartAt = null, lastSaved = null }) {
+  recordStartAt = null, lastSaved = null, volume = null, finished = null, restNotices = [] }) {
   const state = exercises.length > 0 ? "active" : menu.length > 0 ? "menu" : "idle";
   return {
     v: WATCH_SNAPSHOT_VERSION,
     sentAt: now,
     state,
     restStartAt: state === "active" ? restStartAt : null,
+    volume: state === "active" ? volume : null,
+    finished: recordStartAt == null ? finished : null,
+    restNotices,
     // 種目を全部消して一時的に active でなくなっても、記録(startAt)が続いている間は載せ続ける。
     // Watch はこれが消えたときに「記録が終わった」と判断する
     recordStartAt,
@@ -132,6 +140,14 @@ function watchWorkoutFromOps(ops) {
     }
   }
   return found ? found.recordStartAt : null;
+}
+
+// Watch が記録 recordStartAt の休憩の通知を受け持てるか(純粋関数。改善要望 4b)。
+// 1.3 の Watch は started の知らせに restNotify: true を載せる。古い Watch(1.2)は iPhone の休憩を予約しないので、
+// 印が無ければ iPhone が予約し続ける(iPhone だけ先に更新されたとき、休憩の通知がどこからも出なくならないように)
+function watchRestCapableFromOps(ops, recordStartAt) {
+  return (ops || []).some(op => op && op.kind === "workout" && op.status === "started"
+    && op.recordStartAt === recordStartAt && op.restNotify === true);
 }
 
 // Watch が記録 recordStartAt のワークアウトを途中でやめたか(純粋関数)。
@@ -234,6 +250,7 @@ globalThis.watchWeightStep = watchWeightStep;
 globalThis.buildWatchSnapshot = buildWatchSnapshot;
 globalThis.applyWatchOps = applyWatchOps;
 globalThis.watchWorkoutFromOps = watchWorkoutFromOps;
+globalThis.watchRestCapableFromOps = watchRestCapableFromOps;
 globalThis.watchWorkoutStopped = watchWorkoutStopped;
 globalThis.settleWatchHealth = settleWatchHealth;
 globalThis.WATCH_HEALTH_CONFIRM_MS = WATCH_HEALTH_CONFIRM_MS;

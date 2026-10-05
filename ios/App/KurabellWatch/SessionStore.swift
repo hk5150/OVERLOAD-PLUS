@@ -14,13 +14,31 @@ final class SessionStore: NSObject, ObservableObject {
 
     @Published private(set) var base: WatchSnapshot?
     @Published private(set) var pending: [WatchOp] = []
+    // 完了画面(改善要望 12)。出している間だけ値が入る。閉じたら id を覚えて、同じ記録では二度と出さない
+    @Published var showingFinished: WatchSnapshot.Finished?
+    // この Watch がワークアウトを記録していたときの心拍の平均と消費カロリー(WorkoutManager.finish が入れる)
+    @Published var workoutStats: WorkoutStats?
+    struct WorkoutStats: Equatable {
+        var recordStartAt: Double
+        var avgHeartRate: Double?
+        var kcal: Double?
+    }
+    private let finishedShownKey = "watch.finishedShown.v1"
+    // 保存から時間がたったものは出さない(何日も後に Watch のアプリを開いて「お疲れ様でした」は変なので)
+    private static let finishedMaxAge: Double = 12 * 3600 * 1000
 
     private let defaults = UserDefaults.standard
     private let baseKey = "watch.snapshot.v1"
     private let pendingKey = "watch.pending.v1"
-    // Watch で始めた休憩の通知ID。iPhone で始めた休憩は iPhone の通知(Watch に転送される)に任せる
-    private static let restNotifyMinutes = [1, 2, 3]
+    // Watch が予約する休憩の通知。Watch で始めた休憩と、Watch がワークアウトを記録している間の iPhone の休憩(改善要望 4b)。
+    // それ以外の iPhone の休憩は iPhone の通知(Watch に転送される)に任せる。
+    // 経過分は iPhone の設定(スナップショットの restNotices)。取り消しは選べる時間のすべてで行う
+    private static let restNotifyChoices: [Double] = [1, 1.5, 2, 2.5, 3, 4, 5]
     private static let restNotifyPrefix = "kurabell-watch-rest-"
+    // いま iPhone の休憩のために予約してある通知の中身(開始時刻と経過分・本文)。同じ内容で予約し直さないため。
+    // 休憩中に iPhone で通知を切った・時間や言語を変えたときは中身が変わるので予約し直す(reviewer 指摘)
+    private var scheduledRestStartAt: Double?
+    private var scheduledRestKey: String?
     private let ownRestKey = "watch.ownRest.v1"
     // Watch で始めた休憩の開始時刻(ms)。iPhone 側で別の休憩が始まったら、こちらの通知を取り消す
     private var ownRestStartAt: Double? {
@@ -38,6 +56,12 @@ final class SessionStore: NSObject, ObservableObject {
         super.init()
         if ProcessInfo.processInfo.arguments.contains("-KurabellSample") {
             base = SampleData.snapshot(now: Date())
+            // スクリーンショット用: -KurabellFinished 1 で完了画面を出した状態から始める
+            if SampleData.launchValue("-KurabellFinished") != nil {
+                let f = SampleData.finished(now: Date())
+                showingFinished = f
+                workoutStats = .init(recordStartAt: f.id, avgHeartRate: 118, kcal: 286)
+            }
             return
         }
         if let data = defaults.data(forKey: baseKey) {
@@ -46,6 +70,24 @@ final class SessionStore: NSObject, ObservableObject {
         if let data = defaults.data(forKey: pendingKey) {
             pending = (try? JSONDecoder().decode([WatchOp].self, from: data)) ?? []
         }
+        // アプリが開いていない間に保存の知らせが届いていたら、開いたときに一度だけ出す
+        presentFinishedIfNeeded()
+    }
+
+    // MARK: - 完了画面
+
+    private func presentFinishedIfNeeded() {
+        guard showingFinished == nil, let f = base?.finished else { return }
+        let shown = defaults.object(forKey: finishedShownKey) as? Double
+        guard f.id != shown, Date().timeIntervalSince1970 * 1000 - f.endAt < Self.finishedMaxAge else { return }
+        // 出した時点で「出した」ことにする。閉じたときに付けると、閉じる途中に届いたスナップショットでもう一度出る。
+        // 出したまま Watch のアプリが落ちても、次の記録の起動時に前回のものを出さない(reviewer 指摘)
+        defaults.set(f.id, forKey: finishedShownKey)
+        showingFinished = f
+    }
+
+    func finishedDismissed(_ f: WatchSnapshot.Finished) {
+        if showingFinished?.id == f.id { showingFinished = nil }
     }
 
     func activate() {
@@ -71,6 +113,8 @@ final class SessionStore: NSObject, ObservableObject {
         send(op)
         if startsRest {
             ownRestStartAt = now
+            scheduledRestStartAt = now
+            scheduledRestKey = nil
             scheduleRestNotifications(from: Date(timeIntervalSince1970: now / 1000))
         }
         return startsRest
@@ -122,12 +166,38 @@ final class SessionStore: NSObject, ObservableObject {
         if snap.state != .active { pending.removeAll { $0.kind != "workout" } }
         save()
         syncWorkout(with: snap)
+        // 次の記録が始まったら、前回の完了画面は下げる
+        if snap.recordStartAt != nil { showingFinished = nil }
+        presentFinishedIfNeeded()
         // Watch で始めた休憩が iPhone で確認された後に、iPhone 側で止まった・別の休憩が始まったら、
         // Watch の通知を取り消す(確認前の古いスナップショットでは判断しない)
         if let own = ownRestStartAt, !pending.contains(where: { $0.restStartAt == own }) {
             if snap.restStartAt == nil || snap.restStartAt! > own {
                 cancelRestNotifications()
                 ownRestStartAt = nil
+                scheduledRestStartAt = nil
+                scheduledRestKey = nil
+            }
+        }
+        // この記録のワークアウトを Watch が記録している間は、iPhone で始めた休憩の通知も Watch が予約する(改善要望 4b)。
+        // iPhone はその間、自分では予約しない(index.html の休憩の effect の watchLive)。手首に二重に届かないように
+        let wm = WorkoutManager.shared
+        if ownRestStartAt == nil {
+            if wm.isRunning, let r = wm.recordStartAt, r == snap.recordStartAt {
+                let key = snap.restStartAt.map { t in "\(t)|" + restNotices().map { "\($0.min):\($0.body)" }.joined(separator: ",") }
+                if key != scheduledRestKey {
+                    if let t = snap.restStartAt {
+                        scheduleRestNotifications(from: Date(timeIntervalSince1970: t / 1000))
+                    } else {
+                        cancelRestNotifications()
+                    }
+                    scheduledRestStartAt = snap.restStartAt
+                    scheduledRestKey = key
+                }
+            } else if scheduledRestKey != nil {
+                // 記録が終わった(保存・破棄)・Watch のワークアウトが別の記録になった。iPhone の休憩のために
+                // 予約した分を消す(残すと保存の後に「1分経過」が鳴る。reviewer 指摘)
+                releaseForeignRestNotifications()
             }
         }
     }
@@ -178,7 +248,8 @@ final class SessionStore: NSObject, ObservableObject {
         let op = WatchOp(opId: UUID().uuidString, kind: "workout", exId: "", setIndex: 0,
                          weight: "", reps: "", rir: nil, restStartAt: nil,
                          at: Date().timeIntervalSince1970 * 1000,
-                         status: status, recordStartAt: recordStartAt)
+                         status: status, recordStartAt: recordStartAt,
+                         restNotify: status == "started" ? true : nil)
         pending.append(op) // 届くまで送り直す(iPhone が合流済みにしたら外れる)
         save()
         send(op)
@@ -235,27 +306,47 @@ final class SessionStore: NSObject, ObservableObject {
         for op in pending where session.isReachable || !outstanding.contains(op.opId) { send(op) }
     }
 
-    // MARK: - 休憩の通知(Watch で始めた休憩だけ)
+    // MARK: - 休憩の通知
+
+    // iPhone の休憩のために予約した分を消す。Watch のワークアウトが終わったとき(WorkoutManager.cleanUp)にも呼ぶ。
+    // 終わると iPhone が予約し直す(discarded で watchOwnsRest が降りる)ので、残すと手首に二重に届く
+    func releaseForeignRestNotifications() {
+        guard ownRestStartAt == nil, scheduledRestKey != nil else { return }
+        cancelRestNotifications()
+        scheduledRestStartAt = nil
+        scheduledRestKey = nil
+    }
+
+    // 経過分と本文。古い iPhone(restNotices が無い)なら今までどおり 1・2・3分とラベルの本文
+    private func restNotices() -> [WatchSnapshot.RestNotice] {
+        if let n = snapshot?.restNotices { return n }
+        let labels = snapshot?.labels
+        return [1, 2, 3].map { m in
+            .init(min: Double(m), body: labels?.restBody.replacingOccurrences(of: "{n}", with: String(m))
+                  ?? String(format: NSLocalizedString("rest.elapsed", comment: ""), m))
+        }
+    }
+
+    // 休憩画面の振動(改善要望 4a)も同じ時間にする
+    var restNoticeMinutes: [Double] { restNotices().map(\.min) }
 
     private func scheduleRestNotifications(from start: Date) {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { granted, _ in
             guard granted else { return }
             Task { @MainActor in
                 self.cancelRestNotifications()
-                // 文言は iPhone のアプリ内言語設定に従わせるため、スナップショットのラベルを優先する
-                let labels = self.snapshot?.labels
-                for m in Self.restNotifyMinutes {
-                    let fire = start.addingTimeInterval(Double(m) * 60)
-                    let interval = fire.timeIntervalSinceNow
+                // 文言は iPhone のアプリ内言語設定に従わせるため、スナップショットのものを使う
+                let title = self.snapshot?.labels.rest ?? "Rest"
+                for n in self.restNotices() {
+                    let interval = start.addingTimeInterval(n.min * 60).timeIntervalSinceNow
                     guard interval > 0 else { continue }
                     let content = UNMutableNotificationContent()
-                    content.title = labels?.rest ?? "Rest"
-                    content.body = labels?.restBody.replacingOccurrences(of: "{n}", with: String(m))
-                        ?? String(format: NSLocalizedString("rest.elapsed", comment: ""), m)
+                    content.title = title
+                    content.body = n.body
                     content.sound = .default
                     content.interruptionLevel = .timeSensitive
                     let req = UNNotificationRequest(
-                        identifier: Self.restNotifyPrefix + String(m), content: content,
+                        identifier: Self.restNotifyPrefix + String(n.min), content: content,
                         trigger: UNTimeIntervalNotificationTrigger(timeInterval: interval, repeats: false))
                     try? await UNUserNotificationCenter.current().add(req)
                 }
@@ -264,8 +355,9 @@ final class SessionStore: NSObject, ObservableObject {
     }
 
     private func cancelRestNotifications() {
-        UNUserNotificationCenter.current().removePendingNotificationRequests(
-            withIdentifiers: Self.restNotifyMinutes.map { Self.restNotifyPrefix + String($0) })
+        // 1.2 までは "kurabell-watch-rest-1" のように整数で積んでいたので、そちらも消す
+        let ids = Self.restNotifyChoices.map { Self.restNotifyPrefix + String($0) } + [1, 2, 3].map { Self.restNotifyPrefix + String($0) }
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ids)
     }
 }
 

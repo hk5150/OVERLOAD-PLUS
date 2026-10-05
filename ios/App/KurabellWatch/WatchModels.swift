@@ -17,6 +17,36 @@ struct WatchSnapshot: Codable, Equatable {
     var applied: [String]?          // iPhone が today に合流済みの opId(直近のもの)
     var recordStartAt: Double? = nil    // 記録中なら、その記録の startAt(ms)。Watch のワークアウトと対応付ける
     var lastSaved: LastSaved? = nil     // 直近に保存した記録。Watch のワークアウトを保存するか破棄するかの判断に使う
+    var volume: Volume? = nil           // 今日のボリュームと基準(改善要望 8)。記録中で、比べる基準があるときだけ
+    var finished: Finished? = nil       // 直近に保存した記録の完了画面の中身(改善要望 12)。記録していない間だけ
+    var restNotices: [RestNotice]? = nil // 休憩の知らせの経過分と本文(改善要望 4)。nil は古い iPhone(1・2・3分)、空は通知を切っている
+
+    struct RestNotice: Codable, Equatable {
+        var min: Double             // 経過分(1.5 = 1分30秒)
+        var body: String            // 通知の本文(iPhone のアプリ内の言語で作ってある)
+    }
+
+    // 文言はすべて iPhone が作る(index.html の saveWorkout)。心拍とカロリーだけは Watch 自身の値を足す
+    struct Finished: Codable, Equatable, Identifiable {
+        var id: Double              // 記録の startAt(ms)。この id ごとに1回だけ出す
+        var endAt: Double           // 保存した時刻(ms)。古すぎるものは出さない
+        var title: String           // お疲れ様でした
+        var stats: [String]         // 例: ["52分", "5種目・18セット"]
+        var volume: String          // 例: 4,820kg
+        var lines: [String]         // 例: ["過去3回平均", "+105kg"]。基準が無ければ空
+        var over: Bool
+        var prTitle: String         // 1RM更新
+        var prs: [String]           // 1RM を更新した種目
+        var hrLabel: String         // 平均心拍
+    }
+
+    // 計算と文言は iPhone 側(index.html の compareBase・volumeGoalKey)。Watch はリングと文字を並べるだけ
+    struct Volume: Codable, Equatable {
+        var ratio: Double           // 基準に対する割合(1 で1周)
+        var now: String             // 今日のボリューム(表示用。例: 2,480kg)
+        var lines: [String]         // 例: ["過去3回平均まで", "あと480kg"] / ["過去3回平均", "+105kg"]
+        var over: Bool              // 基準を超えたか
+    }
 
     struct LastSaved: Codable, Equatable {
         var key: String             // ヘルスケアの紐づけキー(記録の startAt の ISO 文字列)
@@ -88,6 +118,9 @@ struct WatchOp: Codable, Equatable {
     // kind "workout" のときだけ: Watch がワークアウトを始めた知らせ(iPhone はその記録をヘルスケアに書かない)
     var status: String? = nil
     var recordStartAt: Double? = nil
+    // started のときだけ true: この Watch は iPhone の休憩の通知も受け持てる(1.3 から。改善要望 4b)。
+    // 印が無い(古い Watch)と、iPhone は自分で予約し続ける
+    var restNotify: Bool? = nil
 }
 
 extension WatchSnapshot.SetRow {

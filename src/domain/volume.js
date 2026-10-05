@@ -35,7 +35,17 @@ function exVolume(ex, bodyweight, deps) {
   return workingSets(ex).reduce((a, s) => a + setVolume(ex, s, bodyweight, deps), 0);
 }
 
+// 記録画面のボリュームの基準(compareBase)を言い表す文言のキー。
+// 「平均」だけでは何の平均か伝わらなかった(北村さん)ので、何回分かを必ず添える。
+// 基準が1回だけなら平均と呼ばずに「前回」。同じ Day の記録が無く Day を問わず取ったときは「直近」。
+// Watch のリングにも同じ文言を送るので、iPhone と Watch で言い方が揃う。
+function volumeGoalKey(base, over) {
+  const kind = base.n === 1 ? "Prev" : base.sameDay ? "Day" : "Recent";
+  return "log.volume" + (over ? "Over" : "ToGo") + kind;
+}
+
 globalThis.workingSets = workingSets;
+globalThis.volumeGoalKey = volumeGoalKey;
 globalThis.setVolume = setVolume;
 globalThis.exVolume = exVolume;
 globalThis.nextSetType = nextSetType;

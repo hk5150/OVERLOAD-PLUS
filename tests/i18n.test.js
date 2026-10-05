@@ -160,6 +160,16 @@ describe("表示名の解決", () => {
     expect(i18n.dayName("背中")).toBe("Back");
   });
 
+  it("部位から自動で付けた Day 名(「胸・肩」)は1語ずつ訳して繋ぐ", () => {
+    i18n.setLang("en");
+    expect(i18n.dayName("胸・肩")).toBe("Chest & Shoulders");
+    expect(i18n.dayName("胸・肩・腕")).toBe("Chest, Shoulders & Arms");
+    expect(i18n.dayName("胸・自作")).toBe("胸・自作"); // 訳せない語が混ざったら手で付けた名前として扱う
+    expect(i18n.dayName("胸・肩 2")).toBe("Chest & Shoulders 2");
+    i18n.setLang("ja");
+    expect(i18n.dayName("胸・肩")).toBe("胸・肩");
+  });
+
   it("対応表に無い名前(カスタム種目)は消さずにそのまま返す", () => {
     i18n.setLang("en");
     expect(i18n.exName("自作マシンプレス")).toBe("自作マシンプレス");

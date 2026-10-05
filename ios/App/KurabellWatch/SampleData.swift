@@ -45,8 +45,21 @@ enum SampleData {
                 ]),
             ],
             menu: [],
-            applied: []
+            applied: [],
+            volume: .init(ratio: 0.62, now: "2,480kg", lines: ["過去3回平均まで", "あと1,520kg"], over: false)
         )
+    }
+
+    static func finished(now: Date) -> WatchSnapshot.Finished {
+        let ms = now.timeIntervalSince1970 * 1000
+        if launchValue("-KurabellLang") == "en" {
+            return .init(id: ms - 3_000_000, endAt: ms, title: "Great work", stats: ["52 min", "4 exercises · 12 sets"],
+                         volume: "10,650lb", lines: ["+230lb", "vs last-3 avg"], over: true,
+                         prTitle: "New 1RM", prs: ["Bench Press"], hrLabel: "Avg HR")
+        }
+        return .init(id: ms - 3_000_000, endAt: ms, title: "お疲れ様でした", stats: ["52分", "4種目・12セット"],
+                     volume: "4,830kg", lines: ["過去3回平均", "+105kg"], over: true,
+                     prTitle: "1RM更新", prs: ["ベンチプレス"], hrLabel: "平均心拍")
     }
 
     static func snapshotEn(now: Date) -> WatchSnapshot {
@@ -82,7 +95,8 @@ enum SampleData {
                 ]),
             ],
             menu: [],
-            applied: []
+            applied: [],
+            volume: .init(ratio: 0.62, now: "5,470lb", lines: ["3,350lb short of", "last-3 avg"], over: false)
         )
     }
 }

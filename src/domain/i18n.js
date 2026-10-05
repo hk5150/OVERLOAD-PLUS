@@ -100,7 +100,7 @@ const STRINGS = {
   "rir.same":          { ja: "→ 同じ",        en: "→ same" },
 
   // ---- 比較の見出し ----
-  "compare.recentDay": { ja: "直近{n}回の{day}",      en: "Last {n} {day} sessions" },
+  "compare.recentDay": { ja: "過去{n}回の{day}",      en: "Last {n} {day} sessions" },
   "compare.recent":    { ja: "直近{n}回",             en: "Last {n} sessions" },
   "log.lastDate":      { ja: "前回 {date}",           en: "Last {date}" },
   // 元は「回連続」だけ<strong>で囲っていたが、英語だと語順が変わって太字の範囲を保てない。
@@ -115,6 +115,7 @@ const STRINGS = {
   "compare.est1RM":    { ja: "推定1RM",               en: "Est. 1RM" },
   "compare.line":      { ja: "推定1RM {now}{unit}(ベスト比 {diff}{unit})", en: "Est. 1RM {now}{unit} ({diff}{unit} vs best)" },
   "compare.lineFirst": { ja: "初回記録 推定1RM {v}{unit}", en: "First record: est. 1RM {v}{unit}" },
+  "compare.lineNow":   { ja: "推定1RM {v}{unit}", en: "Est. 1RM {v}{unit}" },
   "compare.lineBest":  { ja: "過去のベスト 推定1RM {v}{unit}", en: "Your best: est. 1RM {v}{unit}" },
   "compare.win":       { ja: "過去の自分に勝利", en: "New best" },
   "compare.bestWeight": { ja: "最大重量 {v}{unit}", en: "Top weight {v}{unit}" },
@@ -122,7 +123,8 @@ const STRINGS = {
   "compare.prStale":   { ja: "1RM {n}日間未更新",     en: "1RM unchanged for {n}d" },
   "compare.setPR":     { ja: "1RM更新 +{v}{unit}", en: "1RM +{v}{unit}" },
   "set.repsDelta":     { ja: "{v}回", en: "reps {v}" },
-  "compare.set1RM":    { ja: "推定1RM {v}{unit}",     en: "Est. 1RM {v}{unit}" },
+  // 各セットの右端の推定1RM(単位は付けない。行が長くなるため。同じ行の重量で単位は分かる)
+  "set.oneRm":         { ja: "1RM {v}", en: "1RM {v}" },
 
   // ---- 記録タブ ----
   "log.title":         { ja: "今日の記録", en: "Today's workout" },
@@ -130,9 +132,16 @@ const STRINGS = {
   "log.volume":        { ja: "ボリューム", en: "Volume" },
   // 上部バーの到達度ゲージの読み上げ用(画面上は数字を出さずゲージだけ)
   "log.volumeRatio":   { ja: "{pct}%(基準 {v}{unit})", en: "{pct}% of baseline ({v}{unit})" },
-  // ゲージ下の残量テキスト。labelには compare.recentDay/compare.recent の結果(例:「直近3回の胸」)が入る
+  // ボリュームの基準までの残りの全文(title と読み上げ用。画面の文言は下の volumeToGoDay 等)。labelには compare.recentDay/compare.recent の結果(例:「過去3回の胸」)が入る
   "log.volumeToGo":    { ja: "{label}の平均まであと{v}{unit}", en: "{v}{unit} to {label} avg" },
-  "log.volumeToGoShort": { ja: "あと{v}", en: "{v} to go" },
+  // ゲージの下の文言(volumeGoalKey)。{n} は基準にした回数。「平均」だけの表記はしない。
+  // 「|」は狭い画面で折り返す位置(記録画面はそこで2つに分けて並べる)
+  "log.volumeToGoDay":    { ja: "過去{n}回平均まで|あと{v}{unit}", en: "{v}{unit} short of|last-{n} avg" },
+  "log.volumeToGoRecent": { ja: "直近{n}回平均まで|あと{v}{unit}", en: "{v}{unit} short of|recent-{n} avg" },
+  "log.volumeToGoPrev":   { ja: "前回まで|あと{v}{unit}", en: "{v}{unit} short of|last time" },
+  "log.volumeOverDay":    { ja: "過去{n}回平均|+{v}{unit}", en: "+{v}{unit}|vs last-{n} avg" },
+  "log.volumeOverRecent": { ja: "直近{n}回平均|+{v}{unit}", en: "+{v}{unit}|vs recent-{n} avg" },
+  "log.volumeOverPrev":   { ja: "前回|+{v}{unit}", en: "+{v}{unit}|vs last time" },
   "log.volumeOver":    { ja: "{label}の平均を{v}{unit}上回った", en: "{v}{unit} over {label} avg" },
   "log.tapToExpand":   { ja: "タップで拡大", en: "Tap to expand" },
   "log.saving":        { ja: "保存中…",    en: "Saving…" },
@@ -149,12 +158,11 @@ const STRINGS = {
   "log.setsHint":      { ja: "※「あと何回できた?」を入力したセットが実施済みとして記録されます(薄いセットは未実施)。", en: "A set counts as done once you enter the reps you had left (faded sets are not done yet)." },
   "log.setsHint2":     { ja: "左の番号をタップすると ウォームアップ(W) → 補助あり(補) → 通常 と切り替わります。", en: "Tap the number on the left to cycle warm-up (W) → assisted (A) → normal." },
   "log.superset":      { ja: "スーパーセット",         en: "Superset" },
-  "log.supersetOn":    { ja: "⛓ 上の種目とスーパーセットにする", en: "⛓ Superset with the exercise above" },
-  "log.supersetOff":   { ja: "⛓ 上の種目とスーパーセット中(解除)", en: "⛓ Superset active (tap to unlink)" },
   "log.offDay":        { ja: "今日の部位外",           en: "Not today's muscle" },
   "log.moveUp":        { ja: "上へ移動",               en: "Move up" },
   "log.moveDown":      { ja: "下へ移動",               en: "Move down" },
   "log.youtube":       { ja: "YouTubeでフォームを検索", en: "Search form on YouTube" },
+  "menu.watchForm":    { ja: "フォームを動画で確認", en: "Watch a form video" },
   "log.consultAi":     { ja: "AI相談",                 en: "Ask AI" },
   "log.consultAiDone": { ja: "✓ コピー",               en: "✓ Copied" },
   // ボタンのラベルには入れない(minWidth 74の枠に収まらず、押した瞬間に行が折り返す)。
@@ -167,9 +175,20 @@ const STRINGS = {
   "log.history":       { ja: "履歴",                   en: "History" },
   "log.exerciseConfig": { ja: "種目の詳細設定",        en: "Exercise settings" },
   "log.removeExercise": { ja: "種目を削除",            en: "Remove exercise" },
-  "log.removeExerciseShort": { ja: "削除",              en: "Remove" },
-  "log.exerciseMenu":  { ja: "この種目の操作",        en: "Exercise actions" },
-  "log.exerciseConfigShort": { ja: "設定",            en: "Settings" },
+  // 種目カードの操作の行(7マス・各45px前後に収まる長さ)
+  "act.config":        { ja: "設定",     en: "Settings" },
+  "act.form":          { ja: "フォーム", en: "Form" },
+  "act.ai":            { ja: "AI相談",   en: "Ask AI" },
+  "act.copied":        { ja: "コピー済", en: "Copied" },
+  "act.superset":      { ja: "SS",       en: "SS" },
+  "log.supersetAria":  { ja: "上の種目とスーパーセット", en: "Superset with the exercise above" },
+  "log.swapAria":      { ja: "別の種目に変更",   en: "Swap for another exercise" },
+  "log.historyAria":   { ja: "この種目の履歴",   en: "History of this exercise" },
+  "log.confirmRemove": { ja: "「{name}」には実施済みのセットがあります。種目ごと削除しますか?", en: "\"{name}\" has completed sets. Remove the whole exercise?" },
+  "log.removed":       { ja: "「{name}」を削除しました", en: "Removed \"{name}\"" },
+  "log.addedToDay":    { ja: "Day「{day}」にも登録しました", en: "Also added to day \"{day}\"" },
+  "log.undoAdd":       { ja: "取り消す", en: "Undo" },
+  "log.undo":          { ja: "元に戻す", en: "Undo" },
   "log.swapHint":      { ja: "別の種目に差し替えます(入力中のセットは、差し替え先の種目の前回記録に入れ替わります)。", en: "Swap in another exercise. Sets in progress are replaced with that exercise's last session." },
   "log.searchExercise": { ja: "種目を検索",            en: "Search exercises" },
   "log.noHistory":     { ja: "この種目の過去記録はまだありません。", en: "No past records for this exercise yet." },
@@ -202,6 +221,7 @@ const STRINGS = {
   "menu.weighted":     { ja: "加重",                   en: "added" },
   "menu.perHandShort": { ja: "片手",                   en: "/hand" },
   "menu.savePrompt":   { ja: "次回から今日の種目と前回記録を表示できます。この内容をメニューとして保存しますか?", en: "Save today's exercises as your menu so next time they appear with your last numbers?" },
+  "menu.saveToDayPrompt": { ja: "この内容を Day「{day}」の種目として登録しますか?次からは「今日のメニュー」に並びます。", en: "Register these exercises to \"{day}\"? They'll appear in Today's menu next time." },
   "menu.saveYes":      { ja: "保存する",               en: "Save" },
   "menu.saveNo":       { ja: "今回はしない",           en: "Not now" },
 
@@ -258,9 +278,19 @@ const STRINGS = {
   "rest.finish":       { ja: "終了",                   en: "Finish" },
   "watch.startOnPhone": { ja: "iPhoneで記録を開始すると、ここで入力できます", en: "Start a workout on your iPhone to log sets here" },
   "watch.next":        { ja: "次",                     en: "Next" },
+  // Watch の完了画面(改善要望 12)
+  "watch.finishedTitle": { ja: "お疲れ様でした", en: "Great work" },
+  "watch.finishedMin":   { ja: "{n}分", en: "{n} min" },
+  "watch.finishedCounts": { ja: "{e}種目・{s}セット", en: "{e} exercises · {s} sets" },
+  "watch.prTitle":       { ja: "1RM更新", en: "New 1RM" },
+  "watch.avgHr":         { ja: "平均心拍", en: "Avg HR" },
   "watch.addSet":      { ja: "セットを追加",           en: "Add set" },
   "rest.notifyTitle":  { ja: "インターバル",           en: "Rest timer" },
   "rest.notifyBody":   { ja: "{n}分経過しました。次のセットへ。", en: "{n} min elapsed. Time for your next set." },
+  // 1.3 から経過分を選べる(1:30 など)ので、経過の表し方を別にした。rest.notifyBody は古い Watch アプリの予備に残す
+  "rest.notifyBodyAt": { ja: "{t}経過しました。次のセットへ。", en: "{t} elapsed. Time for your next set." },
+  "rest.minWhole":     { ja: "{n}分", en: "{n} min" },
+  "rest.minHalf":      { ja: "{n}分30秒", en: "{n}:30" },
 
   // ---- 使い方ガイド ----
   "guide.title":       { ja: "アプリの使い方ガイド",   en: "How to use this app" },
@@ -303,6 +333,11 @@ const STRINGS = {
   "split.exerciseList": { ja: "種目: {list}",          en: "Exercises: {list}" },
   "split.tapToLog":    { ja: "タップして記録を始める →", en: "Tap to start logging →" },
   "split.deleteDay":   { ja: "このDayを削除",          en: "Delete this day" },
+  "split.autoFill":     { ja: "おまかせで入れる", en: "Fill with the basics" },
+  "split.aiPick":       { ja: "AIに相談して決める", en: "Ask AI to choose" },
+  "split.pickMuscleFirst": { ja: "先に部位を選ぶと、その部位の種目が並びます。", en: "Pick the muscles first to see exercises for them." },
+  "split.removeExerciseAria": { ja: "{name}を登録から外す", en: "Remove {name} from this day" },
+  "split.addDayAfter":  { ja: "この後ろにDayを追加", en: "Add a day after this" },
   "split.addDay":      { ja: "＋ Dayを追加",           en: "＋ Add day" },
   "split.session":     { ja: "今日のセッション(Day {n}/{total}・{name})", en: "Today's session (day {n}/{total} · {name})" },
   "split.dayHistory":  { ja: "{day}の履歴",            en: "{day} history" },
@@ -356,7 +391,7 @@ const STRINGS = {
   // ---- 自己ベスト ----
   "pr.title":          { ja: "PR(自己ベスト)",      en: "Personal bests" },
   "pr.aboutTitle":     { ja: "PRと推定1RMについて",   en: "About PRs and estimated 1RM" },
-  "pr.noteDef":        { ja: "PR=実際に挙げた最大重量。推定1RMは重量×(1+回数/30)による参考値です。", en: "PR is the heaviest weight you actually lifted. Estimated 1RM is a reference figure: weight × (1 + reps/30)." },
+  "pr.noteDef":        { ja: "PR=実際に挙げた最大重量。推定1RMは重量×(1+回数/30)による参考値で、12回以下のセットから求めます(回数が多いと高めに出るため)。", en: "PR is the heaviest weight you actually lifted. Estimated 1RM is a reference figure: weight × (1 + reps/30), from sets of 12 reps or fewer (higher reps overestimate it)." },
   "pr.note":           { ja: "ダンベル種目は両手合計、自重種目は体重を含む実効重量で表示します。", en: "Dumbbell lifts are shown as both hands combined; bodyweight lifts include your bodyweight." },
   "pr.achievedOn":     { ja: " ({date}に達成)",        en: " (set {date})" },
   "pr.exercise":       { ja: "種目",                   en: "Exercise" },
@@ -416,7 +451,8 @@ const STRINGS = {
   "settings.equipment": { ja: "器具",                  en: "Equipment" },
   "settings.other":    { ja: "その他",                 en: "Other" },
   "settings.sound":    { ja: "インターバルの通知",     en: "Rest timer alerts" },
-  "settings.soundDesc": { ja: "インターバル中、1分・2分・3分の経過時に知らせます。通知を許可しておくと、アプリを閉じていても届き、Apple Watchを着けていれば手元でも気づけます。", en: "Alerts you at 1, 2 and 3 minutes into your rest. If you allow notifications, they arrive even when the app is closed — and on your wrist if you wear an Apple Watch." },
+  "settings.restMinutes": { ja: "知らせる経過時間(複数選べます)", en: "Alert after (choose any)" },
+  "settings.soundDesc": { ja: "インターバル中、下で選んだ経過時間に知らせます。通知を許可しておくと、アプリを閉じていても届き、Apple Watchを着けていれば手元でも気づけます。", en: "Alerts you at the times you pick below during your rest. If you allow notifications, they arrive even when the app is closed — and on your wrist if you wear an Apple Watch." },
   // 通知音もアプリ内の音も、iPhoneのサイレントスイッチには従う。以前は「許可していない場合」に
   // だけ掛かる書き方で、通知の方はサイレントでも鳴ると読めてしまっていた。
   // 「バナーとWatchのハプティックは届く」は通知を許可した側にだけ掛ける。未許可側はbeep()だけで、
@@ -467,6 +503,7 @@ const STRINGS = {
   "share.exMeta":      { ja: "種目: {name}({muscle} / {eq})", en: "Exercise: {name} ({muscle} / {eq})" },
   "share.exUnit":      { ja: "重量の表記: {unit}", en: "Weights are given in: {unit}" },
   "share.exProfile":   { ja: "体重: {bw} / 目標レップ数: {reps}回 / 重量の刻み: {inc}", en: "Bodyweight: {bw} / Target reps: {reps} / Weight increment: {inc}" },
+  "share.exPrTop":     { ja: "自己ベスト: 最大重量 {top}({topDate})", en: "Personal best: top weight {top} ({topDate})" },
   "share.exPr":        { ja: "自己ベスト: 推定1RM {rm}({rmDate}) 最大重量 {top}({topDate})", en: "Personal best: est. 1RM {rm} ({rmDate}), top weight {top} ({topDate})" },
   "share.exPrEff":     { ja: "(自己ベストの数値は実効重量。ダンベルは両手合計、自重種目は体重込み。各セットの数値とは基準が違います)", en: "(Personal bests are effective load: dumbbells count both hands, bodyweight lifts include bodyweight — a different basis from the per-set numbers.)" },
   "share.exHistory":   { ja: "■ 直近の記録(古い順)", en: "■ Recent sessions (oldest first)" },
@@ -484,6 +521,9 @@ const STRINGS = {
   "share.dayExercises":  { ja: "登録種目: {list}", en: "Registered exercises: {list}" },
   "share.dayNoExercises":{ ja: "(この日にはまだ種目を登録していません)", en: "(No exercises registered for this day yet.)" },
   "share.dayHistory":    { ja: "■ この日の直近の実績(古い順)", en: "■ Recent sessions for this day (oldest first)" },
+  "share.dayPickPrompt": { ja: "以下は私のトレーニング分割の1日分「{name}」です。この日の部位に合う種目を4〜5個、行う順番つきで提案してください。", en: "Below is one day (\"{name}\") of my training split. Please suggest 4-5 exercises that fit this day's muscles, in the order I should do them." },
+  "share.dayPickList":   { ja: "■ アプリにある種目(この中から選んでください)", en: "■ Exercises available in my app (please choose from these)" },
+  "share.dayPickRule":   { ja: "※種目名は上の一覧のとおりに書いてください(アプリで検索して登録するため)。", en: "※Please write the exercise names exactly as listed above (I'll search for them in the app)." },
   "share.dayNoHistory":  { ja: "(この日の記録はまだありません)", en: "(No sessions recorded for this day yet.)" },
   "csv.date":          { ja: "日付",                   en: "Date" },
   "csv.session":       { ja: "セッション",             en: "Session" },
@@ -517,7 +557,8 @@ const STRINGS = {
   "note.rom":          { ja: "シュラッグ・カーフレイズ・クランチなど可動域が小さい種目は、荷重が動く距離に応じて集計ボリュームを0.3〜0.75倍で換算しています(推定1RM・PR・次回メニューの判定には影響しません)。種目ごとに⚙から調整できます。", en: "Shrugs, calf raises, crunches and other short-range exercises have their volume scaled to 0.3–0.75× based on how far the load travels (estimated 1RM, PRs and the next menu are unaffected). Adjust per exercise via ⚙." },
 
   // YouTubeのフォーム検索。表示文言ではなく検索クエリなので、言語ごとに語順ごと変える。
-  "youtube.query":     { ja: "{name} やり方 フォーム", en: "{name} how to proper form" },
+  // 「やり方」だと入門の長い解説動画が上に来る。ジムで手早く見たいのは要点なので「コツ」にした(改善要望 10c)
+  "youtube.query":     { ja: "{name} フォーム コツ", en: "{name} form tips" },
 };
 
 // t() は言語別のフラットな表を引く。STRINGS から組み立てることで、
@@ -708,6 +749,7 @@ const DAY_NAMES_EN = {
   "脚": "Legs",
   "肩": "Shoulders",
   "腕": "Arms",
+  "腹": "Abs",
 };
 
 // 曜日の頭文字。fmtDateが `9/3 (水)` を組み立てるのに使う。
@@ -724,7 +766,17 @@ const exName     = (name) => lookupName(EX_NAMES_EN, name);
 const muscleName = (name) => lookupName(MUSCLE_NAMES_EN, name);
 const eqName     = (name) => lookupName(EQ_NAMES_EN, name);
 const splitName  = (name) => lookupName(SPLIT_NAMES_EN, name);
-const dayName    = (name) => lookupName(DAY_NAMES_EN, name);
+// 部位から自動で付けた名前(「胸・肩」、src/domain/dayPlan.js の autoDayName)は、1語ずつ訳して繋ぐ
+const dayName    = (name) => {
+  // 同じ名前の Day が重なったときの番号(「胸・肩 2」)は外して訳し、後ろに付け直す
+  const m = typeof name === "string" ? name.match(/^(.*?)( \d+)?$/) : null;
+  const parts = m && m[1].includes("・") ? m[1].split("・") : null;
+  if (LANG === "en" && parts && parts.every(p => DAY_NAMES_EN[p])) {
+    const en = parts.map(p => DAY_NAMES_EN[p]);
+    return (en.length > 2 ? `${en.slice(0, -1).join(", ")} & ${en[en.length - 1]}` : en.join(" & ")) + (m[2] || "");
+  }
+  return lookupName(DAY_NAMES_EN, name);
+};
 const weekdayLabel = (dow) => (WEEKDAYS[LANG] || WEEKDAYS.ja)[dow];
 
 // 種目の検索対象テキスト。英語UIでも日本語名で引けるように、常に両方を含める

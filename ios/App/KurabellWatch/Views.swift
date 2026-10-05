@@ -36,6 +36,19 @@ struct RootView: View {
     @State private var path: [String] = SampleData.launchValue("-KurabellOpen").map { [$0] } ?? []
 
     var body: some View {
+        // 保存したら「お疲れ様でした」(改善要望 12)。シートで重ねると、休憩画面などの子のシートが出ている・閉じかけている
+        // 間は出せずに終わり、値が残ったまま以後ずっと出なくなる(reviewer 指摘)。画面ごと差し替える
+        // (NavigationStack ごと外れるので、子のシートも一緒に閉じる)
+        if let f = store.showingFinished {
+            FinishedView(finished: f, stats: store.workoutStats?.recordStartAt == f.id ? store.workoutStats : nil) {
+                store.finishedDismissed(f)
+            }
+        } else {
+            main
+        }
+    }
+
+    private var main: some View {
         NavigationStack(path: $path) {
             if let s = store.snapshot {
                 switch s.state {
@@ -47,6 +60,86 @@ struct RootView: View {
                 IdleView()
             }
         }
+    }
+}
+
+// MARK: - 完了画面
+
+// タップか15秒で閉じる。出たときに成功の振動を返す。15秒は画面を見ている(アクティブな)間だけ数える
+// (ワークアウト中は手首を下ろしてもアプリが裏で動き続けるので、見ないうちに閉じてしまう。reviewer 指摘)。
+// 心拍とカロリーは、この Watch がその記録のワークアウトを記録していたときだけ(iPhone は知らないので Watch の値)
+struct FinishedView: View {
+    let finished: WatchSnapshot.Finished
+    let stats: SessionStore.WorkoutStats?
+    let close: () -> Void
+    @Environment(\.scenePhase) private var scenePhase
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(finished.title)
+                    .font(.system(size: 20, weight: .bold))
+                    .foregroundStyle(Palette.text)
+                Text(finished.stats.joined(separator: "  "))
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Palette.muted)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(finished.volume).numeric(26)
+                        .foregroundStyle(Palette.text)
+                    if !finished.lines.isEmpty {
+                        Text(finished.lines.joined(separator: " "))
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(finished.over ? Palette.green : Palette.muted)
+                            .lineLimit(2)
+                    }
+                }
+                .padding(.top, 2)
+                if !finished.prs.isEmpty {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Label(finished.prTitle, systemImage: "bolt.fill")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(Palette.green)
+                        ForEach(finished.prs, id: \.self) { name in
+                            Text(name).font(.system(size: 14, weight: .semibold)).foregroundStyle(Palette.text).lineLimit(1)
+                        }
+                    }
+                    .padding(.top, 2)
+                }
+                if let s = stats, s.avgHeartRate != nil || s.kcal != nil {
+                    HStack(spacing: 12) {
+                        if let hr = s.avgHeartRate {
+                            VStack(alignment: .leading, spacing: 0) {
+                                Text(finished.hrLabel).font(.system(size: 11, weight: .semibold)).foregroundStyle(Palette.muted)
+                                Text("\(Int(hr.rounded()))").numeric(20).foregroundStyle(Palette.text)
+                            }
+                        }
+                        if let kcal = s.kcal {
+                            VStack(alignment: .leading, spacing: 0) {
+                                Text("kcal").font(.system(size: 11, weight: .semibold)).foregroundStyle(Palette.muted)
+                                Text("\(Int(kcal.rounded()))").numeric(20).foregroundStyle(Palette.text)
+                            }
+                        }
+                    }
+                    .padding(.top, 2)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 4)
+            .contentShape(Rectangle())
+            .onTapGesture { close() }
+            // シートではないので × が無い。閉じる手段を見える形でも置く
+            Button("OK") { close() }
+                .buttonStyle(.borderedProminent)
+                .tint(Palette.green)
+                .padding(.top, 8)
+        }
+        .onAppear { WKInterfaceDevice.current().play(.success) }
+        .task(id: scenePhase) {
+            guard scenePhase == .active else { return }
+            try? await Task.sleep(nanoseconds: 15_000_000_000)
+            if !Task.isCancelled { close() }
+        }
+        .background(Color.black.ignoresSafeArea())
     }
 }
 
@@ -160,10 +253,27 @@ struct RestTimerView: View {
                         .background(RoundedRectangle(cornerRadius: 10).fill(Palette.surface))
                         .padding(.top, 2)
                     }
+                    // 46mm で次のセットの「前回」の行までがスクロールせずに見える量なので、リングはその下(スクロールで見る)
+                    if let v = snap.volume {
+                        VolumeRow(volume: v)
+                            .padding(.horizontal, 4)
+                            .padding(.top, 6)
+                    }
                 }
             }
             // 後ろの画面(一覧の緑の数字など)が透けて見えないよう、背景は黒で塗る
             .background(Color.black.ignoresSafeArea())
+            // 休憩画面を開いている間は、設定した経過時間に強めに振動する(改善要望 4a。通知とは別に)。
+            // 休憩が替わったら(id が変わる)数え直す。過ぎた時間は鳴らさない
+            .task(id: r) {
+                for m in store.restNoticeMinutes.sorted() {
+                    let wait = startAt.addingTimeInterval(m * 60).timeIntervalSinceNow
+                    guard wait > 0 else { continue }
+                    try? await Task.sleep(nanoseconds: UInt64(wait * 1_000_000_000))
+                    if Task.isCancelled { return }
+                    WKInterfaceDevice.current().play(.notification)
+                }
+            }
         } else {
             // iPhone 側で休憩が止まった
             Image(systemName: "checkmark")
@@ -190,6 +300,38 @@ struct RestTimerView: View {
         let sameLoad = Double(s.weight) != nil && Double(s.weight) == Double(p.weight) && Int(s.reps) == Int(p.reps)
         if sameLoad, let r = p.rir { return "\(labels.prev) RIR\(r)" }
         return "\(labels.prev) \(p.text)"
+    }
+}
+
+// 今日のボリュームを、基準(同じ Day の直近の平均など)で1周するリングで見せる(改善要望 8)。
+// 超えたら緑で満たす。数字と「過去3回平均まで / あと480kg」は iPhone が作った文字をそのまま出す
+struct VolumeRow: View {
+    let volume: WatchSnapshot.Volume
+
+    var body: some View {
+        HStack(spacing: 8) {
+            ZStack {
+                Circle().stroke(Palette.surface2, lineWidth: 5)
+                Circle()
+                    .trim(from: 0, to: min(max(volume.ratio, 0), 1))
+                    .stroke(volume.over ? Palette.green : Palette.text.opacity(0.85),
+                            style: StrokeStyle(lineWidth: 5, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+            }
+            .frame(width: 34, height: 34)
+            .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(volume.now).numeric(18, weight: .bold).foregroundStyle(Palette.text)
+                ForEach(Array(volume.lines.enumerated()), id: \.offset) { _, line in
+                    Text(line)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(volume.over ? Palette.green : Palette.muted)
+                        .lineLimit(1).minimumScaleFactor(0.8)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -229,8 +371,13 @@ struct ExerciseListView: View {
 
     var body: some View {
         List {
+            // 休憩の経過は急ぐ情報なので先に、リングはその下に
             if let r = snap.restStartAt {
                 RestRowButton(store: store, label: snap.labels.rest, startAt: Date(timeIntervalSince1970: r / 1000))
+                    .listRowBackground(Color.clear)
+            }
+            if let v = snap.volume {
+                VolumeRow(volume: v)
                     .listRowBackground(Color.clear)
             }
             ForEach(snap.exercises) { ex in
@@ -411,12 +558,12 @@ struct SetEditView: View {
                 // 上の1行が無くなった分の高さで、46mm でも1画面に収まる
                 ValueStepper(value: formatWeight(weight), caption: ex.weightLabel, shortCaption: ex.unit,
                         prev: row?.prev.map { "\(labels.prev) \(assistedMark($0))\($0.weight)" },
-                        minus: { weight = max(0, weight - ex.step); weightTouched = true },
-                        plus: { weight += ex.step; weightTouched = true })
+                        minus: { stepWeight(-1, $0) },
+                        plus: { stepWeight(1, $0) })
                 ValueStepper(value: String(Int(reps)), caption: labels.reps,
                         prev: row?.prev.map { "\(labels.prev) \($0.reps)" },
-                        minus: { reps = max(0, reps - 1); repsTouched = true },
-                        plus: { reps += 1; repsTouched = true })
+                        minus: { stepReps(-1, $0) },
+                        plus: { stepReps(1, $0) })
                 if row?.warmup == true {
                     Button("OK") { commit(rir: nil) }
                         .buttonStyle(.borderedProminent)
@@ -460,6 +607,32 @@ struct SetEditView: View {
         }
     }
 
+    // −/+ の1回分(改善要望 5)。押してすぐは今までどおり1刻み。押し続けると StepPad が繰り返し呼び、
+    // 1.5秒を過ぎた分(.fast)は重量だけ 5kg(lb は 10)刻みに速める。速いときは刻みの倍数に揃える(61 → 65 → 70)。
+    // 戻り値は「振動を返すか」。連続中は毎回ではなく、10kg(lb は 20)・5回の区切りをまたいだときだけ返す
+    private func stepWeight(_ dir: Double, _ phase: StepPhase) -> Bool {
+        let before = weight
+        if phase == .fast {
+            let fs: Double = ex.unit == "lb" ? 10 : 5
+            weight = dir > 0 ? (floor(weight / fs + 1e-9) + 1) * fs : max(0, (ceil(weight / fs - 1e-9) - 1) * fs)
+        } else {
+            weight = max(0, weight + dir * ex.step)
+        }
+        weightTouched = true
+        return phase == .tap || crossed(before, weight, every: ex.unit == "lb" ? 20 : 10)
+    }
+
+    private func stepReps(_ dir: Double, _ phase: StepPhase) -> Bool {
+        let before = reps
+        reps = max(0, reps + dir)
+        repsTouched = true
+        return phase == .tap || crossed(before, reps, every: 5)
+    }
+
+    private func crossed(_ a: Double, _ b: Double, every: Double) -> Bool {
+        floor(a / every + 1e-9) != floor(b / every + 1e-9)
+    }
+
     // 前回が補助ありだったときの印(「補」)。Prev に専用の項目は無いので、表示用の text の先頭で見分ける
     // (watch.js が text の先頭に labels.assisted を付けている)
     private func assistedMark(_ p: WatchSnapshot.Prev) -> String {
@@ -481,8 +654,8 @@ private struct ValueStepper: View {
     let caption: String
     var shortCaption: String? = nil  // 幅が足りないときの見出し(例: 「重量 kg/片手」→「kg」)
     var prev: String? = nil   // 前回の値(例: 前回 70)。欄の下に、見出しより明るく出す
-    let minus: () -> Void
-    let plus: () -> Void
+    let minus: (StepPhase) -> Bool
+    let plus: (StepPhase) -> Bool
 
     var body: some View {
         HStack(spacing: 4) {
@@ -506,7 +679,7 @@ private struct ValueStepper: View {
         }
     }
 
-    private func stepButton(_ symbol: String, action: @escaping () -> Void) -> some View {
+    private func stepButton(_ symbol: String, action: @escaping (StepPhase) -> Bool) -> some View {
         StepPad(symbol: symbol, action: action)
     }
 
@@ -521,15 +694,21 @@ private struct ValueStepper: View {
     }
 }
 
+// −/+ の1回分が、どの押し方で来たか
+enum StepPhase { case tap, repeating, fast }
+
 // −/+ は続けて何度も押すので、標準の Button ではなく「指が触れた瞬間」に反応させる。
 // Button は指を離したときに確定し、素早く続けて押すと取りこぼした(シミュレータで3回押して1回しか増えない)。
 // 入力画面は ScrollView で包まないので、スクロールのつもりで触れて誤って増減することはない。
+// 押し続けると連続で入る(改善要望 5): 0.4秒で始まり1秒に約8回、1.5秒を過ぎると .fast(重量の刻みを大きく)。
+// 指を離すとすぐ止まる。Digital Crown は使わない(2026-09-26 の判断のまま)。
 private struct StepPad: View {
     let symbol: String
-    let action: () -> Void
+    let action: (StepPhase) -> Bool  // 戻り値が true のときだけ振動を返す
     // 触れている間だけ true。@GestureState は、指を離したときだけでなく、ジェスチャが途中で
     // 取り消されたときも必ず false に戻る(@State だと戻らずに次の接触を無視し続ける恐れがある)
     @GestureState private var pressed = false
+    @State private var repeatTask: Task<Void, Never>?
 
     var body: some View {
         Image(systemName: symbol)
@@ -544,15 +723,33 @@ private struct StepPad: View {
                         guard !isDown else { return } // 1回の接触で1回だけ(触れた瞬間)
                         isDown = true
                         DispatchQueue.main.async {
-                            WKInterfaceDevice.current().play(.click) // 押せたことを指先に返す
-                            action()
+                            if action(.tap) { WKInterfaceDevice.current().play(.click) } // 押せたことを指先に返す
+                            startRepeating()
                         }
                     }
             )
+            // 離した・取り消された(pressed が false に戻った)ら、連続をすぐ止める
+            .onChange(of: pressed) { _, isDown in
+                if !isDown { repeatTask?.cancel(); repeatTask = nil }
+            }
+            .onDisappear { repeatTask?.cancel(); repeatTask = nil }
             .accessibilityElement()
             .accessibilityLabel(Text(symbol == "plus" ? "+" : "−"))
             .accessibilityAddTraits(.isButton)
-            .accessibilityAction { action() }
+            .accessibilityAction { _ = action(.tap) }
+    }
+
+    private func startRepeating() {
+        repeatTask?.cancel()
+        repeatTask = Task { @MainActor in
+            let start = Date()
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            while !Task.isCancelled && pressed {
+                let phase: StepPhase = Date().timeIntervalSince(start) >= 1.5 ? .fast : .repeating
+                if action(phase) { WKInterfaceDevice.current().play(.click) }
+                try? await Task.sleep(nanoseconds: 125_000_000)
+            }
+        }
     }
 }
 

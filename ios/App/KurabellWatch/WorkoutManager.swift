@@ -103,6 +103,11 @@ final class WorkoutManager: NSObject, ObservableObject {
                 HKMetadataKeySyncVersion: 1,
                 HKMetadataKeyIndoorWorkout: true,
             ])
+            // 完了画面(改善要望 12)に出す心拍の平均と消費カロリー。集計を締めた後に読む
+            let bpm = HKUnit.count().unitDivided(by: .minute())
+            let hr = builder.statistics(for: HKQuantityType(.heartRate))?.averageQuantity()?.doubleValue(for: bpm)
+            let kcal = builder.statistics(for: HKQuantityType(.activeEnergyBurned))?.sumQuantity()?.doubleValue(for: .kilocalorie())
+            if let record { SessionStore.shared.workoutStats = .init(recordStartAt: record, avgHeartRate: hr, kcal: kcal) }
             _ = try await builder.finishWorkout()
             if let record { SessionStore.shared.sendWorkoutEvent("saved", recordStartAt: record) }
         } catch {
@@ -156,6 +161,7 @@ final class WorkoutManager: NSObject, ObservableObject {
         builder = nil
         recordStartAt = nil
         isRunning = false
+        SessionStore.shared.releaseForeignRestNotifications()
     }
 }
 

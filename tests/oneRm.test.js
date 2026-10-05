@@ -54,8 +54,9 @@ describe("est1RM (推定1RM)", () => {
     expect(est1RM(60, 12)).toBeCloseTo(60 * (1 + 12 / 30));
   });
 
-  it("13回以上", () => {
-    expect(est1RM(60, 20)).toBeCloseTo(60 * (1 + 20 / 30));
+  it("13回以上は推定しない(0)。高回数のセットが自己ベストを押し上げないように(2026-10-05 の仕様変更)", () => {
+    expect(est1RM(60, 13)).toBe(0);
+    expect(est1RM(60, 20)).toBe(0);
   });
 
   it("不正値(負の回数)", () => {
@@ -263,5 +264,46 @@ describe("dayBest1RMの境界値(記録が無い日を0で表せること)", () 
 
   it("重量0・回数ありの本番セットだけなら0(自重係数なしの種目)", () => {
     expect(dayBest1RM([workSet({ weight: 0, reps: 10 })], false, 0, 70)).toBe(0);
+  });
+});
+
+describe("showsSet1RM(各セットの推定1RMを出すか)", () => {
+  const { showsSet1RM, SET_1RM_MAX_REPS } = loadDomainModule("src/domain/oneRm.js");
+  const s = (o = {}) => ({ warmup: false, ...o });
+
+  it("重量と回数が入った本番セットには出す(RIR の有無は見ない)", () => {
+    expect(showsSet1RM(s({ rir: "" }), 70, 10)).toBe(true);
+    expect(showsSet1RM(s({ rir: 1 }), 70, 1)).toBe(true);
+  });
+
+  it("12回までは出し、13回以上は出さない(Epley 式が高めに出るため)", () => {
+    expect(SET_1RM_MAX_REPS).toBe(12);
+    expect(showsSet1RM(s(), 40, 12)).toBe(true);
+    expect(showsSet1RM(s(), 40, 13)).toBe(false);
+  });
+
+  it("ウォームアップと補助ありには出さない", () => {
+    expect(showsSet1RM(s({ warmup: true }), 70, 10)).toBe(false);
+    expect(showsSet1RM(s({ assisted: true }), 70, 10)).toBe(false);
+  });
+
+  it("加重0の自重種目にも出す(実効重量で判定する)", () => {
+    const { effWeight } = loadDomainModule("src/domain/oneRm.js");
+    expect(showsSet1RM(s(), effWeight(0, false, 1.0, 70), 10)).toBe(true);
+  });
+
+  it("実効重量か回数が0なら出さない", () => {
+    expect(showsSet1RM(s(), 0, 10)).toBe(false);
+    expect(showsSet1RM(s(), 70, 0)).toBe(false);
+  });
+});
+
+describe("dayBest1RM は13回以上のセットを数えない", () => {
+  it("12回以下のセットの最大を取る", () => {
+    const sets = [{ weight: 60, reps: 20 }, { weight: 80, reps: 8 }];
+    expect(dayBest1RM(sets, false, 0, 70)).toBeCloseTo(80 * (1 + 8 / 30));
+  });
+  it("13回以上しかない日は 0", () => {
+    expect(dayBest1RM([{ weight: 40, reps: 15 }], false, 0, 70)).toBe(0);
   });
 });

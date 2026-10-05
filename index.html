@@ -186,25 +186,27 @@
     { key:'units',      urls:['src/domain/units.js'],
       globals:['LB_PER_KG','SUPPORTED_UNITS','resolveUnit','getUnit','setUnit','uLabel','kgToLb','lbToKg','toU','fromU','wU','wStr','convWeightStr','incU'] },
     { key:'oneRm',      urls:['src/domain/oneRm.js'],
-      globals:['est1RM','effWeight','dayBest1RM'] },
+      globals:['est1RM','effWeight','dayBest1RM','SET_1RM_MAX_REPS','showsSet1RM'] },
     { key:'storage',    urls:['src/domain/storage.js'],
       globals:['store'] },
     { key:'backupValidation', urls:['src/domain/backupValidation.js'],
       globals:['extractWorkoutsArray','validateWorkoutsShape','CURRENT_BACKUP_FORMAT_VERSION','validateBackupPayload','SET_VALUE_LIMITS','isSetValueInRange'] },
     { key:'volume',     urls:['src/domain/volume.js'],
-      globals:['workingSets','setVolume','exVolume','nextSetType'] },
+      globals:['workingSets','setVolume','exVolume','nextSetType','volumeGoalKey'] },
+    { key:'dayPlan',    urls:['src/domain/dayPlan.js'],
+      globals:['STARTER_PICKS','STARTER_FULL_BODY','STARTER_MAX','starterPicks','DAY_GROUP_OF','autoDayName','nextDayName','uniqueDayName'] },
     { key:'coefficients', urls:['src/domain/coefficients.js'],
       globals:['resolveCoefficients'] },
     { key:'insight',    urls:['src/domain/insight.js'],
       globals:['exerciseInsight','topSetOf'] },
     { key:'restNotifications', urls:['src/domain/restNotifications.js'],
-      globals:['REST_NOTIFY_MINUTES','buildRestNotifications','restNotificationsAvailable','ensureRestNotificationPermission','checkRestNotificationPermission','scheduleRestNotifications','cancelRestNotifications','clearDeliveredRestNotifications','toNativeRestNotifications','REST_ACTIVITY_STALE_MINUTES','buildRestActivityState','syncRestActivity'] },
+      globals:['REST_NOTIFY_MINUTES','REST_NOTIFY_CHOICES','restNotifyId','normalizeRestNotifyMinutes','buildRestNotifications','restNotificationsAvailable','ensureRestNotificationPermission','checkRestNotificationPermission','scheduleRestNotifications','cancelRestNotifications','clearDeliveredRestNotifications','toNativeRestNotifications','REST_ACTIVITY_STALE_MINUTES','buildRestActivityState','syncRestActivity'] },
     { key:'iap',        urls:['src/domain/iap.js'],
       globals:['TRIAL_WORKOUT_LIMIT','IAP_PRODUCT_ID','iapAvailable','isTrialLimitReached','refreshPurchaseState','readCachedPurchaseFlag','fetchUnlockProduct','purchaseUnlock','restorePurchase','onEntitlementsChanged'] },
     { key:'health',     urls:['src/domain/health.js'],
       globals:['healthAvailable','healthSupported','healthRequestAuthorization','healthAuthDecided','healthAuthorizationStatus','healthWorkoutKey','HEALTH_MAX_WORKOUT_MS','healthWorkoutRange','healthSaveWorkout','healthDeleteWorkout','healthStartWatchWorkout','healthLatestBodyMass','healthSaveBodyMass','pickHealthWeight','healthWeightToWrite'] },
     { key:'watch',      urls:['src/domain/watch.js'],
-      globals:['WATCH_APPLIED_KEEP','watchWeightStep','buildWatchSnapshot','applyWatchOps','watchWorkoutFromOps','watchWorkoutStopped','settleWatchHealth','WATCH_HEALTH_CONFIRM_MS','syncWatchSnapshot','peekWatchOps','ackWatchOps','onWatchOps'] },
+      globals:['WATCH_APPLIED_KEEP','watchWeightStep','buildWatchSnapshot','applyWatchOps','watchWorkoutFromOps','watchRestCapableFromOps','watchWorkoutStopped','settleWatchHealth','WATCH_HEALTH_CONFIRM_MS','syncWatchSnapshot','peekWatchOps','ackWatchOps','onWatchOps'] },
     { key:'fileExport', urls:['src/domain/fileExport.js'],
       globals:['fileExportAvailable','shareTextFile'] },
     { key:'review',     urls:['src/domain/review.js'],
@@ -304,12 +306,15 @@ const C = {
 // 本文用フォント。<head>のbodyと同じ指定。Barlow Condensed(数字用)の中に
 // 日本語を戻したいときだけ明示的に使う(それ以外はbodyから継承させる)。
 const FONT_UI = "-apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic', Meiryo, sans-serif";
+// 画面には出さず、読み上げにだけ渡すテキスト
+const srOnly = { position: "absolute", width: 1, height: 1, padding: 0, margin: -1, overflow: "hidden", clip: "rect(0 0 0 0)", whiteSpace: "nowrap", border: 0 };
 
 const STORAGE_KEY = "workout-log-v1";
 const DRAFT_KEY = "workout-draft-v1"; // 入力途中の記録(アプリが落ちても復元できるように)
 // Apple Watch のワークアウトとヘルスケアの書き込みの受け渡し(docs/Watchアプリ.md の「ワークアウト」)
 const WATCH_HEALTH_PENDING_KEY = "watch-health-pending-v1";
 const WATCH_LAST_SAVED_KEY = "watch-last-saved-v1";
+const WATCH_FINISHED_KEY = "watch-finished-v1"; // 保存したら Watch に出す完了画面の中身(改善要望 12)
 const PRE_IMPORT_BACKUP_KEY = "workout-log-v1-pre-import"; // バックアップ復元前のデータ退避(復元に失敗した場合の保険)
 // ヘッダーのバージョンバッジとバックアップのappVersionで共有する単一の定数。
 // sw.js の CACHE 定数とは tests/version.test.js が数字の一致を機械的に縛っている(CLAUDE.md参照)。
@@ -384,6 +389,8 @@ const defaultProfile = (p) => ({
   // ヘルスケア連携(iOSのみ)。healthBwAt は最後にヘルスケアと体重を同期した日時(エポックミリ秒)。
   // これより新しいヘルスケアの体重だけを反映する(pickHealthWeight、src/domain/health.js)。
   healthOn: p?.healthOn ?? false, healthBwAt: p?.healthBwAt ?? 0,
+  // 休憩の通知を出す経過分(改善要望 4c)。未設定は今までと同じ 1・2・3分。空の配列は「通知しない」
+  restNotifyMinutes: normalizeRestNotifyMinutes(p?.restNotifyMinutes),
 });
 
 // extractWorkoutsArray・validateWorkoutsShapeは src/domain/backupValidation.js へ移設(テストのため)。
@@ -658,7 +665,6 @@ function NumInput({ value, onChange, onFocus, onBlur, inputMode = "decimal", sty
 // 線画アイコン。絵文字(🏆⚡📌💾🗑など)は端末によって見た目が変わり、暗い画面で浮くので置き換えた。
 // 初回ガイドの GuideArt と同じく、自前の SVG で持つ(外部のアイコンフォントは読み込まない)。
 const ICON_PATHS = {
-  more:    <><circle cx="5" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.6" fill="currentColor" stroke="none"/></>,
   pin:     <><path d="M9 4h6l-1 6 3 3H7l3-3z"/><path d="M12 13v7"/></>,
   bolt:    <path d="M13 3 5 14h6l-1 7 8-11h-6z"/>,
   trophy:  <><path d="M8 4h8v5a4 4 0 0 1-8 0z"/><path d="M8 6H5a3 3 0 0 0 3 4M16 6h3a3 3 0 0 1-3 4M12 13v4M8 20h8"/></>,
@@ -670,6 +676,12 @@ const ICON_PATHS = {
   split:   <><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 10v10"/></>,
   log:     <><path d="M8.5 12h7"/><rect x="5" y="6.5" width="3.5" height="11" rx="1.2"/><rect x="15.5" y="6.5" width="3.5" height="11" rx="1.2"/><path d="M2.5 10v4M21.5 10v4"/></>,
   history: <><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></>,
+  up:      <path d="M6 15l6-6 6 6"/>,
+  down:    <path d="M6 9l6 6 6-6"/>,
+  check:   <path d="M5 12.5l4.5 4.5L19 7.5"/>,
+  chat:    <><path d="M4 5h16v11H10l-4 3.5V16H4z"/><path d="M8 9.5h8M8 12.5h5"/></>,
+  swap:    <><path d="M4 8h13l-3-3M20 16H7l3 3"/></>,
+  link:    <><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></>,
   settings:<><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></>,
 };
 function Icon({ name, size = 14, color = "currentColor", style }) {
@@ -685,7 +697,8 @@ function Icon({ name, size = 14, color = "currentColor", style }) {
 // グラフの縦軸の目盛り。千以上は 12k のように詰める(幅40pxに収めるため)
 const compactTick = (v) => Math.abs(v) >= 1000 ? `${Math.round(v / 100) / 10}k` : `${Math.round(v * 10) / 10}`;
 // グラフの点は最新だけ打つ。Recharts の dot は要素を返す必要があるので、他は空の <g> にする
-const lastDot = (len, color) => (p) => p.index === len - 1
+// 値の無い点(13回以上しかない日の推定1RM)には打たない
+const lastDot = (len, color) => (p) => p.index === len - 1 && p.value != null
   ? <circle key={p.key} cx={p.cx} cy={p.cy} r={4.5} fill={color} stroke={C.surface} strokeWidth={2} />
   : <g key={p.key} />;
 
@@ -870,7 +883,7 @@ class ErrorBoundary extends React.Component {
 // 新規インストール時、および全データ削除後の既定値(clearAllで再利用し、削除直後に古いprofileが復活しないようにする)
 // defaultProfile() と同じフィールドを持たせる。ここに書き忘れると、初回起動と
 // 「全データ削除」直後だけ値がundefinedになり、設定タブの選択状態が消える。
-const DEFAULT_PROFILE = { bodyweight: 70, soundOn: true, defTargetReps: 10, defIncrement: 2.5, lang: null, unit: null, aiService: DEFAULT_AI_SERVICE, healthOn: false, healthBwAt: 0 };
+const DEFAULT_PROFILE = { bodyweight: 70, soundOn: true, defTargetReps: 10, defIncrement: 2.5, lang: null, unit: null, aiService: DEFAULT_AI_SERVICE, healthOn: false, healthBwAt: 0, restNotifyMinutes: [1, 2, 3] };
 
 // ================= アプリ本体 =================
 // 文言中の「|」の位置だけで折り返す(日本語は語の途中でも折り返されるため、意味の切れ目を指定する)。
@@ -972,9 +985,6 @@ function App() {
   const [swapMuscle, setSwapMuscle] = useState("");  // 種目差し替え時の部位フィルター
   const [openSetKey, setOpenSetKey] = useState(null); // 展開中のセット "exId:index"
   const [openHist, setOpenHist] = useState({});       // 種目カードの履歴パネル開閉
-  // 種目カードの「⋯」(並べ替え・AI相談・変更・履歴・設定・YouTube・削除)。セットを打つ間は使わない操作なので
-  // 普段は畳んでおく(以前は毎カードで1行を占め、赤い YouTube が「開始」「削除」と同格に見えていた)
-  const [openMenu, setOpenMenu] = useState({});
   const [restFull, setRestFull] = useState(false);    // インターバルの全画面表示
   const [showSplitHistory, setShowSplitHistory] = useState(false); // 上部バーのボリュームタップ→同一分割の履歴一覧
   const splitHistoryModalRef = useRef(null);
@@ -1039,9 +1049,16 @@ function App() {
   // Watch がワークアウトを記録している間に iPhone の Live Activity を出すと、watchOS がそれを Watch にも出して
   // KURABELL の画面を隠す(1.1 の実機で踏んだ)。refは保存時の判定に使うので、そちらはそのまま残す
   const [watchLiveFor, setWatchLiveFor] = useState(null);
+  // Watch がこの記録の休憩の通知を受け持つと知らせてきたら、その記録の startAt(改善要望 4b。watchRestCapableFromOps)。
+  // 受け持つ間は iPhone は休憩の通知を予約しない。watchLiveFor と一緒に降ろす。下書きにも残す
+  const [watchRestFor, setWatchRestFor] = useState(null);
+  const watchRestForRef = useRef(null);
   // 直近に保存した記録 { key, startAt, endAt }。Watchはこれを見て自分のワークアウトを保存するか破棄するか決める。
   // 保存直後にアプリが終了されても届くよう、store にも残す(WATCH_LAST_SAVED_KEY)
   const [watchLastSaved, setWatchLastSaved] = useState(null);
+  // 直近に保存した記録の「お疲れ様でした」の中身(改善要望 12)。Watch は id ごとに1回だけ出す。
+  // Watch のアプリが開いていないと次に開いたときに出すので、iPhone を再起動しても送り続けられるよう store にも残す
+  const [watchFinished, setWatchFinished] = useState(null);
   // Watchに任せたヘルスケアの書き込み。Watchが "saved" を返すまで残し、"discarded" や
   // 1時間の無応答なら iPhone が時刻だけ書く(settleWatchHealth。store に残す)
   const watchHealthPendingRef = useRef([]);
@@ -1062,7 +1079,7 @@ function App() {
           } else {
             await store.set(DRAFT_KEY, JSON.stringify({
               today, startAt, restStartAt, watchApplied, restFromWatch: restFromWatchRef.current,
-              watchWorkoutFor: watchWorkoutForRef.current, savedAt: Date.now(),
+              watchWorkoutFor: watchWorkoutForRef.current, watchRestFor: watchRestForRef.current, savedAt: Date.now(),
             }));
           }
           // 合流させたWatchの操作は、下書きに残せてから(または記録が無く捨てた後に)キューから消す
@@ -1079,7 +1096,7 @@ function App() {
       if (today.length === 0 && !startAt) return;
       try {
         // 同期的に書けるlocalStorageへ直接退避
-        localStorage.setItem(DRAFT_KEY, JSON.stringify({ today, startAt, restStartAt, watchApplied, restFromWatch: restFromWatchRef.current, watchWorkoutFor: watchWorkoutForRef.current, savedAt: Date.now() }));
+        localStorage.setItem(DRAFT_KEY, JSON.stringify({ today, startAt, restStartAt, watchApplied, restFromWatch: restFromWatchRef.current, watchWorkoutFor: watchWorkoutForRef.current, watchRestFor: watchRestForRef.current, savedAt: Date.now() }));
       } catch { /* noop */ }
     };
     const onHide = () => { if (document.visibilityState === "hidden") flush(); };
@@ -1137,6 +1154,8 @@ function App() {
         if (p?.value) watchHealthPendingRef.current = JSON.parse(p.value) || [];
         const ls = await store.get(WATCH_LAST_SAVED_KEY);
         if (ls?.value) setWatchLastSaved(JSON.parse(ls.value));
+        const fin = await store.get(WATCH_FINISHED_KEY);
+        if (fin?.value) setWatchFinished(JSON.parse(fin.value));
       } catch { /* 無ければ空 */ }
 
       // 入力途中の記録を復元(24時間以内のものだけ)
@@ -1151,6 +1170,7 @@ function App() {
             if (draft.restStartAt) setRestStartAt(draft.restStartAt);
             if (draft.restFromWatch) restFromWatchRef.current = draft.restFromWatch;
             if (draft.watchWorkoutFor) { watchWorkoutForRef.current = draft.watchWorkoutFor; setWatchLiveFor(draft.watchWorkoutFor); }
+            if (draft.watchRestFor) { watchRestForRef.current = draft.watchRestFor; setWatchRestFor(draft.watchRestFor); }
             if (Array.isArray(draft.watchApplied)) {
               watchAppliedRef.current = draft.watchApplied;
               setWatchApplied(draft.watchApplied);
@@ -1351,7 +1371,9 @@ function App() {
   // 壊れていたら作り直す方式にして、鳴らなくなるのを防ぐ。
   const soundOn = profile.soundOn !== false;
   const audioRef = useRef(null);
-  const firedMinRef = useRef(0); // 何分の通知まで鳴らしたか(再レンダーでも保持)
+  const firedMinRef = useRef(0); // 最後に鳴らした経過秒(設定で選んだ時間。再レンダーでも保持)
+  // firedMinRef がどの休憩のものか。Watch から合流した休憩は startRest を通らず、前の休憩の値が残っていた(reviewer 指摘)
+  const firedForRef = useRef(null);
 
   // ---- 休憩タイマーのローカル通知 ----
   // 通知が使えるなら分刻みのbeep()は鳴らさず通知に一本化する(前面でもバナーが出るため
@@ -1488,6 +1510,8 @@ function App() {
   // 前面復帰(visibilitychange)では呼ばない: ロック画面でスワイプして消した表示を復活させないため。
   // Watch がこの記録のワークアウトを記録している間は出さない(Watch の画面を隠すため。休憩は Watch 側が表示・通知する)。
   const watchLive = watchLiveFor != null && watchLiveFor === startAt;
+  // Watch がこの記録の休憩の通知を受け持っている(1.3 以降の Watch で、ワークアウトを記録中)
+  const watchOwnsRest = watchLive && watchRestFor === startAt;
   useEffect(() => {
     if (!loaded) return;
     runNotify(() => syncRestActivity(watchLive ? null : restStartAt, Date.now(), t("rest.title")));
@@ -1518,10 +1542,16 @@ function App() {
       // 今の記録の知らせだけ採用する(遅れて届いた前の記録の知らせで上書きしない)
       const wk = watchWorkoutFromOps(fresh);
       if (wk != null && wk === startAtRef.current) { watchWorkoutForRef.current = wk; setWatchLiveFor(wk); }
+      if (startAtRef.current != null && watchRestCapableFromOps(fresh, startAtRef.current)) {
+        watchRestForRef.current = startAtRef.current; setWatchRestFor(startAtRef.current);
+      }
       // Watch が途中でワークアウトをやめた(ほかのアプリに替えた等)ら、Watch はこの記録にもう何も返さない。
       // ref も降ろす: 保存時は iPhone がすぐヘルスケアに書き、下書きの復元で抑止が戻らない(discarded は最後の状態)。
       // 休憩の Live Activity は出す側に戻る
-      if (watchWorkoutStopped(fresh, startAtRef.current)) { watchWorkoutForRef.current = null; setWatchLiveFor(null); }
+      if (watchWorkoutStopped(fresh, startAtRef.current)) {
+        watchWorkoutForRef.current = null; setWatchLiveFor(null);
+        watchRestForRef.current = null; setWatchRestFor(null);
+      }
       setToday(t => applyWatchOps(t, fresh).today);
       if (r.applied.length > 0) {
         const ids = [...watchAppliedRef.current, ...r.applied].slice(-WATCH_APPLIED_KEEP * 2);
@@ -1542,6 +1572,11 @@ function App() {
     return () => { sub.remove(); document.removeEventListener("visibilitychange", onVisible); };
   }, [loaded]);
 
+  // 休憩の通知を出す経過分(設定。改善要望 4c)と、その表示(「1分30秒」「1:30」)
+  const restMinutes = normalizeRestNotifyMinutes(profile.restNotifyMinutes);
+  const restMinutesKey = restMinutes.join(",");
+  const restMinLabel = (m) => Number.isInteger(m) ? t("rest.minWhole", { n: m }) : t("rest.minHalf", { n: Math.floor(m) });
+
   // ---- インターバルタイマー(カウントアップ・1分ごとに知らせる) ----
   useEffect(() => {
     if (restStartAt == null) {
@@ -1552,8 +1587,12 @@ function App() {
     // 通知はOS側が発火するので、アプリがバックグラウンドでも届く(この機能の主目的)。
     // 許可要求はインターバルを実際に始めたときだけ、セッション中1回。設定トグルの操作で
     // 出すと、休憩中にトグルしたユーザーへ唐突にダイアログが出るため連動させない。
-    // Watchで始めた休憩は、Watchが自分で通知する(iPhoneからも出すと手首に二重に届く)
-    if (soundOn && restNotificationsAvailable() && restStartAt !== restFromWatchRef.current) {
+    // Watchで始めた休憩は、Watchが自分で通知する(iPhoneからも出すと手首に二重に届く)。
+    // Watchがこの記録のワークアウトを記録している間は、iPhoneで始めた休憩もWatchが通知する(改善要望 4b。
+    // スナップショットの restNotices を見て予約する)。受け持てると知らせてきた Watch(1.3 以降)のときだけ。
+    // Watchが途中でやめたら watchOwnsRest が降りて、ここで予約し直す。
+    // Watch のアプリが落ちて discarded も届かないと、保存・破棄まで通知がどこからも出ない(Live Activity と同じ弱点)
+    if (soundOn && restNotificationsAvailable() && restStartAt !== restFromWatchRef.current && !watchOwnsRest) {
       runNotify(async () => {
         let ok = notifyGranted;
         if (!ok && !askedNotifyRef.current) {
@@ -1573,21 +1612,24 @@ function App() {
         // 再実行(新しいrestStartAtでの呼び出し)が続くため、届く前に正しい内容へ上書きされる。
         await scheduleRestNotifications(restStartAt, Date.now(), {
           title: t("rest.notifyTitle"),
-          body: (n) => t("rest.notifyBody", { n }),
-        });
+          body: (n) => t("rest.notifyBodyAt", { t: restMinLabel(n) }),
+        }, restMinutes);
       });
     } else {
       runNotify(() => cancelRestNotifications());
     }
+    if (firedForRef.current !== restStartAt) { firedForRef.current = restStartAt; firedMinRef.current = 0; }
     const tick = () => {
       const sec = Math.floor((Date.now() - restStartAt) / 1000);
       setRestElapsed(sec);
-      const min = Math.floor(sec / 60);
-      // 1秒ごとの判定で分の境界を飛ばしても、未通知の分を確実に鳴らす
-      if (min > firedMinRef.current) {
-        firedMinRef.current = min;
-        // 通知が届く環境では鳴らさない(通知と二重になるため)
-        if (!notifyGranted) beep(min === 1 ? 1 : Math.min(min, 3)); // 経過が長いほど回数を増やす
+      // 設定で選んだ経過分(restMinutes)のうち、最後に鳴らした時刻より後で、もう過ぎたもの。
+      // 「過ぎた数」で数えると、休憩中に印を外したときに後の分が鳴らなくなる(reviewer 指摘)。
+      // firedMinRef は最後に鳴らした経過秒。判定の間隔で境界を飛ばしても、未通知の分を確実に鳴らす
+      const due = restMinutes.filter(m => m * 60 <= sec && m * 60 > firedMinRef.current);
+      if (due.length > 0) {
+        firedMinRef.current = due[due.length - 1] * 60;
+        // 通知が届く環境では鳴らさない(通知と二重になるため)。経過が長いほど回数を増やす
+        if (!notifyGranted) beep(Math.min(restMinutes.indexOf(due[due.length - 1]) + 1, 3));
       }
     };
     // 500msごとに判定して1分の取りこぼしを減らす(表示は秒単位)
@@ -1603,7 +1645,7 @@ function App() {
     // cleanupで通知はキャンセルしない。バックグラウンド化はunmountを起こさないが、
     // 万一unmountで消すと「アプリを閉じていても知らせる」という目的そのものを損なう。
     return () => { clearInterval(id); document.removeEventListener("visibilitychange", onVisible); };
-  }, [restStartAt, soundOn, notifyGranted]);
+  }, [restStartAt, soundOn, notifyGranted, watchOwnsRest, restMinutesKey, lang]);
 
   const startRest = () => { setRestStartAt(Date.now()); setRestElapsed(0); firedMinRef.current = 0; }; // 記録入力のたびに0から再スタート
   const stopRest = () => { setRestStartAt(null); setRestElapsed(0); firedMinRef.current = 0; setRestFull(false); };
@@ -1735,6 +1777,8 @@ function App() {
     const avg = recent.reduce((a, w) => a + volOf(w), 0) / recent.length;
     return {
       avg,
+      n: recent.length,
+      sameDay: sameList.length > 0,
       avgLabel: sameList.length > 0 ? t("compare.recentDay", { n: recent.length, day: dayName(todayDay.name) }) : t("compare.recent", { n: recent.length }),
     };
   }, [workouts, split, profile.bodyweight, exerciseOverrides, lang]);
@@ -1797,6 +1841,14 @@ function App() {
     const rank = (e) => { const r = recentNames.indexOf(e.n); return r >= 0 ? r : 1000; };
     return [...list].sort((a, b) => rank(a) - rank(b));
   }, [editingDay, daySearch, recentNames, allExercises]);
+  // 見出しの部位。MUSCLES に無い部位(改名前の「胸」のまま残ったカスタム種目など)は「その他」に入れる
+  // (落とすと一覧に出ず、検索では見つかるので作成パネルも出ず、登録できなくなる。reviewer 指摘)
+  const muscleGroupOf = (e) => MUSCLES.includes(e.m) ? e.m : "";
+  // 部位ごとの見出しで区切る(改善要望 3b)。並びは MUSCLES の順、部位の中は最近使った順(上の sort)のまま
+  const dayPickerGroups = useMemo(() => {
+    const groups = [...MUSCLES, ""].map(m => ({ m, items: dayPickerList.filter(e => muscleGroupOf(e) === m) }));
+    return groups.filter(g => g.items.length);
+  }, [dayPickerList]);
   // 別のDayを開いたら、前のDayで入れていた検索語とカスタム種目の設定は捨てる
   useEffect(() => { setDaySearch(""); setDayDraft({ muscle: "", eq: "" }); }, [editDay]);
   // 追加したDayのカードは一覧の一番下で画面の外になりやすい。「編集」を押したときまで
@@ -1898,17 +1950,23 @@ function App() {
     return [...workouts].reverse().find(w => w.session === todayDay.name) || null;
   }, [workouts, todayDay]);
 
-  // 今日のセッションのメニュー(前回同セッションの実際の記録 > 分割に登録した種目 > 部位一致の履歴)。
-  // 以前は分割の登録種目リストを最優先にしていたが、そのリストは手動編集しない限り不変なので、
-  // ある種目をもうやらなくなっても「今日のメニュー」に出続けてしまっていた。前回実際にやった
-  // 記録があるなら、分割の登録内容に関わらずそちらを優先する(前回やっていない種目は出ない)。
+  // 今日のセッションのメニュー(分割に登録した種目 > 前回同セッションの実際の記録 > 部位一致の履歴)。
+  // 経緯: 以前は登録種目を最優先にしていたが、登録の一覧は手で直さない限り変わらず、やめた種目が出続けた。
+  // そこで前回の記録を優先にしたが、今度は登録の順を ▲▼ で並べ替えても効かなくなった。1.3 では登録の一覧を
+  // 分割タブで並べ替え・外せるようにし、記録中に足した種目は登録に入り、カードの ✕ で消すと登録からも外れる
+  // ので、登録を最優先に戻した(北村さんの判断、2026-10-05)。セットの中身は種目ごとに前回の同じ Day から引く(buildMenuItem)。
+  // 登録が0件の Day(プリセットのまま記録している Day)は、今までどおり前回の記録の順。
+  // 記録中にカードを並べ替えたら、保存のときに登録の順も合わせる(saveWorkout。1.2 まではそれで次回の順が変わっていた)。
   const autoMenu = useMemo(() => {
     if (!todayDay) return [];
     let names = [];
-    if (lastSameSession) {
+    if (todayDay.exercises && todayDay.exercises.length) {
+      // 登録の順のあとに、前回やっていて登録に無い種目を前回の順で足す(記録のある Day に1件だけ登録したときに、
+      // メニューがその1件だけにならないように。reviewer 指摘)。やめた種目は前回に無いので出ない
+      names = [...todayDay.exercises,
+        ...(lastSameSession ? lastSameSession.exercises.map(e => e.name).filter(n => !todayDay.exercises.includes(n)) : [])];
+    } else if (lastSameSession) {
       names = lastSameSession.exercises.map(e => e.name);
-    } else if (todayDay.exercises && todayDay.exercises.length) {
-      names = [...todayDay.exercises];
     } else {
       const seen = new Set();
       [...workouts].reverse().forEach(w => w.exercises.forEach(ex => {
@@ -1980,6 +2038,7 @@ function App() {
       if (day.exercises && day.exercises.length && !day.exercises.includes(n)) {
         const days = split.days.map((d, i) => i === dayIdx ? { ...d, exercises: [...d.exercises, n] } : d);
         splitPatch = { split: { ...split, days } };
+        showNotice({ kind: "dayAdded", name: n, ...noticeDay() });
       }
     }
     persist({ recentNames: nextRecent, ...(known ? {} : { customExercises: nextCustom }), ...splitPatch });
@@ -2015,7 +2074,15 @@ function App() {
     if (!split || !todayDay) return;
     const dayIdx = split.cursor % split.days.length;
     const day = split.days[dayIdx];
-    if (!day.exercises || !day.exercises.includes(oldName)) return; // 登録種目でなければ何もしない
+    if (!day.exercises || !day.exercises.length) return; // 登録0件の Day は登録しない(addExercise と同じ)
+    if (!day.exercises.includes(oldName)) {
+      // 登録に無い種目を差し替えた: 差し替え先を登録に足す(addExercise と同じ。足さないと、今日のメニューは
+      // 登録を優先するので次回に出ない。reviewer 指摘)
+      if (newName && !day.exercises.includes(newName)) {
+        persist({ split: { ...split, days: split.days.map((d, i) => i === dayIdx ? { ...d, exercises: [...d.exercises, newName] } : d) } });
+      }
+      return;
+    }
     const nextExercises = newName
       ? day.exercises.map(x => x === oldName ? newName : x)
       : day.exercises.filter(x => x !== oldName);
@@ -2030,6 +2097,59 @@ function App() {
     setToday(t => t.filter(e => e.id !== id));
     if (ex) updateSplitDayExercise(ex.name, null);
     if (today.every(e => e.id === id)) clearErrorIf("log.noValidSets", "err.workoutSaveFailed"); // 最後の種目を消した(入力はもう残っていない)
+  };
+  // 記録画面の固定バーの直下に5秒だけ出す、取り消せる知らせ(改善要望 11・3d)。
+  //   removed:  カードの ✕ で種目を消した。実施済みのセットがあるときだけ確認し、戻すと Day の登録も同じ位置に戻す
+  //            (removeExercise は今日の Day の登録種目からも外すため)
+  //   dayAdded: 記録中に足した種目を、今日の Day の登録にも足した(以前は黙って足していた)。取り消すと登録だけ外す
+  // 取り消しは、押した時点の split を見て直す(知らせを出した時点の split を握らない。間に別の変更が入りうる)。
+  // Day は名前ではなく、知らせを出した時点の位置と cursor で特定する(保存で次の Day に進んだ後、
+  // 同じ名前の Day に足してしまわないように)。保存・下書きの破棄では知らせごと消す。
+  // 取り消しても、消していた間に Watch から来たその種目への入力は戻らない(applyWatchOps が
+  // 無い種目への op を捨てて ack するため)。5秒の間に Watch で打つことは稀なので、ここでは扱わない。
+  const [notice, setNotice] = useState(null);
+  const noticeTimerRef = useRef(null);
+  const lastRemoveAtRef = useRef(0);
+  const showNotice = (n) => {
+    setNotice(n);
+    clearTimeout(noticeTimerRef.current);
+    noticeTimerRef.current = setTimeout(() => setNotice(null), 5000);
+  };
+  useEffect(() => () => clearTimeout(noticeTimerRef.current), []);
+  const removeExerciseUndoable = (ex) => {
+    // ✕ は見出しの右端の同じ位置にあるので、素早く2回押すと、繰り上がってきた次の種目まで消える
+    // (取り消せるのは最後の1つだけ)。直前の削除から0.4秒以内は無視する(reviewer 指摘)
+    if (Date.now() - lastRemoveAtRef.current < 400) return;
+    const entered = ex.sets.some(s => !s.warmup && s.rir !== "" && s.rir != null);
+    if (entered && !window.confirm(t("log.confirmRemove", { name: exName(ex.name) }))) return;
+    const idx = today.findIndex(e => e.id === ex.id);
+    const dayPos = todayDay?.exercises ? todayDay.exercises.indexOf(ex.name) : -1;
+    removeExercise(ex.id);
+    lastRemoveAtRef.current = Date.now();
+    showNotice({ kind: "removed", ex, idx, ...noticeDay(), dayPos });
+  };
+  // 今日の Day の位置と cursor(取り消すときに、同じ Day のままかを確かめるため)
+  const noticeDay = () => split && todayDay
+    ? { dayIdx: split.cursor % split.days.length, cursor: split.cursor, dayName: todayDay.name }
+    : { dayIdx: -1, cursor: null, dayName: null };
+  const clearNotice = () => { clearTimeout(noticeTimerRef.current); setNotice(null); };
+  const undoNotice = () => {
+    const r = notice;
+    if (!r) return;
+    clearNotice();
+    const dayIdx = split && todayDay && r.dayIdx >= 0 && split.cursor === r.cursor && split.days[r.dayIdx] === todayDay ? r.dayIdx : -1;
+    const dayEx = dayIdx >= 0 ? (todayDay.exercises || []) : null;
+    if (r.kind === "removed") {
+      // 5秒の間に同じ種目を足し直していたら戻さない(同名が2枚あると、名前で引く前回の記録が片方にしか付かない)
+      setToday(t => t.some(e => e.id === r.ex.id || e.name === r.ex.name) ? t : [...t.slice(0, r.idx), r.ex, ...t.slice(r.idx)]);
+      if (dayEx && r.dayPos >= 0 && !dayEx.includes(r.ex.name)) {
+        const list = [...dayEx];
+        list.splice(Math.min(r.dayPos, list.length), 0, r.ex.name);
+        persist({ split: { ...split, days: split.days.map((d, i) => i === dayIdx ? { ...d, exercises: list } : d) } });
+      }
+    } else if (r.kind === "dayAdded" && dayEx && dayEx.includes(r.name)) {
+      persist({ split: { ...split, days: split.days.map((d, i) => i === dayIdx ? { ...d, exercises: dayEx.filter(x => x !== r.name) } : d) } });
+    }
   };
   // 種目の並べ替え(dir: -1=上へ, +1=下へ)
   // 種目の差し替え(セット内容は維持したまま種目だけ変更)
@@ -2127,6 +2247,22 @@ function App() {
         applied: watchApplied,
         recordStartAt: startAt,
         lastSaved: watchLastSaved,
+        finished: watchFinished,
+        // 休憩の知らせの経過分と本文(改善要望 4)。Watch は自分で始めた休憩と、自分がワークアウトを記録している間の
+        // iPhone の休憩にこれで通知を予約し、休憩画面を開いている間はこの時間に振動する。通知を切っていれば空
+        restNotices: soundOn ? restMinutes.map(m => ({ min: m, body: t("rest.notifyBodyAt", { t: restMinLabel(m) }) })) : [],
+        // 記録画面の固定バーと同じ基準・同じ文言(volumeGoalKey)。Watch で入れたセットは、iPhone が合流させて
+        // 送り直すまでリングに入らない(Watch はボリュームを計算しない)
+        volume: compareBase && compareBase.avg > 0 ? (() => {
+          const diff = liveVolume - compareBase.avg;
+          const v = Math.round(toU(Math.abs(diff))).toLocaleString();
+          return {
+            ratio: Math.max(0, liveVolume / compareBase.avg),
+            now: `${Math.round(toU(liveVolume)).toLocaleString()}${uLabel()}`,
+            lines: t(volumeGoalKey(compareBase, diff >= 0), { n: compareBase.n, v, unit: uLabel() }).split("|"),
+            over: diff >= 0,
+          };
+        })() : null,
         fmtW: wU,
       });
       const { sentAt, ...content } = snap;
@@ -2136,7 +2272,7 @@ function App() {
       syncWatchSnapshot(snap);
     }, 400);
     return () => clearTimeout(timer);
-  }, [loaded, today, restStartAt, todayDay, autoMenu, watchApplied, workouts, lang, unit, customExercises, exerciseOverrides, startAt, watchLastSaved]);
+  }, [loaded, today, restStartAt, todayDay, autoMenu, watchApplied, workouts, lang, unit, customExercises, exerciseOverrides, startAt, watchLastSaved, watchFinished, profile.bodyweight, soundOn, restMinutesKey]);
 
   // カロリー(METs×体重×時間, 目安)
   const estimateKcal = (min) => Math.round(5.0 * profile.bodyweight * (min / 60));
@@ -2189,17 +2325,51 @@ function App() {
       return best > 0 && liveBest1RM(ex) > best + 0.01;
     });
     const totalVolume = exercises.reduce((a, ex) => a + exVolume(ex), 0);
+    // Watch の完了画面(改善要望 12)。比べる基準(compareBase)と自己ベスト(prMap)は保存前の履歴から作られているので、
+    // persist より前に作る。文言はすべてここで作り、Watch は並べるだけ(心拍とカロリーだけは Watch 自身の値)
+    const finishedSummary = (() => {
+      const diff = compareBase && compareBase.avg > 0 ? totalVolume - compareBase.avg : null;
+      return {
+        id: start, endAt: end,
+        title: t("watch.finishedTitle"),
+        stats: [t("watch.finishedMin", { n: durationMin }),
+          t("watch.finishedCounts", { e: exercises.length, s: exercises.reduce((a, ex) => a + ex.sets.filter(x => !x.warmup).length, 0) })],
+        volume: `${Math.round(toU(totalVolume)).toLocaleString()}${uLabel()}`,
+        lines: diff == null ? [] : t(volumeGoalKey(compareBase, diff >= 0), { n: compareBase.n, v: Math.round(toU(Math.abs(diff))).toLocaleString(), unit: uLabel() }).split("|"),
+        over: diff != null && diff >= 0,
+        prTitle: t("watch.prTitle"),
+        prs: today.filter(ex => { const best = prMap[ex.name]?.best1RM || 0; return best > 0 && liveBest1RM(ex) > best + 0.01; }).map(ex => exName(ex.name)),
+        hrLabel: t("watch.avgHr"),
+      };
+    })();
     const entry = {
       date: new Date(end).toISOString(), session: todayDay ? todayDay.name : undefined,
       startAt: new Date(start).toISOString(), endAt: new Date(end).toISOString(),
       durationMin, totalVolume, kcal: estimateKcal(durationMin), exercises,
     };
-    const nextSplit = split ? { ...split, cursor: (split.cursor + 1) % split.days.length } : split;
+    // 記録中にカードを並べ替えたら、今日の Day の登録の順も合わせる(今日のメニューは登録の順を優先するので、
+    // 合わせないと並べ替えが次回に残らない。reviewer 指摘)。今日やらなかった登録種目は元の位置のまま、
+    // 今日やった登録種目が占めていた位置に、今日の順で入れ直す
+    const reorderedDays = (() => {
+      if (!split || !todayDay || !(todayDay.exercises || []).length) return split?.days;
+      const reg = todayDay.exercises;
+      const done = [...new Set(exercises.map(e => e.name))].filter(n => reg.includes(n));
+      let k = 0;
+      const next = reg.map(n => done.includes(n) ? done[k++] : n);
+      const dayIdx = split.cursor % split.days.length;
+      return next.join("\u0000") === reg.join("\u0000") ? split.days : split.days.map((d, i) => i === dayIdx ? { ...d, exercises: next } : d);
+    })();
+    const nextSplit = split ? { ...split, days: reorderedDays, cursor: (split.cursor + 1) % split.days.length } : split;
     // 分割が無い状態での初めての記録だけ、終了後に「メニューとして保存しますか?」と尋ねる
     // (2回目以降は出さない。workouts.length===0の時点=これが最初の記録、で判定する)
     if (!split && workouts.length === 0) {
       const muscles = [...new Set(exercises.map(ex => ex.muscle).filter(Boolean))];
       setOfferSaveAsMenu({ exercises: exercises.map(ex => ex.name), muscles });
+    }
+    // 登録種目が0件の Day で記録したら、その内容を Day の種目にするか尋ねる(改善要望 3d)。
+    // 記録中に足した種目が Day に登録されるのは、登録が1件以上あるときだけなので、0件の Day はずっと空のままになる
+    if (split && todayDay && !(todayDay.exercises || []).length && !dayHasRecords(todayDay.name)) {
+      setOfferSaveAsMenu({ exercises: [...new Set(exercises.map(ex => ex.name))], dayIdx: split.cursor % split.days.length, dayName: todayDay.name });
     }
     // 書き込めなかったら、入力中の記録・下書き・開始時刻はそのまま残す(2026-09-29に実機で、保存に失敗した
     // 記録を画面から消して失わせた)。persistは画面の状態を先に進めるので、履歴と分割は保存前に戻す
@@ -2232,6 +2402,8 @@ function App() {
     // watchLiveFor はここでは降ろさない。startAt が null になれば watchLive は false になる。ここで降ろすと、
     // 下の await の間の render で startAt・restStartAt が残ったまま抑止だけ外れ、Live Activity が一瞬出る
     try { await store.set(WATCH_LAST_SAVED_KEY, JSON.stringify(lastSaved)); } catch { /* noop */ }
+    setWatchFinished(finishedSummary);
+    try { await store.set(WATCH_FINISHED_KEY, JSON.stringify(finishedSummary)); } catch { /* noop */ }
     if (handToWatch) {
       watchHealthPendingRef.current = [...watchHealthPendingRef.current,
         { recordStartAt: start, startAt: entry.startAt, endAt: entry.endAt, savedAt: Date.now() }];
@@ -2240,7 +2412,7 @@ function App() {
     // 待たない(ヘルスケアへの書き込みが遅れても失敗しても、記録の保存とは無関係)
     if (healthOn && !watchRecorded) healthSaveWorkout(entry);
     // 終了コメント
-    setToday([]); setSaving(false);
+    setToday([]); setSaving(false); clearNotice();
     setStartAt(null); setElapsed(0); stopRest();
     setDraftRestored(false);
     try { await store.del(DRAFT_KEY); localStorage.removeItem(DRAFT_KEY); } catch { /* noop */ }
@@ -2267,9 +2439,17 @@ function App() {
 
   // 「分割未設定で初めて記録した内容をメニューとして保存するか」の申し出への応答
   const applyOfferedMenu = () => {
-    if (!offerSaveAsMenu) return;
-    persist({ split: { name: "マイメニュー", days: [{ name: "Day 1", muscles: offerSaveAsMenu.muscles, exercises: offerSaveAsMenu.exercises }], cursor: 0 } });
+    const o = offerSaveAsMenu;
+    if (!o) return;
     setOfferSaveAsMenu(null);
+    if (o.dayIdx != null) {
+      // 尋ねてから押すまでに Day を消した・並べ替えた・手で登録した場合は何もしない
+      const d = split?.days[o.dayIdx];
+      if (!d || d.name !== o.dayName || (d.exercises || []).length) return;
+      persist({ split: { ...split, days: split.days.map((x, i) => i === o.dayIdx ? { ...x, exercises: o.exercises } : x) } });
+      return;
+    }
+    persist({ split: { name: "マイメニュー", days: [{ name: "Day 1", muscles: o.muscles, exercises: o.exercises }], cursor: 0 } });
   };
   const dismissOfferedMenu = () => setOfferSaveAsMenu(null);
 
@@ -2286,7 +2466,31 @@ function App() {
   };
   const updSplit = (patch) => persist({ split: { ...split, ...patch } });
   const updDay = (i, patch) => updSplit({ days: split.days.map((d, j) => j === i ? { ...d, ...patch } : d) });
-  const toggleDayMuscle = (i, m) => { const d = split.days[i]; updDay(i, { muscles: d.muscles.includes(m) ? d.muscles.filter(x => x !== m) : [...d.muscles, m] }); };
+  // 部位を変えたら、まだ手で名前を付けていない Day は名前も付け直す(「胸・肩」、src/domain/dayPlan.js)
+  const toggleDayMuscle = (i, m) => {
+    const d = split.days[i];
+    const muscles = d.muscles.includes(m) ? d.muscles.filter(x => x !== m) : [...d.muscles, m];
+    const taken = split.days.filter((_, j) => j !== i).map(x => x.name);
+    updDay(i, { muscles, name: nextDayName(d, muscles, i, { locked: dayHasRecords(d.name), taken }) });
+  };
+  // その名前の Day で記録したことがあるか。Day 名は記録の session に入っていて、前回の同じ Day を名前で引く。
+  // 「最初の種目設定」(おまかせ・選ぶための AI 相談・保存時の登録の申し出)は、まだ記録が無い Day にだけ出す
+  // (プリセットの Day は登録種目を持たないまま記録を重ねるので、登録0件だけで判断すると出続けた。reviewer 指摘)
+  const dayHasRecords = (name) => workouts.some(w => w.session === name);
+  // 登録種目の並べ替え(改善要望 3c)。この順が今日のメニューの並びになる(autoMenu は登録を最優先にする)
+  const moveDayExercise = (i, name, dir) => {
+    const ex = [...(split.days[i].exercises || [])];
+    const a = ex.indexOf(name), b = a + dir;
+    if (a < 0 || b < 0 || b >= ex.length) return;
+    [ex[a], ex[b]] = [ex[b], ex[a]];
+    updDay(i, { exercises: ex });
+  };
+  // 「おまかせで入れる」(改善要望 2)。登録が0件の Day にだけ出すボタンから呼ぶ
+  const fillDayStarter = (i) => {
+    const d = split.days[i];
+    const cur = d.exercises || [];
+    updDay(i, { exercises: [...cur, ...starterPicks(d.muscles).filter(n => !cur.includes(n))] });
+  };
   const toggleDayExercise = (i, name) => { const d = split.days[i]; const ex = d.exercises || []; updDay(i, { exercises: ex.includes(name) ? ex.filter(x => x !== name) : [...ex, name] }); };
   // Dayのカスタム種目を作って、そのDayに登録する。今日の記録には入れない。
   // customExercises と split を1回の persist で書く(別々に書くと、後の方が古い値を元にして前の方を消す)。
@@ -2299,13 +2503,26 @@ function App() {
     persist({ customExercises: nextCustom, split: { ...split, days } });
     setDaySearch(""); setDayDraft({ muscle: "", eq: "" });
   };
-  const addDay = () => {
-    const i = split.days.length;
-    updSplit({ days: [...split.days, { name: `Day ${i + 1}`, muscles: [] }] });
-    setEditDay(i);
-    scrollToDayRef.current = i;
+  // at を省くと末尾に足す。編集中の Day の「この後ろに Day を追加」(改善要望 3e)は at = i + 1。
+  // 「今日」の Day がずれないよう、足した位置より後ろにあれば cursor も1つ進める
+  const addDay = (at = split.days.length) => {
+    const days = [...split.days];
+    // 既定名が既存の Day と重なると記録が混ざるので、空いている番号にする(reviewer 指摘)
+    days.splice(at, 0, { name: uniqueDayName(`Day ${at + 1}`, split.days.map(d => d.name), true), muscles: [] });
+    const cur = split.cursor % split.days.length;
+    updSplit({ days, cursor: cur >= at ? cur + 1 : cur });
+    setEditDay(at);
+    scrollToDayRef.current = at;
   };
-  const removeDay = (i) => { const days = split.days.filter((_, j) => j !== i); if (!days.length) { persist({ split: null }); setEditDay(null); return; } updSplit({ days, cursor: Math.min(split.cursor, days.length - 1) }); setEditDay(null); };
+  // 消した Day より後ろが「今日」なら cursor を1つ戻す(以前は min を取るだけで、前の Day を消すと「今日」が1つ先へずれた。
+  // 途中に Day を挟める addDay(at) と対称にする。reviewer 指摘)
+  const removeDay = (i) => {
+    const days = split.days.filter((_, j) => j !== i);
+    if (!days.length) { persist({ split: null }); setEditDay(null); return; }
+    const cur = split.cursor % split.days.length;
+    updSplit({ days, cursor: cur > i ? cur - 1 : Math.min(cur, days.length - 1) });
+    setEditDay(null);
+  };
   // Dayの並べ替え(dir: -1=上へ, +1=下へ)。「今日」の位置がずれないようcursorも追従させる。
   const moveDay = (i, dir) => {
     const j = i + dir;
@@ -2587,13 +2804,14 @@ function App() {
       inc: `${wU(ex.increment ?? profile.defIncrement)}${uLabel()}`,
     }));
     const pr = prMap[ex.name];
-    if (pr && pr.best1RM > 0) {
-      lines.push(t("share.exPr", {
+    if (pr && (pr.best1RM > 0 || pr.bestWeight > 0)) {
+      // 13回以上しか記録していない種目は推定1RMが無いので、最大重量だけ渡す
+      lines.push(pr.best1RM > 0 ? t("share.exPr", {
         // 推定1RMは計算値で端数が出る(39.199999999999996 のような値になる)。
         // 画面側と同じく小数1桁に丸める。
         rm: `${toU(pr.best1RM).toFixed(1)}${uLabel()}`, rmDate: shortDate(pr.date),
         top: `${toU(pr.bestWeight).toFixed(1)}${uLabel()}`, topDate: shortDate(pr.weightDate),
-      }));
+      }) : t("share.exPrTop", { top: `${toU(pr.bestWeight).toFixed(1)}${uLabel()}`, topDate: shortDate(pr.weightDate) }));
       // prMapの値は実効重量(ダンベルは両手合計・自重は体重込み)。セット行は片手/加重の生値なので、
       // 但し書きが無いとAIが「自己ベスト44kgに対して今日22kgは大幅減」と誤読する。
       if (unitNote) lines.push(t("share.exPrEff"));
@@ -2634,6 +2852,7 @@ function App() {
   // 他の日が何を担当しているか)が無いと、AIは「胸の日に背中も入れては」のような、
   // 分割の設計と衝突する助言をしてくる。
   const dayToText = (d, i) => {
+    if (!(d.exercises || []).length && d.muscles.length && !dayHasRecords(d.name)) return dayPickText(d, i);
     const dName = dayName(d.name);
     const lines = [t("share.dayPrompt", { name: dName }), ""];
     lines.push(t("share.dayMeta", { split: splitName(split.name), n: i + 1, total: split.days.length, name: dName }));
@@ -2689,6 +2908,28 @@ function App() {
     }
 
     lines.push("", t("share.rirNote"), "— KURABELL Workout Log");
+    return lines.join("\n");
+  };
+
+  // 登録種目が0件の Day の相談(改善要望 2)。見直しではなく「選んで」と頼む。
+  // その部位のアプリ内の種目名を渡して、その中から選ばせる(アプリに無い名前を返されると、
+  // 検索しても見つからず登録できない)。
+  const dayPickText = (d, i) => {
+    const dName = dayName(d.name);
+    const lines = [t("share.dayPickPrompt", { name: dName }), ""];
+    lines.push(t("share.dayMeta", { split: splitName(split.name), n: i + 1, total: split.days.length, name: dName }));
+    lines.push(t("share.dayMuscles", { muscles: d.muscles.map(m => muscleName(m)).join(" / ") }));
+    const others = split.days
+      .map((o, oi) => oi === i ? null : `${dayName(o.name)}(${(o.muscles || []).map(m => muscleName(m)).join(", ") || "-"})`)
+      .filter(Boolean);
+    if (others.length) lines.push(t("share.dayOthers", { list: others.join(" / ") }));
+    lines.push("", t("share.dayPickList"));
+    const cands = allExercises.filter(e => muscleMatchesDay(e.m, d));
+    [...MUSCLES, ""].forEach(m => {
+      const names = cands.filter(e => muscleGroupOf(e) === m).map(e => exName(e.n));
+      if (names.length) lines.push(`${m ? muscleName(m) : t("settings.other")}: ${names.join(" / ")}`);
+    });
+    lines.push("", t("share.dayPickRule"), "— KURABELL Workout Log");
     return lines.join("\n");
   };
 
@@ -2931,7 +3172,8 @@ function App() {
       return {
         date: `${d.getMonth() + 1}/${d.getDate()}`,
         最大重量: wU(Math.max(...ws.map(s => s.weight))),
-        推定1RM: Math.round(toU(best) * 10) / 10,
+        // 13回以上しかない日は推定しない(est1RM が 0)。0 を描くと線が落ちるので、その日は点を打たない
+        推定1RM: best > 0 ? Math.round(toU(best) * 10) / 10 : null,
       };
     }).filter(Boolean);
   }, [workouts, chartExercise, profile.bodyweight]);
@@ -3009,7 +3251,7 @@ function App() {
     : (today.find(ex => ex.sets.some(s => !s.warmup && (s.rir === "" || s.rir == null))) || today[today.length - 1]);
 
   // 上部バーとタブバーは自分でsafe-areaを負担しているので、実際の高さは端末で変わる
-  // (バーは 約95px + env(top)、タブバーは 56px + env(bottom))。ここをpxで決め打つと
+  // (バーは 約115px + env(top)、タブバーは 56px + env(bottom))。ここをpxで決め打つと
   // ブラウザでは合っていてもiOS実機だけ数十pxずれるので、必ず実測して使う。
   // rootMarginはcalc()/env()を受け付けないため、そもそも実測しないと書けない。
   const topBarRef = useRef(null);
@@ -3020,7 +3262,7 @@ function App() {
   });
 
   // 現在の種目が画面に見えているならボタンは出さない。固定ボタンは右下に居座るので、
-  // 出しっぱなしにすると種目名の行の「⋯」やセット行の×を覆って押せなくする
+  // 出しっぱなしにすると種目名の行の ✕ やセット行の ✕ を覆って押せなくする
   // (実際に覆っているのを確認した)。見えていれば戻る必要もない。
   const [currentExVisible, setCurrentExVisible] = useState(true);
   useEffect(() => {
@@ -3259,7 +3501,7 @@ function App() {
 
       {/* ===== 固定バー(タイマー+ボリューム) =====
           原則は記録タブ限定。以前は全タブに出していたが、設定・履歴・分割の画面で
-          経過時間とボリュームは判断材料にならず、縦を85px専有するだけだった。
+          経過時間とボリュームは判断材料にならず、縦を85px(今は約110px)専有するだけだった。
           ただしインターバル計測中だけは例外で全タブに出す。休憩中に履歴で前回の数字を
           見るのは実際の動線で、そこでバーが消えると残り時間も見えず止める手段も無くなる
           (上部バーの「インターバル開始」ボタン経由だとrestFullが開いていないため)。
@@ -3290,35 +3532,39 @@ function App() {
                   ゲージ全幅を基準の125%とし、80%の位置(=基準ちょうど)に切り欠きを置く。
                   高さは常に確保する。条件表示のままだと最初のRIRを入れた瞬間にバーが16px伸びて、
                   stickyバーの下にある入力欄が丸ごとずれてしまう。 */}
-              <div style={{ display: "flex", alignItems: "center", gap: 6, height: 15, marginTop: 5 }}>
-                <div style={{ flex: 1, minWidth: 0, height: 5 }}>
-                  {compareBase && compareBase.avg > 0 && (() => {
-                    const ratio = liveVolume / compareBase.avg;
-                    return (
-                      // ゲージは純粋に視覚的なので、文字で持っていた比較情報はaria-valuetextに移す
-                      <div role="progressbar" aria-label={t("log.volume")}
-                        aria-valuemin={0} aria-valuemax={100}
-                        aria-valuenow={Math.max(0, Math.min(Math.round(ratio * 100), 100))}
-                        aria-valuetext={t("log.volumeRatio", {
-                          pct: Math.round(ratio * 100),
-                          v: Math.round(toU(compareBase.avg)).toLocaleString(),
-                          unit: uLabel(),
-                        })}
-                        style={{ height: "100%", borderRadius: 999, background: C.border, position: "relative", overflow: "hidden" }}>
-                        <div style={{
-                          // 両側クランプ。NumInputはtype="text"で負の重量を打てるため、片側だけだと
-                          // width:"-32%"という不正値になり、宣言ごと無視されてゲージが満杯に見える。
-                          width: `${Math.max(0, Math.min(ratio / 1.25, 1)) * 100}%`, height: "100%",
-                          background: ratio >= 1 ? C.green : C.muted, transition: "width .3s linear",
-                        }} />
-                        <div style={{ position: "absolute", left: "80%", top: 0, bottom: 0, width: 2, background: C.surface2 }} />
-                      </div>
-                    );
-                  })()}
-                </div>
-                {/* 基準(直近N回の平均)までの残り。以前は「直近3回のPushの平均まであと5,088kg」を10pxで出していて
-                    ジムでは読めなかった。数字だけをゲージの右端に置き、基準の説明は title と読み上げに回す。
-                    ゲージと同じ行に置くので、出る・出ないで高さは変わらない。 */}
+              <div style={{ height: 5, marginTop: 6 }}>
+                {compareBase && compareBase.avg > 0 && (() => {
+                  const ratio = liveVolume / compareBase.avg;
+                  return (
+                    // ゲージは純粋に視覚的なので、文字で持っていた比較情報はaria-valuetextに移す
+                    <div role="progressbar" aria-label={t("log.volume")}
+                      aria-valuemin={0} aria-valuemax={100}
+                      aria-valuenow={Math.max(0, Math.min(Math.round(ratio * 100), 100))}
+                      aria-valuetext={t("log.volumeRatio", {
+                        pct: Math.round(ratio * 100),
+                        v: Math.round(toU(compareBase.avg)).toLocaleString(),
+                        unit: uLabel(),
+                      })}
+                      style={{ height: "100%", borderRadius: 999, background: C.border, position: "relative", overflow: "hidden" }}>
+                      <div style={{
+                        // 両側クランプ。NumInputはtype="text"で負の重量を打てるため、片側だけだと
+                        // width:"-32%"という不正値になり、宣言ごと無視されてゲージが満杯に見える。
+                        width: `${Math.max(0, Math.min(ratio / 1.25, 1)) * 100}%`, height: "100%",
+                        background: ratio >= 1 ? C.green : C.muted, transition: "width .3s linear",
+                      }} />
+                      <div style={{ position: "absolute", left: "80%", top: 0, bottom: 0, width: 2, background: C.surface2 }} />
+                    </div>
+                  );
+                })()}
+              </div>
+              {/* 基準までの残り(「過去3回平均まで あと480kg」)。以前はゲージの右端に「あと480」だけを出していたが、
+                  何に対する残りか・単位が分からなかった。ゲージの横には収まらないので下に置き、
+                  狭い画面では「過去3回平均まで」「あと480kg」の2行に折り返す。
+                  高さは常に2行分を確保する。数字の桁で1行と2行が入れ替わったり、出る・出ないで高さが変わったりすると、
+                  stickyバーの下にある入力欄が丸ごとずれる。
+                  読み上げは、見えている2つの断片ではなく、Day 名まで入れた1文(srOnly)で行う。
+                  role の無い span に aria-label を付けても読まれない場合があり、断片の片方が抜けるため(reviewer 指摘)。 */}
+              <div style={{ height: 26, marginTop: 3, display: "flex", flexWrap: "wrap", alignContent: "center", justifyContent: "center", columnGap: 4, fontSize: 11, lineHeight: "13px", fontWeight: 700, overflow: "hidden", position: "relative" }}>
                 {compareBase && compareBase.avg > 0 && (() => {
                   const diff = liveVolume - compareBase.avg;
                   const v = Math.round(toU(Math.abs(diff))).toLocaleString();
@@ -3326,9 +3572,12 @@ function App() {
                     ? t("log.volumeOver", { label: compareBase.avgLabel, v, unit: uLabel() })
                     : t("log.volumeToGo", { label: compareBase.avgLabel, v, unit: uLabel() });
                   return (
-                    <span title={full} aria-label={full} style={{ fontSize: 12, fontWeight: 700, whiteSpace: "nowrap", color: diff >= 0 ? C.green : C.muted }}>
-                      {diff >= 0 ? `+${v}` : t("log.volumeToGoShort", { v })}
-                    </span>
+                    <>
+                      {t(volumeGoalKey(compareBase, diff >= 0), { n: compareBase.n, v, unit: uLabel() }).split("|").map((part, i) => (
+                        <span key={i} title={full} aria-hidden="true" style={{ whiteSpace: "nowrap", color: diff >= 0 ? C.green : C.muted }}>{part}</span>
+                      ))}
+                      <span style={srOnly}>{full}</span>
+                    </>
                   );
                 })()}
               </div>
@@ -3350,6 +3599,32 @@ function App() {
               }}>
                 {t("rest.start")}<br />{t("rest.startLine2")}
               </button>
+            )}
+          </div>
+          {/* 種目を消した直後の「元に戻す」と、AI相談のあとの貼り付けの案内(改善要望 11)。
+              バーの直下に重ねて出す。カードの中に出すと、消えるときに下の入力欄がずれる。
+              画面の下側は「ワークアウトを保存」と重なり、押し間違えを招く */}
+          {/* role="status" は常駐させ、中身だけを出し入れする(出すたびにライブリージョンごと挿入すると、
+              VoiceOver では読まれないことが多い)。貼り付けの案内はボタンが無いので、下のタップを通す */}
+          <div role="status" style={{
+            position: "absolute", left: 0, right: 0, top: "calc(100% + 8px)", maxWidth: 520, margin: "0 auto", padding: "0 16px", pointerEvents: "none",
+          }}>
+            {view === "log" && (notice || (copiedIdx || "").startsWith("ex:")) && (
+              <div style={{
+                display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 12, pointerEvents: notice ? "auto" : "none",
+                background: C.surface2, border: `1px solid ${C.border}`, boxShadow: "0 6px 20px rgba(0,0,0,0.5)", fontSize: 13,
+              }}>
+                {notice ? (
+                  <>
+                    <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {notice.kind === "removed" ? t("log.removed", { name: exName(notice.ex.name) }) : t("log.addedToDay", { day: dayName(notice.dayName) })}
+                    </span>
+                    <button onClick={undoNotice} style={{ ...btn("transparent", C.yellow), padding: "4px 2px", fontSize: 13, fontWeight: 800, flexShrink: 0 }}>{notice.kind === "removed" ? t("log.undo") : t("log.undoAdd")}</button>
+                  </>
+                ) : (
+                  <span style={{ color: C.green }}>{t("log.pasteHint")}</span>
+                )}
+              </div>
             )}
           </div>
         </div>
@@ -3409,8 +3684,9 @@ function App() {
               <button onClick={() => setDraftRestored(false)} style={{ ...btn(C.green, "#fff"), padding: "6px 14px", fontSize: 13 }}>OK</button>
               <button onClick={async () => {
                 if (!window.confirm(t("log.discardDraft"))) return;
-                setToday([]); setStartAt(null); setElapsed(0); stopRest(); setDraftRestored(false);
+                setToday([]); setStartAt(null); setElapsed(0); stopRest(); setDraftRestored(false); clearNotice();
                 watchWorkoutForRef.current = null; setWatchLiveFor(null);
+                watchRestForRef.current = null; setWatchRestFor(null);
                 clearErrorIf("log.noValidSets", "err.workoutSaveFailed"); // 破棄したので「入力した内容は残っています」も消す
                 try { await store.del(DRAFT_KEY); localStorage.removeItem(DRAFT_KEY); } catch { /* noop */ }
               }} style={{ ...btn("transparent", C.muted), padding: "6px 10px", fontSize: 13 }}>{t("log.discard")}</button>
@@ -3472,10 +3748,10 @@ function App() {
             <div style={{ background: C.surface, borderRadius: 14, padding: 14, marginBottom: 14, border: `1px solid ${C.border}` }}>
               <div style={{ fontSize: 13, fontWeight: 900, marginBottom: 2 }}>{t("menu.title")}</div>
               <div style={{ fontSize: 12, color: C.muted, marginBottom: 10, lineHeight: 1.6 }}>
-                {/* autoMenuの3分岐(前回同セッション > 分割の登録種目 > 部位一致の履歴)と1対1で対応させる。
+                {/* autoMenuの3分岐(分割の登録種目 > 前回同セッション > 部位一致の履歴)と1対1で対応させる。
                     以前は3分岐目(部位一致で複数の過去記録から寄せ集め)もfromLastと表示しており、
                     特定の「前回のセッション」から来たかのように読めて不正確だった。 */}
-                {t("menu.carryover", { src: lastSameSession ? t("menu.fromLast") : (todayDay.exercises && todayDay.exercises.length ? t("menu.fromSplit") : t("menu.fromHistory")) })}
+                {t("menu.carryover", { src: todayDay.exercises && todayDay.exercises.length ? t("menu.fromSplit") : (lastSameSession ? t("menu.fromLast") : t("menu.fromHistory")) })}
               </div>
               {autoMenu.map((it, i) => {
                 const p = it.prescription;
@@ -3515,6 +3791,13 @@ function App() {
                         {wU(p.weight)}<span style={{ fontSize: 12, color: C.muted }}>{uLabel()}{p.bwFactor > 0 ? t("menu.weighted") : p.isDb ? t("menu.perHandShort") : ""}</span>
                         {" × "}<span style={{ fontSize: 15 }}>{repsLabel(p.targetReps)}</span>
                       </div>
+                    )}
+                    {/* 初めての種目は、まずフォームを見てから始められるように(改善要望 10b) */}
+                    {it.type === "new_start" && (
+                      <button onClick={() => openYouTube(p.name)} className="tapArea"
+                        style={{ ...btn("transparent", C.text), padding: "6px 0", fontSize: 12, marginTop: 2, display: "inline-flex", alignItems: "center", gap: 5 }}>
+                        <Icon name="youtube" size={14} />{t("menu.watchForm")}
+                      </button>
                     )}
                   </div>
                 );
@@ -3562,8 +3845,7 @@ function App() {
                   {t("log.superset")}
                 </div>
               )}
-              <div style={{ marginBottom: 10 }}>
-                <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+              <div style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 10 }}>
                   <div style={{ fontSize: 15, fontWeight: 700, lineHeight: 1.4, flex: 1, minWidth: 0, paddingTop: 3 }}>
                     {inGroup && <span style={{ color: C.blue, fontWeight: 800, marginRight: 6 }}>{ssLetter}.</span>}
                     {exName(ex.name)}
@@ -3572,105 +3854,11 @@ function App() {
                     {resolveRom(ex.name, ex.rom) < 1 && <span style={{ color: C.muted, fontSize: 12, marginLeft: 4 }}>ROM×{resolveRom(ex.name, ex.rom)}</span>}
                     {todayDay && ex.muscle && !muscleMatchesDay(ex.muscle, todayDay) && <span style={{ color: C.yellow, fontSize: 12, marginLeft: 6 }}>{t("log.offDay")}</span>}
                   </div>
-                  <button onClick={() => setOpenMenu({ ...openMenu, [ex.id]: !openMenu[ex.id] })}
-                    aria-label={t("log.exerciseMenu")} aria-expanded={!!openMenu[ex.id]} className="tapArea"
-                    style={{ ...btn(openMenu[ex.id] ? C.surface2 : "transparent", openMenu[ex.id] ? C.text : C.muted),
-                      width: 34, height: 30, padding: 0, display: "grid", placeItems: "center", flexShrink: 0, border: `1px solid ${openMenu[ex.id] ? C.border : "transparent"}` }}>
-                    <Icon name="more" size={18} />
-                  </button>
-                </div>
-                {openMenu[ex.id] && (
-                  <div style={{ background: C.bg, borderRadius: 10, padding: 8, marginTop: 8 }}>
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
-                      {/* この行は flexWrap: "wrap" で折り返しうるため .tapArea を付けない。
-                          縦方向の透明拡張(-6px)が gap を超え、折り返した隣の行のボタンと
-                          重なって誤タップを誘発するリスクがあるため(reviewer指摘)。 */}
-                      <button onClick={() => moveExercise(ex.id, -1)} disabled={exIdx === 0} aria-label={t("log.moveUp")}
-                        style={{ ...btn(C.surface2, exIdx === 0 ? C.border : C.muted), padding: "6px 10px", fontSize: 13, cursor: exIdx === 0 ? "default" : "pointer" }}>▲</button>
-                      <button onClick={() => moveExercise(ex.id, 1)} disabled={exIdx === today.length - 1} aria-label={t("log.moveDown")}
-                        style={{ ...btn(C.surface2, exIdx === today.length - 1 ? C.border : C.muted), padding: "6px 10px", fontSize: 13, cursor: exIdx === today.length - 1 ? "default" : "pointer" }}>▼</button>
-                      <button onClick={() => consultAi(exerciseToText(ex), `ex:${ex.id}`)}
-                        style={{
-                          ...btn(C.surface2, copiedIdx === `ex:${ex.id}` ? C.green : C.text), padding: "6px 10px", fontSize: 13,
-                          whiteSpace: "nowrap", flexShrink: 0,
-                          // コピー後の「✓ コピー / ✓ Copied」は元のラベルより長い。幅を固定しないと
-                          // 押した瞬間にボタン行が折り返して、下のUIがずれる(英語+375pxで顕著)。
-                          minWidth: 74, textAlign: "center",
-                        }}>
-                        {copiedIdx === `ex:${ex.id}` ? t("log.consultAiDone") : t("log.consultAi")}
-                      </button>
-                      <button onClick={() => { setSwapEx(swapEx === ex.id ? null : ex.id); setSwapSearch(""); setSwapMuscle(""); }}
-                        style={{ ...btn(C.surface2, swapEx === ex.id ? C.yellow : C.text), padding: "6px 10px", fontSize: 13, whiteSpace: "nowrap", flexShrink: 0 }}>{t("log.swap")}</button>
-                      <button onClick={() => setOpenHist({ ...openHist, [ex.id]: !openHist[ex.id] })}
-                        style={{ ...btn(C.surface2, openHist[ex.id] ? C.yellow : C.text), padding: "6px 10px", fontSize: 13, whiteSpace: "nowrap", flexShrink: 0 }}>{t("log.history")}</button>
-                      <button onClick={() => setOpenCfg({ ...openCfg, [ex.id]: !openCfg[ex.id] })} aria-label={t("log.exerciseConfig")} aria-expanded={!!openCfg[ex.id]}
-                        style={{ ...btn(C.surface2, openCfg[ex.id] ? C.yellow : C.text), padding: "6px 10px", fontSize: 13, whiteSpace: "nowrap", flexShrink: 0 }}>{t("log.exerciseConfigShort")}</button>
-                      <button onClick={() => openYouTube(ex.name)} aria-label={t("log.youtube")}
-                        style={{ ...btn(C.surface2, C.text), padding: "6px 10px", fontSize: 13, whiteSpace: "nowrap", flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 5 }}>
-                        <Icon name="youtube" size={15} />YouTube</button>
-                      {exIdx > 0 && (
-                        <button onClick={() => toggleSuperset(ex.id)} style={{
-                          ...btn(inGroup && prevEx && prevEx.ssGroup === ex.ssGroup ? C.blue : C.surface2, inGroup && prevEx && prevEx.ssGroup === ex.ssGroup ? "#fff" : C.text),
-                          padding: "6px 10px", fontSize: 13, whiteSpace: "nowrap",
-                        }}>
-                          {inGroup && prevEx && prevEx.ssGroup === ex.ssGroup ? t("log.supersetOff") : t("log.supersetOn")}
-                        </button>
-                      )}
-                      <div style={{ flex: 1 }} />
-                      <button onClick={() => removeExercise(ex.id)} aria-label={t("log.removeExercise")}
-                        style={{ ...btn("transparent", C.red), padding: "6px 6px", fontSize: 13, whiteSpace: "nowrap", flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 4 }}>
-                        <Icon name="trash" size={15} />{t("log.removeExerciseShort")}</button>
-                    </div>
-                    {/* コピーしただけでは「次に何をすればいいか」が伝わらないため、貼り付けが要ることを明示する。
-                        高さは常に確保する。条件表示にすると、AI側から戻ってきた直後に文言が消えた瞬間
-                        セット行が上へ飛び、狙った入力欄の1つ下を押してしまう(ボタン幅をminWidthで
-                        固定したのと同じ理由)。role="status"もDOMに常駐させないと読み上げられない。 */}
-                    <div role="status" style={{ fontSize: 12, color: C.green, marginTop: 6, height: 17 }}>
-                      {copiedIdx === `ex:${ex.id}` ? t("log.pasteHint") : ""}
-                    </div>
-                  </div>
-                )}
+                {/* 削除は、ほかの操作から離して見出しの右端に置く(改善要望 11。「削除は結構使う」)。
+                    実施済みのセットがあるときだけ確認し、消した直後は「元に戻す」を数秒出す */}
+                <button onClick={() => removeExerciseUndoable(ex)} aria-label={t("log.removeExercise")} title={t("log.removeExercise")} className="tapArea"
+                  style={{ ...btn("transparent", C.muted), width: 30, height: 30, padding: 0, display: "grid", placeItems: "center", flexShrink: 0, fontSize: 15 }}>✕</button>
               </div>
-
-              {/* 種目の差し替え(セットは新しい種目の前回記録から入れ直す) */}
-              {swapEx === ex.id && (
-                <div style={{ background: C.bg, borderRadius: 10, padding: 10, marginBottom: 10, border: `1px solid ${C.border}` }}>
-                  <div style={{ fontSize: 12, color: C.muted, marginBottom: 8 }}>
-                    {t("log.swapHint")}
-                  </div>
-                  <input value={swapSearch} onChange={e => setSwapSearch(e.target.value)} placeholder={t("log.searchExercise")}
-                    style={{ width: "100%", background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: "8px 10px", fontSize: 16, fontFamily: "inherit", marginBottom: 8 }} />
-                  {/* 部位フィルター(他の部位にも変更できる) */}
-                  <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 8, marginBottom: 4 }}>
-                    <button onClick={() => setSwapMuscle("")} style={{ ...chip(swapMuscle === ""), flexShrink: 0 }}>{t("common.all")}</button>
-                    {MUSCLES.map(m => (
-                      <button key={m} onClick={() => setSwapMuscle(m)} style={{ ...chip(swapMuscle === m), flexShrink: 0 }}>{muscleName(m)}</button>
-                    ))}
-                  </div>
-                  <div style={{ maxHeight: 180, overflowY: "auto" }}>
-                    {allExercises
-                      .filter(e => {
-                        const q = swapSearch.trim();
-                        if (e.n === ex.name) return false;
-                        // 今日の記録に既にある種目名には差し替えない(同名重複すると、履歴参照が
-                        // 名前ベースの.findのため一方のカードの記録が以後参照できなくなる)
-                        if (today.some(t => t.id !== ex.id && t.name === e.n)) return false;
-                        if (q) return exMatches(e, q);
-                        if (swapMuscle) return e.m === swapMuscle;
-                        return true; // 既定はすべての部位から選べる
-                      })
-                      .slice(0, 60)
-                      .map(e => (
-                        <button key={e.n} onClick={() => swapExercise(ex.id, e.n)}
-                          style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, width: "100%", textAlign: "left", background: "transparent", border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 10px", marginBottom: 5, cursor: "pointer", color: C.text, fontSize: 13, fontFamily: "inherit" }}>
-                          <span style={{ minWidth: 0 }}>{exName(e.n)}</span>
-                          <span style={{ color: C.muted, fontSize: 12, flexShrink: 0 }}>{muscleName(e.m)}{t("common.sep")}{eqName(e.eq)}</span>
-                        </button>
-                      ))}
-                  </div>
-                  <button onClick={() => { setSwapEx(null); setSwapSearch(""); }} style={{ ...btn("transparent", C.muted), width: "100%", fontSize: 13, padding: 6, marginTop: 2 }}>{t("common.cancel")}</button>
-                </div>
-              )}
 
               {/* 判断材料: 重量の停滞と推移。前回の各セットはセット行に並べて出すのでここでは繰り返さない */}
               {(() => {
@@ -3734,13 +3922,15 @@ function App() {
                 const daysSincePR = pr?.date ? Math.floor((Date.now() - new Date(pr.date).getTime()) / 86400000) : null;
                 const unit = ex.bwFactor > 0 ? t("share.withBw", { unit: uLabel() }) : resolveIsDb(ex.name, ex.isDb) ? t("share.bothHands", { unit: uLabel() }) : uLabel();
                 const f1 = (v) => toU(v).toFixed(1);
-                let main;
+                // 13回以上しか記録していない種目は、最大重量はあっても推定1RMが無い(est1RM が 0)。
+                // そのときは「過去のベスト 推定1RM 0.0」や「初回記録」を出さない(reviewer 指摘)
+                let main = null;
                 if (live1RM > 0 && best1RM > 0) {
                   const d = live1RM - best1RM;
                   main = t("compare.line", { now: f1(live1RM), diff: `${d >= 0 ? "+" : "−"}${f1(Math.abs(d))}`, unit: uLabel() });
                 } else if (live1RM > 0) {
-                  main = t("compare.lineFirst", { v: f1(live1RM), unit: uLabel() });
-                } else {
+                  main = hasHistory ? t("compare.lineNow", { v: f1(live1RM), unit: uLabel() }) : t("compare.lineFirst", { v: f1(live1RM), unit: uLabel() });
+                } else if (best1RM > 0) {
                   main = t("compare.lineBest", { v: f1(best1RM), unit: uLabel() });
                 }
                 return (
@@ -3749,7 +3939,7 @@ function App() {
                     padding: "7px 10px", borderRadius: 10, background: C.bg,
                     border: `1px solid ${isPR1RM && best1RM > 0 ? C.green : "transparent"}`,
                   }}>
-                    <span style={{ fontSize: 13, fontWeight: isPR1RM ? 800 : 600, color: isPR1RM ? C.green : C.text }}>{main}</span>
+                    {main && <span style={{ fontSize: 13, fontWeight: isPR1RM ? 800 : 600, color: isPR1RM ? C.green : C.text }}>{main}</span>}
                     {isPR1RM && best1RM > 0 && <span style={{ fontSize: 12, color: C.green }}>{t("compare.win")}</span>}
                     <span style={{ marginLeft: "auto", display: "inline-flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                       {isPRw ? (
@@ -3767,12 +3957,97 @@ function App() {
                 );
               })()}
 
+              {/* 種目の操作(改善要望 11)。1.2 では「⋯」に畳んでいたが、毎回1タップ余計にかかった。
+                  畳んだ理由(2段のボタンでカードが長くなり、入力欄が下に追いやられた)に配慮して、
+                  アイコン+短い文字の7マスを1段に収める。並べ替えとスーパーセットは使う頻度が低いので薄く。
+                  この行は折り返さないので .tapArea を付けてよい(set 行と同じ扱い) */}
+              {(() => {
+                const ssOn = inGroup && prevEx && prevEx.ssGroup === ex.ssGroup;
+                const copied = copiedIdx === `ex:${ex.id}`;
+                const cell = (on, faint) => ({
+                  ...btn("transparent", on ? C.yellow : faint ? C.grey : C.muted),
+                  flex: 1, minWidth: 0, padding: "4px 0", display: "flex", flexDirection: "column", alignItems: "center", gap: 3,
+                  fontSize: 10, fontWeight: 600, lineHeight: 1.1, whiteSpace: "nowrap", overflow: "hidden", // 320px 幅で隣のマスに重ならないように
+                });
+                const arrow = (disabled) => ({
+                  ...btn("transparent", disabled ? C.border : C.grey), flex: 1, minWidth: 0, padding: 0,
+                  display: "grid", placeItems: "center", cursor: disabled ? "default" : "pointer",
+                });
+                return (
+                  <div style={{ display: "flex", alignItems: "stretch", gap: 2, marginBottom: 10, marginTop: -2 }}>
+                    <div style={{ flex: 1, minWidth: 0, display: "flex" }}>
+                      <button onClick={() => moveExercise(ex.id, -1)} disabled={exIdx === 0} aria-label={t("log.moveUp")} className="tapArea" style={arrow(exIdx === 0)}>
+                        <Icon name="up" size={16} /></button>
+                      <button onClick={() => moveExercise(ex.id, 1)} disabled={exIdx === today.length - 1} aria-label={t("log.moveDown")} className="tapArea" style={arrow(exIdx === today.length - 1)}>
+                        <Icon name="down" size={16} /></button>
+                    </div>
+                    <button onClick={() => setOpenCfg({ ...openCfg, [ex.id]: !openCfg[ex.id] })} aria-label={t("log.exerciseConfig")} aria-expanded={!!openCfg[ex.id]} className="tapArea" style={cell(openCfg[ex.id])}>
+                      <Icon name="settings" size={16} />{t("act.config")}</button>
+                    <button onClick={() => openYouTube(ex.name)} aria-label={t("log.youtube")} className="tapArea" style={cell(false)}>
+                      <Icon name="youtube" size={16} />{t("act.form")}</button>
+                    <button onClick={() => consultAi(exerciseToText(ex), `ex:${ex.id}`)} aria-label={t("log.consultAi")} className="tapArea"
+                      style={{ ...cell(false), color: copied ? C.green : C.muted }}>
+                      <Icon name={copied ? "check" : "chat"} size={16} />{copied ? t("act.copied") : t("act.ai")}</button>
+                    <button onClick={() => { setSwapEx(swapEx === ex.id ? null : ex.id); setSwapSearch(""); setSwapMuscle(""); }} aria-label={t("log.swapAria")} aria-expanded={swapEx === ex.id} className="tapArea" style={cell(swapEx === ex.id)}>
+                      <Icon name="swap" size={16} />{t("log.swap")}</button>
+                    <button onClick={() => setOpenHist({ ...openHist, [ex.id]: !openHist[ex.id] })} aria-label={t("log.historyAria")} aria-expanded={!!openHist[ex.id]} className="tapArea" style={cell(openHist[ex.id])}>
+                      <Icon name="history" size={16} />{t("log.history")}</button>
+                    {/* 先頭の種目は上と組めない。マスは空けたまま残して、カードごとに位置がずれないようにする */}
+                    {exIdx > 0 ? (
+                      <button onClick={() => toggleSuperset(ex.id)} aria-label={t("log.supersetAria")} aria-pressed={!!ssOn} className="tapArea"
+                        style={{ ...cell(false, !ssOn), color: ssOn ? C.blue : C.grey }}>
+                        <Icon name="link" size={16} />{t("act.superset")}</button>
+                    ) : <span style={{ flex: 1 }} />}
+                  </div>
+                );
+              })()}
+
+              {/* 種目の差し替え(セットは新しい種目の前回記録から入れ直す) */}
+              {swapEx === ex.id && (
+                <div style={{ background: C.bg, borderRadius: 10, padding: 10, marginBottom: 10, border: `1px solid ${C.border}` }}>
+                  <div style={{ fontSize: 12, color: C.muted, marginBottom: 8 }}>
+                    {t("log.swapHint")}
+                  </div>
+                  <input value={swapSearch} onChange={e => setSwapSearch(e.target.value)} placeholder={t("log.searchExercise")}
+                    style={{ width: "100%", background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: "8px 10px", fontSize: 16, fontFamily: "inherit", marginBottom: 8 }} />
+                  {/* 部位フィルター(他の部位にも変更できる) */}
+                  <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 8, marginBottom: 4 }}>
+                    <button onClick={() => setSwapMuscle("")} style={{ ...chip(swapMuscle === ""), flexShrink: 0 }}>{t("common.all")}</button>
+                    {MUSCLES.map(m => (
+                      <button key={m} onClick={() => setSwapMuscle(m)} style={{ ...chip(swapMuscle === m), flexShrink: 0 }}>{muscleName(m)}</button>
+                    ))}
+                  </div>
+                  <div style={{ maxHeight: 180, overflowY: "auto" }}>
+                    {allExercises
+                      .filter(e => {
+                        const q = swapSearch.trim();
+                        if (e.n === ex.name) return false;
+                        // 今日の記録に既にある種目名には差し替えない(同名重複すると、履歴参照が
+                        // 名前ベースの.findのため一方のカードの記録が以後参照できなくなる)
+                        if (today.some(t => t.id !== ex.id && t.name === e.n)) return false;
+                        if (q) return exMatches(e, q);
+                        if (swapMuscle) return e.m === swapMuscle;
+                        return true; // 既定はすべての部位から選べる
+                      })
+                      .slice(0, 60)
+                      .map(e => (
+                        <button key={e.n} onClick={() => swapExercise(ex.id, e.n)}
+                          style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, width: "100%", textAlign: "left", background: "transparent", border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 10px", marginBottom: 5, cursor: "pointer", color: C.text, fontSize: 13, fontFamily: "inherit" }}>
+                          <span style={{ minWidth: 0 }}>{exName(e.n)}</span>
+                          <span style={{ color: C.muted, fontSize: 12, flexShrink: 0 }}>{muscleName(e.m)}{t("common.sep")}{eqName(e.eq)}</span>
+                        </button>
+                      ))}
+                  </div>
+                  <button onClick={() => { setSwapEx(null); setSwapSearch(""); }} style={{ ...btn("transparent", C.muted), width: "100%", fontSize: 13, padding: 6, marginTop: 2 }}>{t("common.cancel")}</button>
+                </div>
+              )}
+
               {/* この種目の過去履歴 */}
               {openHist[ex.id] && (() => {
                 const hist = exerciseHistory(ex.name, 5);
                 return (
                   <div style={{ background: C.bg, borderRadius: 10, padding: 10, marginBottom: 10, border: `1px solid ${C.border}` }}>
-                    {/* 開くボタンは「⋯」の中にあるので、パネル側にも閉じるボタンを置く */}
+                    {/* 開くボタン(操作の行の「履歴」)から離れているので、パネル側にも閉じるボタンを置く */}
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 8 }}>
                       <span style={{ fontSize: 12, color: C.muted }}>{t("log.recentN", { name: exName(ex.name), n: hist.length })}</span>
                       <button onClick={() => setOpenHist({ ...openHist, [ex.id]: false })} aria-label={t("common.close")} className="tapArea"
@@ -3902,24 +4177,28 @@ function App() {
                 const done = s.warmup || (s.rir !== "" && s.rir != null); // 実施済みか
                 // このセットの推定1RM(ウォームアップ・補助は対象外)
                 const setW = fromU(s.weight), setR = Math.round(num(s.reps));
-                const set1RM = (!s.warmup && !s.assisted && setW > 0 && setR > 0 && s.rir !== "" && s.rir != null)
-                  ? est1RM(effWeight(setW, resolveIsDb(ex.name, ex.isDb), ex.bwFactor || 0, profile.bodyweight), setR)
-                  : 0;
+                const setEffW = effWeight(setW, resolveIsDb(ex.name, ex.isDb), ex.bwFactor || 0, profile.bodyweight);
+                const set1RM = (showsSet1RM(s, setEffW, setR) && s.rir !== "" && s.rir != null) ? est1RM(setEffW, setR) : 0;
                 const pastBest1RM = prMap[ex.name]?.best1RM || 0;
                 // このセットが自己ベストを更新しているか(同一セッション内では最も高い1セットのみに印を付ける)
+                // 対象は行に 1RM を出すセット(showsSet1RM)に揃える。13回以上を数えると、⚡がどの行にも出ないことがある(reviewer 指摘)
                 const bestIdxInSession = (() => {
                   let bi = -1, bv = 0;
                   ex.sets.forEach((x, xi) => {
-                    if (x.warmup || x.assisted) return;
                     if (x.rir === "" || x.rir == null) return; // 未実施は対象外
-                    const w = fromU(x.weight), r = Math.round(num(x.reps));
-                    if (w <= 0 || r <= 0) return;
-                    const v = est1RM(effWeight(w, resolveIsDb(ex.name, ex.isDb), ex.bwFactor || 0, profile.bodyweight), r);
+                    const w = effWeight(fromU(x.weight), resolveIsDb(ex.name, ex.isDb), ex.bwFactor || 0, profile.bodyweight), r = Math.round(num(x.reps));
+                    if (!showsSet1RM(x, w, r)) return;
+                    const v = est1RM(w, r);
                     if (v > bv) { bv = v; bi = xi; }
                   });
                   return bi;
                 })();
                 const isSetPR = set1RM > 0 && set1RM > pastBest1RM + 0.01 && i === bestIdxInSession;
+                // 行の右端に出す推定1RM。重量と回数が入っていれば RIR の前から出す(未実施の行は行ごと薄くなる)。
+                // 自己ベストを超えたら緑。初めての種目は比べる相手がいないので緑にしない(全部の行が緑になる)
+                const show1RM = showsSet1RM(s, setEffW, setR);
+                const row1RM = show1RM ? est1RM(setEffW, setR) : 0;
+                const over1RM = pastBest1RM > 0 && row1RM > pastBest1RM + 0.01;
                 // 前回の同じ番手のワーキングセット。同じ重量×回数なら余力の伸びを差分で出す
                 const prevSet = s.warmup ? null : (ins?.sets?.[wsIndex - 1] || null);
                 const rirDiff = (prevSet && prevSet.rir != null && s.rir !== "" && s.rir != null
@@ -3963,9 +4242,11 @@ function App() {
                       style={{ width: 26, height: 26, borderRadius: 8, border: `1px solid ${C.border}`, background: C.surface2, color: C.muted, fontSize: 13, cursor: "pointer", flexShrink: 0 }}>✕</button>
                   </div>
 
-                  {/* 前回の同じ番手のセットと、今日との差。推定1RMは上の比較行で出しているので、
-                      セット行では更新したときだけバッジで出す(以前は毎行「推定1RM 91.8kg」が並んでいた)。 */}
-                  {(prevSet || isSetPR) && (() => {
+                  {/* 前回の同じ番手のセットと、今日との差、このセットの推定1RM。
+                      1RM は以前は毎行「推定1RM 91.8kg」と出していて長すぎたので、更新したときだけバッジにしていた。
+                      1.3 で右端に短く「1RM 92.5」を戻した(改善要望 6)。更新の印はバッジをやめて、数字の緑と ⚡ に寄せた
+                      (バッジ・差・1RM の3つが並ぶと 375px で折り返すため)。 */}
+                  {(prevSet || show1RM) && (() => {
                     const prevR = prevSet ? Math.round(num(prevSet.reps)) : 0;
                     const hasNow = setW > 0 || setR > 0;
                     // 重量の差は「画面に出ている数字どうし」で取る。kg で記録した前回を lb で表示しているとき、
@@ -3994,12 +4275,21 @@ function App() {
                           </span>
                         )}
                         <span style={{ marginLeft: "auto", display: "inline-flex", gap: 8, alignItems: "center" }}>
-                          {isSetPR && (
-                            <span style={{ background: C.yellow, color: "#141517", borderRadius: 999, padding: "1px 8px", fontWeight: 800, display: "inline-flex", alignItems: "center", gap: 3 }}>
-                              <Icon name="bolt" size={12} />{t("compare.setPR", { v: toU(set1RM - pastBest1RM).toFixed(1), unit: uLabel() })}
-                            </span>
-                          )}
                           {delta && <span style={{ fontWeight: 800, color: delta[1] }}>{delta[0]}</span>}
+                          {show1RM && (() => {
+                            // ⚡はその日の最高のセットで、かつ自己ベストを超えたときだけ(初めての種目には付けない)
+                            const pr = isSetPR && over1RM;
+                            const prText = pr ? t("compare.setPR", { v: toU(set1RM - pastBest1RM).toFixed(1), unit: uLabel() }) : null;
+                            return (
+                              <span title={prText || undefined}
+                                style={{ display: "inline-flex", alignItems: "center", gap: 2, whiteSpace: "nowrap", color: over1RM ? C.green : C.muted, fontWeight: over1RM ? 800 : 500 }}>
+                                {pr && <Icon name="bolt" size={12} />}
+                                {t("set.oneRm", { v: toU(row1RM).toFixed(1) })}
+                                {/* ⚡と色は読み上げられないので、以前のバッジの文言を読み上げにだけ残す */}
+                                {pr && <span style={srOnly}>{prText}</span>}
+                              </span>
+                            );
+                          })()}
                         </span>
                       </div>
                     );
@@ -4233,7 +4523,7 @@ function App() {
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, minWidth: 0 }}>
                         <span style={{ color: C.muted, fontSize: 13, flexShrink: 0 }}>Day {i + 1}</span>
-                        {editing ? <input value={d.name} onChange={e => updDay(i, { name: e.target.value })} onFocus={selectOnFocus} aria-label={t("split.dayNameAria")} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: "4px 8px", fontSize: 16, fontFamily: "inherit", width: "100%" }} /> : <strong style={{ fontSize: 15 }}>{dayName(d.name)}</strong>}
+                        {!editing && <strong style={{ fontSize: 15 }}>{dayName(d.name)}</strong>}
                         {isNext && <span style={{ background: C.red, color: "#fff", borderRadius: 999, padding: "2px 8px", fontSize: 11, fontWeight: 800, flexShrink: 0 }}>{t("common.today")}</span>}
                       </div>
                       <div style={{ display: "flex", gap: 4, flexShrink: 0, alignItems: "center" }} onClick={e => e.stopPropagation()}>
@@ -4245,16 +4535,35 @@ function App() {
                         <button onClick={() => setEditDay(editing ? null : i)} style={{ ...btn(C.surface2, C.muted), padding: "4px 10px", fontSize: 13 }}>{editing ? t("common.done") : t("common.edit")}</button>
                       </div>
                     </div>
+                    {/* 名前の欄は見出しの行に置くと▲▼・今日にする・完了に押されて70px ほどしか残らず、
+                        部位から付けた「胸・肩・腕」が切れて見えた。編集中は1行使う */}
+                    {editing && <input value={d.name} onChange={e => updDay(i, { name: e.target.value })} onFocus={selectOnFocus} aria-label={t("split.dayNameAria")} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: "6px 10px", fontSize: 16, fontFamily: "inherit", width: "100%", marginTop: 10 }} />}
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 10 }}>
                       {editing ? MUSCLES.map(m => <button key={m} onClick={() => toggleDayMuscle(i, m)} style={chip(d.muscles.includes(m))}>{muscleName(m)}</button>)
                         : d.muscles.length ? d.muscles.map(m => <span key={m} style={{ ...chip(false), cursor: "default" }}>{muscleName(m)}</span>)
                           : <span style={{ color: C.muted, fontSize: 13 }}>{t("split.muscleUnset")}</span>}
                     </div>
 
-                    {/* ヘッダー行は▲▼・今日にする・編集で埋まっているので、この行に置く。
+                    {(d.exercises || []).length === 0 && d.muscles.length > 0 && !dayHasRecords(d.name) ? (
+                      // 登録0件の Day(改善要望 2)。最初の種目設定のときだけ、定番を入れるか AI に選ばせるかを出す。
+                      // 貼り付けの案内は下の行に高さを取っておく(このカードは登録すれば出なくなるので、常時取っても数枚だけ)
+                      <div style={{ marginTop: 10 }} onClick={e => e.stopPropagation()}>
+                        <div style={{ display: "flex", gap: 8 }}>
+                          <button onClick={() => fillDayStarter(i)} style={{ ...btn(C.red), flex: 1, padding: "10px 6px", fontSize: 13 }}>{t("split.autoFill")}</button>
+                          <button onClick={() => consultAi(dayToText(d, i), `day:${i}`)}
+                            style={{ ...btn(C.surface2, copiedIdx === `day:${i}` ? C.green : C.text), flex: 1, padding: "10px 6px", fontSize: 13, border: `1px solid ${C.border}` }}>
+                            {copiedIdx === `day:${i}` ? t("log.consultAiDone") : t("split.aiPick")}
+                          </button>
+                        </div>
+                        <div role="status" style={{ fontSize: 12, color: C.green, height: 17, marginTop: 6 }}>
+                          {copiedIdx === `day:${i}` ? t("log.pasteHint") : ""}
+                        </div>
+                      </div>
+                    ) : (
+                    /* ヘッダー行は▲▼・今日にする・編集で埋まっているので、この行に置く。
                         ペースト注記はボタンの左に横並びにする(下に出すと、Dayの数だけ
                         高さを常時確保することになる)。カードは丸ごとタップで記録画面へ
-                        飛ぶ領域なので、伝播を止めないと押した瞬間に画面が変わる。 */}
+                        飛ぶ領域なので、伝播を止めないと押した瞬間に画面が変わる。 */
                     <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 8, marginTop: 10 }}
                       onClick={e => e.stopPropagation()}>
                       <span role="status" style={{ fontSize: 12, color: C.green, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
@@ -4268,15 +4577,29 @@ function App() {
                         {copiedIdx === `day:${i}` ? t("log.consultAiDone") : t("log.consultAi")}
                       </button>
                     </div>
+                    )}
 
                     {/* 種目の登録(この日の固定メニュー) */}
                     {editing ? (
                       <div style={{ marginTop: 12, background: C.bg, borderRadius: 10, padding: 10 }}>
                         <div style={{ fontSize: 13, color: C.muted, marginBottom: 8 }}>{t("split.dayExercises")}</div>
+                        {/* 登録種目は縦の一覧で、▲▼ で並べ替える。この順が今日のメニューの並び(改善要望 3c)。
+                            以前はチップで、押すと消えるだけだった(順番を変えられなかった) */}
                         {(d.exercises && d.exercises.length > 0) && (
-                          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
-                            {d.exercises.map(n => (
-                              <button key={n} onClick={() => toggleDayExercise(i, n)} style={{ ...chip(true, C.red) }}>{exName(n)} ✕</button>
+                          <div style={{ marginBottom: 10 }}>
+                            {d.exercises.map((n, k) => (
+                              <div key={n} style={{ display: "flex", alignItems: "center", gap: 4, padding: "6px 0", borderBottom: k < d.exercises.length - 1 ? `1px solid ${C.border}` : "none" }}>
+                                <span style={{ color: C.muted, fontSize: 12, width: 18, flexShrink: 0 }}>{k + 1}</span>
+                                <span style={{ flex: 1, minWidth: 0, fontSize: 14 }}>{exName(n)}</span>
+                                <button onClick={() => moveDayExercise(i, n, -1)} disabled={k === 0} aria-label={t("log.moveUp")} className="tapArea"
+                                  style={{ ...btn("transparent", k === 0 ? C.border : C.muted), width: 30, height: 30, padding: 0, display: "grid", placeItems: "center", cursor: k === 0 ? "default" : "pointer" }}>
+                                  <Icon name="up" size={16} /></button>
+                                <button onClick={() => moveDayExercise(i, n, 1)} disabled={k === d.exercises.length - 1} aria-label={t("log.moveDown")} className="tapArea"
+                                  style={{ ...btn("transparent", k === d.exercises.length - 1 ? C.border : C.muted), width: 30, height: 30, padding: 0, display: "grid", placeItems: "center", cursor: k === d.exercises.length - 1 ? "default" : "pointer" }}>
+                                  <Icon name="down" size={16} /></button>
+                                <button onClick={() => toggleDayExercise(i, n)} aria-label={t("split.removeExerciseAria", { name: exName(n) })} className="tapArea"
+                                  style={{ ...btn("transparent", C.muted), width: 30, height: 30, padding: 0, fontSize: 14 }}>✕</button>
+                              </div>
                             ))}
                           </div>
                         )}
@@ -4292,21 +4615,33 @@ function App() {
                           }}
                           placeholder={t("picker.searchPlaceholder")}
                           style={{ width: "100%", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 12px", color: C.text, fontSize: 16, fontFamily: "inherit", marginBottom: 8 }} />
-                        <div style={{ maxHeight: 240, overflowY: "auto" }}>
-                          {dayPickerList.map(e => {
-                            const on = (d.exercises || []).includes(e.n);
-                            return (
-                              <button key={e.n} onClick={() => toggleDayExercise(i, e.n)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, width: "100%", textAlign: "left", background: on ? C.surface2 : "transparent", border: `1px solid ${on ? C.text : C.border}`, borderRadius: 8, padding: "8px 10px", marginBottom: 5, cursor: "pointer", color: C.text, fontSize: 13, fontFamily: "inherit" }}>
-                                <span style={{ minWidth: 0 }}>{on ? "✓ " : ""}{exName(e.n)}{recentNames.includes(e.n) && <span style={{ color: C.muted, fontSize: 11, marginLeft: 6 }}>{t("common.recent")}</span>}</span>
-                                <span style={{ color: C.muted, fontSize: 12, flexShrink: 0 }}>{muscleName(e.m)}{t("common.sep")}{eqName(e.eq)}</span>
-                              </button>
-                            );
-                          })}
-                          {/* 検索で0件なら下の作成パネルが同じことを言うので、ここは部位で絞って0件のときだけ */}
-                          {dayPickerList.length === 0 && !daySearch.trim() && (
-                            <div style={{ color: C.muted, fontSize: 13, textAlign: "center", padding: 8 }}>{t("split.noBuiltIn")}</div>
-                          )}
-                        </div>
+                        {/* 以前は 240px の枠の中でスクロールさせていた(枠の中と画面の2重のスクロールになっていた)。
+                            画面ごとスクロールさせ、部位の見出しで区切る(改善要望 3b)。
+                            部位も検索語も無いときは全種目が並んで長くなるだけなので、先に部位を選んでもらう(3a) */}
+                        {!daySearch.trim() && d.muscles.length === 0 ? (
+                          <div style={{ color: C.muted, fontSize: 13, padding: "4px 0 8px" }}>{t("split.pickMuscleFirst")}</div>
+                        ) : (
+                          <div>
+                            {dayPickerGroups.map(g => (
+                              <div key={g.m || "-"}>
+                                <div style={{ fontSize: 12, fontWeight: 700, color: C.muted, margin: "10px 0 6px" }}>{g.m ? muscleName(g.m) : t("settings.other")}</div>
+                                {g.items.map(e => {
+                                  const on = (d.exercises || []).includes(e.n);
+                                  return (
+                                    <button key={e.n} onClick={() => toggleDayExercise(i, e.n)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, width: "100%", textAlign: "left", background: on ? C.surface2 : "transparent", border: `1px solid ${on ? C.text : C.border}`, borderRadius: 8, padding: "8px 10px", marginBottom: 5, cursor: "pointer", color: C.text, fontSize: 13, fontFamily: "inherit" }}>
+                                      <span style={{ minWidth: 0 }}>{on ? "✓ " : ""}{exName(e.n)}{recentNames.includes(e.n) && <span style={{ color: C.muted, fontSize: 11, marginLeft: 6 }}>{t("common.recent")}</span>}</span>
+                                      <span style={{ color: C.muted, fontSize: 12, flexShrink: 0 }}>{eqName(e.eq)}</span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            ))}
+                            {/* 検索で0件なら下の作成パネルが同じことを言うので、ここは部位で絞って0件のときだけ */}
+                            {dayPickerList.length === 0 && !daySearch.trim() && (
+                              <div style={{ color: C.muted, fontSize: 13, textAlign: "center", padding: 8 }}>{t("split.noBuiltIn")}</div>
+                            )}
+                          </div>
+                        )}
                         {daySearch.trim() && !findExercise(daySearch.trim()) && (
                           <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 10, marginTop: 4 }}>
                             <div style={{ fontSize: 13, color: C.muted, marginBottom: 8 }}>{t("picker.addCustom", { name: daySearch.trim() })}</div>
@@ -4329,11 +4664,17 @@ function App() {
                     )}
 
                     {goToLog && <div style={{ marginTop: 10, fontSize: 13, color: C.red, fontWeight: 700 }}>{t("split.tapToLog")}</div>}
-                    {editing && <button onClick={() => removeDay(i)} style={{ ...btn("transparent", "#FF5A4E"), fontSize: 13, padding: "8px 0 0" }}>{t("split.deleteDay")}</button>}
+                    {editing && (
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginTop: 12 }}>
+                        <button onClick={() => removeDay(i)} style={{ ...btn("transparent", "#FF5A4E"), fontSize: 13, padding: "8px 0" }}>{t("split.deleteDay")}</button>
+                        {/* 末尾の「＋ Dayを追加」まで戻らずに、間に Day を挟めるように(改善要望 3e) */}
+                        <button onClick={() => addDay(i + 1)} style={{ ...btn(C.surface2, C.text), fontSize: 13, padding: "8px 12px", border: `1px dashed ${C.border}` }}>{t("split.addDayAfter")}</button>
+                      </div>
+                    )}
                   </div>
                 );
               })}
-              <button onClick={addDay} style={{ ...btn(C.surface2, C.text), width: "100%", padding: 12, fontSize: 13, border: `1px dashed ${C.border}` }}>{t("split.addDay")}</button>
+              <button onClick={() => addDay()} style={{ ...btn(C.surface2, C.text), width: "100%", padding: 12, fontSize: 13, border: `1px dashed ${C.border}` }}>{t("split.addDay")}</button>
 
               <div style={{ background: C.surface, borderRadius: 14, padding: 14, border: `1px solid ${C.border}`, marginTop: 16 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
@@ -4387,7 +4728,7 @@ function App() {
           {offerSaveAsMenu && (
             <div style={{ background: C.surface, borderRadius: 14, padding: 14, border: `1px solid ${C.yellow}`, marginBottom: 12 }}>
               <div style={{ fontSize: 13, lineHeight: 1.7, marginBottom: 10 }}>
-                {t("menu.savePrompt")}
+                {offerSaveAsMenu.dayIdx != null ? t("menu.saveToDayPrompt", { day: dayName(offerSaveAsMenu.dayName) }) : t("menu.savePrompt")}
               </div>
               <div style={{ display: "flex", gap: 8 }}>
                 <button onClick={applyOfferedMenu} style={{ ...btn(C.red), flex: 1, padding: 10, fontSize: 14 }}>{t("menu.saveYes")}</button>
@@ -4477,7 +4818,9 @@ function App() {
                       <Tooltip contentStyle={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 13, color: C.text }} formatter={(v, n) => [n === "最大重量" ? `${v}${uLabel()}` : `${v.toLocaleString()}${uLabel()}`, n === "最大重量" ? t("chart.maxWeight") : t("chart.est1RM")]} />
                       <Legend verticalAlign="top" align="right" height={26} iconSize={10} wrapperStyle={{ fontSize: 12, color: C.muted }} formatter={v => v === "最大重量" ? t("chart.maxWeight") : t("chart.est1RM")} />
                       <Line type="monotone" dataKey="最大重量" stroke={C.red} strokeWidth={2.5} dot={lastDot(chartData.length, C.red)} />
-                      <Line type="monotone" dataKey="推定1RM" stroke={C.yellow} strokeWidth={2} strokeDasharray="4 3" dot={lastDot(chartData.length, C.yellow)} />
+                      {/* 13回以上しかない日は値が無い(null)。線はつなぎ、点は値のある最後の日に打つ */}
+                      <Line type="monotone" dataKey="推定1RM" stroke={C.yellow} strokeWidth={2} strokeDasharray="4 3" connectNulls
+                        dot={lastDot(chartData.map(d => d.推定1RM != null).lastIndexOf(true) + 1, C.yellow)} />
                     </LineChart>
                   </ResponsiveContainer>
                 ) : <div style={{ color: C.muted, fontSize: 13, textAlign: "center", padding: "24px 0" }}>{t("chart.need2Exercise")}</div>}
@@ -4827,7 +5170,8 @@ function App() {
                       {toU(pr.bestWeight).toFixed(1)}<span style={{ fontSize: 11, color: C.muted }}>{uLabel()}</span>
                     </span>
                     <span style={{ width: 68, textAlign: "right", fontFamily: "'Barlow Condensed', sans-serif", fontSize: 15, color: C.muted }}>
-                      {toU(pr.best1RM).toFixed(1)}<span style={{ fontSize: 11 }}>{uLabel()}</span>
+                      {/* 13回以上しか記録していない種目は推定1RMが無い */}
+                      {pr.best1RM > 0 ? <>{toU(pr.best1RM).toFixed(1)}<span style={{ fontSize: 11 }}>{uLabel()}</span></> : "—"}
                     </span>
                   </div>
                   {days != null && (
@@ -5117,6 +5461,25 @@ function App() {
               <summary style={{ color: C.muted, fontSize: 12, cursor: "pointer" }}>{t("common.details")}</summary>
               <p style={{ color: C.muted, fontSize: 13, margin: "6px 0 0", lineHeight: 1.6 }}>{t("settings.soundDesc2")}</p>
             </details>
+            {/* 知らせる経過分(改善要望 4c)。複数選べる。Watch の休憩の通知・振動も同じ時間 */}
+            {soundOn && (
+              <div style={{ marginTop: 12 }}>
+                <div style={{ fontSize: 13, color: C.muted, marginBottom: 6 }}>{t("settings.restMinutes")}</div>
+                <div role="group" aria-label={t("settings.restMinutes")} style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                  {REST_NOTIFY_CHOICES.map(m => {
+                    const on = restMinutes.includes(m);
+                    return (
+                      // 最後の1つは外せない(全部外すと、トグルはオンのまま何も知らせなくなる)
+                      <button key={m} aria-pressed={on} disabled={on && restMinutes.length === 1}
+                        onClick={() => persist({ profile: { ...profile, restNotifyMinutes: normalizeRestNotifyMinutes(on ? restMinutes.filter(x => x !== m) : [...restMinutes, m]) } })}
+                        style={{ ...chip(on), fontVariantNumeric: "tabular-nums" }}>
+                        {`${Math.floor(m)}:${Number.isInteger(m) ? "00" : "30"}`}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
             {/* 一度拒否されるとiOSは再度ダイアログを出さないため、設定アプリへ誘導するしかない */}
             {soundOn && notifyPerm === "denied" && (
               <p style={{ color: C.yellow, fontSize: 13, margin: "10px 0 0", lineHeight: 1.6 }}>

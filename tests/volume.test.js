@@ -203,3 +203,22 @@ describe("nextSetType(Wと補助が両方立つと、行の複製で見えない
     expect(a).not.toBe(b);
   });
 });
+
+const { volumeGoalKey } = loadDomainModule("src/domain/volume.js");
+
+describe("volumeGoalKey(ボリュームの基準の文言)", () => {
+  it("同じ Day の記録が2回以上なら「過去N回平均」", () => {
+    expect(volumeGoalKey({ n: 3, sameDay: true }, false)).toBe("log.volumeToGoDay");
+    expect(volumeGoalKey({ n: 2, sameDay: true }, true)).toBe("log.volumeOverDay");
+  });
+
+  it("Day を問わず取ったときは「直近N回平均」", () => {
+    expect(volumeGoalKey({ n: 3, sameDay: false }, false)).toBe("log.volumeToGoRecent");
+    expect(volumeGoalKey({ n: 3, sameDay: false }, true)).toBe("log.volumeOverRecent");
+  });
+
+  it("基準が1回だけなら平均と呼ばずに「前回」(Day を問わない場合も)", () => {
+    expect(volumeGoalKey({ n: 1, sameDay: true }, false)).toBe("log.volumeToGoPrev");
+    expect(volumeGoalKey({ n: 1, sameDay: false }, true)).toBe("log.volumeOverPrev");
+  });
+});
