@@ -541,6 +541,68 @@ Claude in Chrome で App Store Connect を操作して入力した(北村さん�
   - バージョンのページを英語に切り替えても、6.5インチ枠の表示が「日本語6.9インチを使用」のまま古いことがある。実際の割り当てはメディアマネージャーで確かめる
 - 同時刻に別のセッション(「Apple Watch制作」)も同じ入力を始めていてぶつかった → CLAUDE.md の「複数セッションの連携」
 
+## 1.3(改善要望)の掲載情報
+
+中身は `docs/改善要望_2026-10.md`(採用10項目)。2026-10-07 に用意した。
+
+### このバージョンの最新情報(What's New)
+
+日本語:
+```
+・各セットに推定1RMを表示。自己ベストを超えると緑になります
+・種目ごとの操作(設定・フォーム・AI相談・変更・履歴)を「⋯」から外に出しました。削除は ✕ で、消した直後は元に戻せます
+・ボリュームの目標を「過去3回平均まで あと480kg」のように表示
+・分割の新しい Day に「おまかせで入れる」。登録した種目は並べ替えでき、その順で今日のメニューに並びます
+・休憩の通知を出す時間を選べるように(1:00〜5:00)
+・Apple Watch: −/+ の長押しで連続入力、ボリュームのリング、保存すると「お疲れ様でした」
+・推定1RMは12回以下のセットから求めるようにしました
+```
+
+English:
+```
+• Every set now shows its estimated 1RM, and turns green when you beat your best.
+• Exercise actions (Settings, Form, Ask AI, Swap, History) are out of the "⋯" menu. Remove an exercise with ✕ and undo it right away.
+• Volume goal now reads like "480 kg short of last-3 avg".
+• New split days can "Fill with the basics", and you can reorder a day's exercises — today's menu follows that order.
+• Choose when rest alerts fire (1:00–5:00).
+• Apple Watch: hold −/+ to keep stepping, a volume ring, and a "Great work" screen when you save.
+• Estimated 1RM now uses only sets of 12 reps or fewer.
+```
+
+### 概要(Description)の差し替え(10d)
+- 「■ 前回の自分と、セットごとに勝負」/「■ Beat your last session, set by set」の最後の1文:
+  - ja: 自己ベストの推定1RMを超えると…(1.2 の「緑の印と『1RM更新』のバッジ」)→ `各セットに推定1RMが出て、自己ベストを超えると緑に光ります。`
+  - en: `Beat your best estimated 1RM and it lights up green with a "1RM" badge, right on the set.` → `Every set shows its estimated 1RM, and it lights up green when you beat your best.`
+- 休憩タイマーの節: 「1分ごとに通知」→ ja `選んだ時間(初期は1・2・3分)に通知でお知らせします。` / en `sends a notification at the times you choose (1, 2 and 3 minutes by default), even with the phone locked.`
+- 「■ 伸びが、線で見える」(Watch your numbers climb)の後ろに足す節:
+  - ja:
+    ```
+    ■ フォームは動画ですぐ確認
+    種目ごとの「フォーム」をタップすると、その種目のフォームの解説動画を YouTube で検索します。初めての種目も、動画を見てから始められます。
+    ```
+  - en:
+    ```
+    ■ Check your form in one tap
+    Tap "Form" on any exercise to search YouTube for how-to videos on it. Trying an exercise for the first time? Watch first, then lift.
+    ```
+
+### キーワード(10f)
+- 日本語(77文字): `メモ,ノート,ログ,シンプル,トレーニング,ベンチプレス,デッドリフト,スクワット,BIG3,RIR,1RM,自己ベスト,オフライン,watch,フォーム`
+  (下の「次のバージョンで差し替えるキーワード」の案に「フォーム」を足したもの)
+- 英語は変えない(99文字で余地が無い)
+
+### スクリーンショット(10e)
+**2026-10-07 に作成: `~/Desktop/KURABELL-appstore-screenshots/v5/{ja,en}/` 1320×2868 各8枚**。登録するのは 01〜07(08 の料金は外す)。
+- 1.3 の画面(操作の行・セット行の 1RM・ボリュームの文言)で撮り直し、**07「フォームの確認も、ワンタップで」/ `Check your form in one tap` を新しく足した**
+- Apple Watch の枠は 1.2 のまま
+- 撮り方: `.playwright-mcp/store-v5/`(gitignore 済み)の `shoot-{ja,en}.js` → `compose-run.js`。main を 8765 番で配信して撮る。
+  Playwright MCP のブラウザが別のセッションに使われていたので、scratchpad に `playwright-core@1.63.0` を入れ、
+  既存の `~/Library/Caches/ms-playwright/chromium-1234` を `executablePath` に渡して Node から同じ関数を実行した
+
+### 審査メモ
+- 英語の冒頭の版の1文を `Version 1.3 adds per-set estimates, reorganized exercise actions and Apple Watch improvements; it adds no new data handling or external services.` に
+- 外部サービスの段落の YouTube は「"Form" button」に書き換え済み(上の本文)
+
 ## 次のバージョン(1.2.1 など)で差し替えるキーワード(日本語)
 
 2026-10-04 に決めた。1.2 は提出済みで審査待ちの間は変えられないので、1.2 には入れず、次に版を作るときに差し替える。サブタイトルは変えない(「ジムで前回超え。サブスクなし」のまま)。
