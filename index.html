@@ -62,6 +62,12 @@
   #boot button { background: #E2453C; color: #fff; border: none; border-radius: 10px; padding: 12px 20px; font-size: 14px; font-weight: 700; font-family: inherit; cursor: pointer; }
   .spinner { width: 22px; height: 22px; border: 2px solid #2E3237; border-top-color: #E2453C; border-radius: 50%; animation: spin .8s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
+  /* 自己ベスト更新の「YOU WIN!」(1.4)。文字は一度大きく出てから収まり、全体は最後に消える */
+  @keyframes winWord { 0% { transform: scale(.55); opacity: 0; } 55% { transform: scale(1.08); opacity: 1; } 75% { transform: scale(.98); } 100% { transform: scale(1); } }
+  @keyframes winFade { 0% { opacity: 0; } 8% { opacity: 1; } 82% { opacity: 1; } 100% { opacity: 0; } }
+  .win-overlay { animation: winFade 1.8s ease-out forwards; }
+  .win-word { animation: winWord .55s cubic-bezier(.2,.9,.3,1.2) both; }
+  @media (prefers-reduced-motion: reduce) { .win-word, .win-overlay { animation: none; } }
 
   /* 縦画面固定。
      ネイティブ(iOS)はInfo.plistのUISupportedInterfaceOrientationsで固定できるが、
@@ -186,7 +192,7 @@
     { key:'units',      urls:['src/domain/units.js'],
       globals:['LB_PER_KG','SUPPORTED_UNITS','resolveUnit','getUnit','setUnit','uLabel','kgToLb','lbToKg','toU','fromU','wU','wStr','convWeightStr','incU'] },
     { key:'oneRm',      urls:['src/domain/oneRm.js'],
-      globals:['est1RM','effWeight','dayBest1RM','SET_1RM_MAX_REPS','showsSet1RM'] },
+      globals:['est1RM','effWeight','dayBest1RM','SET_1RM_MAX_REPS','showsSet1RM','isNew1RMBest'] },
     { key:'storage',    urls:['src/domain/storage.js'],
       globals:['store'] },
     { key:'backupValidation', urls:['src/domain/backupValidation.js'],
@@ -320,7 +326,7 @@ const WATCH_FINISHED_KEY = "watch-finished-v1"; // 保存したら Watch に出�
 const PRE_IMPORT_BACKUP_KEY = "workout-log-v1-pre-import"; // バックアップ復元前のデータ退避(復元に失敗した場合の保険)
 // ヘッダーのバージョンバッジとバックアップのappVersionで共有する単一の定数。
 // sw.js の CACHE 定数とは tests/version.test.js が数字の一致を機械的に縛っている(CLAUDE.md参照)。
-const APP_VERSION = "v139";
+const APP_VERSION = "v140";
 // store(保存レイヤ)は src/domain/storage.js へ移設(テストのため)。
 // LIBSで<script src>読み込み済みなのでグローバルの store をそのまま参照できる。
 const uid = () => Math.random().toString(36).slice(2, 8);
@@ -393,6 +399,9 @@ const defaultProfile = (p) => ({
   healthOn: p?.healthOn ?? false, healthBwAt: p?.healthBwAt ?? 0,
   // 休憩の通知を出す経過分(改善要望 4c)。未設定は今までと同じ 1・2・3分。空の配列は「通知しない」
   restNotifyMinutes: normalizeRestNotifyMinutes(p?.restNotifyMinutes),
+  // 休憩の Live Activity(ロック画面・Dynamic Island)。既定はオフ(北村さん、2026-10-09)。1.3 まで常にオンだった利用者も、
+  // 保存していない項目なので更新後はオフになる
+  restLiveActivity: p?.restLiveActivity === true,
 });
 
 // extractWorkoutsArray・validateWorkoutsShapeは src/domain/backupValidation.js へ移設(テストのため)。
@@ -766,6 +775,52 @@ function GuideArt({ kind }) {
       ))}
     </>);
   }
+  if (kind === "rir") {
+    // セット行 + 「あと何回できた?」の 0 / 1 / 2 / 3+(1 を選んだところ)
+    return wrap(<>
+      <rect x="14" y="16" width="172" height="44" rx="10" fill={C.surface} stroke={BR} strokeWidth="1.5" />
+      <rect x="26" y="28" width="40" height="20" rx="5" fill={L} />
+      <rect x="74" y="28" width="28" height="20" rx="5" fill={L} />
+      <rect x="112" y="34" width="62" height="8" rx="4" fill={M} opacity="0.5" />
+      {["0", "1", "2", "3+"].map((label, i) => (
+        <g key={label}>
+          <rect x={14 + i * 44} y="76" width="40" height="48" rx="10" fill={i === 1 ? Y : C.surface} stroke={i === 1 ? Y : BR} strokeWidth="1.5" />
+          <text x={34 + i * 44} y="108" textAnchor="middle" fontSize="22" fontWeight="800" fontFamily="'Barlow Condensed', sans-serif" fill={i === 1 ? "#14171C" : M}>{label}</text>
+        </g>
+      ))}
+    </>);
+  }
+  if (kind === "coach") {
+    // 相談文(左)→ AI の答え(右)→ 今日のメニューに入る
+    return wrap(<>
+      <rect x="18" y="18" width="92" height="40" rx="10" fill={C.surface} stroke={BR} strokeWidth="1.5" />
+      <rect x="28" y="28" width="60" height="5" rx="2.5" fill={M} />
+      <rect x="28" y="39" width="44" height="5" rx="2.5" fill={M} />
+      <rect x="90" y="52" width="92" height="40" rx="10" fill={Y} opacity="0.92" />
+      <rect x="100" y="62" width="64" height="5" rx="2.5" fill="#14171C" opacity="0.7" />
+      <rect x="100" y="73" width="48" height="5" rx="2.5" fill="#14171C" opacity="0.7" />
+      <path d="M100 100 L100 114" stroke={G} strokeWidth="3" strokeLinecap="round" />
+      <path d="M93 108 L100 115 L107 108" stroke={G} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+      <rect x="40" y="120" width="120" height="22" rx="7" fill={C.surface} stroke={R} strokeWidth="1.5" />
+      <rect x="50" y="128" width="40" height="6" rx="3" fill={L} />
+      <rect x="118" y="128" width="30" height="6" rx="3" fill={Y} />
+    </>);
+  }
+  if (kind === "watch") {
+    // Apple Watch(重量と −/+)
+    return wrap(<>
+      <rect x="76" y="6" width="48" height="22" rx="6" fill={C.surface2} />
+      <rect x="76" y="122" width="48" height="22" rx="6" fill={C.surface2} />
+      <rect x="62" y="24" width="76" height="102" rx="22" fill="#000" stroke={BR} strokeWidth="2" />
+      <rect x="139" y="56" width="5" height="18" rx="2.5" fill={BR} />
+      <text x="100" y="72" textAnchor="middle" fontSize="28" fontWeight="800" fontFamily="'Barlow Condensed', sans-serif" fill={L}>24</text>
+      <text x="100" y="86" textAnchor="middle" fontSize="9" fontWeight="700" fill={M}>kg × 10</text>
+      <circle cx="82" cy="104" r="10" fill={C.surface2} />
+      <circle cx="118" cy="104" r="10" fill={G} />
+      <path d="M77 104 L87 104" stroke={L} strokeWidth="2.5" strokeLinecap="round" />
+      <path d="M113 104 L123 104 M118 99 L118 109" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" />
+    </>);
+  }
   // progress: 折れ線グラフ(右肩上がり)
   return wrap(<>
     <line x1="34" y1="118" x2="168" y2="118" stroke={BR} strokeWidth="1.5" />
@@ -885,7 +940,7 @@ class ErrorBoundary extends React.Component {
 // 新規インストール時、および全データ削除後の既定値(clearAllで再利用し、削除直後に古いprofileが復活しないようにする)
 // defaultProfile() と同じフィールドを持たせる。ここに書き忘れると、初回起動と
 // 「全データ削除」直後だけ値がundefinedになり、設定タブの選択状態が消える。
-const DEFAULT_PROFILE = { bodyweight: 70, soundOn: true, defTargetReps: 10, defIncrement: 2.5, lang: null, unit: null, aiService: DEFAULT_AI_SERVICE, healthOn: false, healthBwAt: 0, restNotifyMinutes: [1, 2, 3] };
+const DEFAULT_PROFILE = { bodyweight: 70, soundOn: true, defTargetReps: 10, defIncrement: 2.5, lang: null, unit: null, aiService: DEFAULT_AI_SERVICE, healthOn: false, healthBwAt: 0, restNotifyMinutes: [1, 2, 3], restLiveActivity: false };
 
 // ================= アプリ本体 =================
 // 文言中の「|」の位置だけで折り返す(日本語は語の途中でも折り返されるため、意味の切れ目を指定する)。
@@ -939,7 +994,9 @@ function App() {
   // persistはクロージャから呼ばれるので、判定はrefで行う(stateは表示用)。
   const [loadFailed, setLoadFailed] = useState(false);
   const loadFailedRef = useRef(false);
-  const finishGuide = () => { persist({ guideSeen: true }); setGuideStep(0); setView("split"); };
+  // 初回は分割タブへ(まず分割を作る)。設定の「使い方ガイドをもう一度見る」から開いたときは、設定に戻る
+  const [guideFromSettings, setGuideFromSettings] = useState(false);
+  const finishGuide = () => { persist({ guideSeen: true }); setGuideStep(0); if (!guideFromSettings) setView("split"); setGuideFromSettings(false); };
   useModalA11y(loaded && !guideSeen && !loadFailed, finishGuide, guideModalRef);
   // IAP(非消耗型・買い切りフル解除)。Web版はiapAvailable()が常にfalseを返すため
   // purchasedは事実上参照されず、試用制限自体が発動しない。詳細はdocs/IAP実装方針.mdを参照。
@@ -1507,7 +1564,8 @@ function App() {
   }, [loaded]);
 
   // Live Activity(ロック画面・Dynamic Islandの経過表示)をrestStartAtに合わせる。iOS 16.2+のみ、
-  // Web版では何もしない。通知の許可・soundOnとは独立(Live Activityは許可が別枠で、常にオン)。
+  // Web版では何もしない。通知の許可・soundOnとは独立(Live Activityは許可が別枠)。
+  // 1.4 から設定で切れる(profile.restLiveActivity、既定はオフ)。オフにすると表示中のものも消える(startedAt: null で終わる)。
   // loaded後の初回で前回の残骸も片付く(下書きから同じ値が戻れば何もせず、無ければ終了)。
   // 前面復帰(visibilitychange)では呼ばない: ロック画面でスワイプして消した表示を復活させないため。
   // Watch がこの記録のワークアウトを記録している間は出さない(Watch の画面を隠すため。休憩は Watch 側が表示・通知する)。
@@ -1516,8 +1574,8 @@ function App() {
   const watchOwnsRest = watchLive && watchRestFor === startAt;
   useEffect(() => {
     if (!loaded) return;
-    runNotify(() => syncRestActivity(watchLive ? null : restStartAt, Date.now(), t("rest.title")));
-  }, [loaded, restStartAt, lang, watchLive]);
+    runNotify(() => syncRestActivity(watchLive || !profile.restLiveActivity ? null : restStartAt, Date.now(), t("rest.title")));
+  }, [loaded, restStartAt, lang, watchLive, profile.restLiveActivity]);
 
   // ---- Apple Watchで入力されたセットを合流させる(src/domain/watch.js、docs/Watchアプリ.md) ----
   // 操作はネイティブのキューに溜まっている(iPhoneのアプリが裏で寝ている間も)。起動時・前面復帰時・
@@ -1709,6 +1767,18 @@ function App() {
       return Math.max(max, est1RM(eff, Math.round(num(s.reps))));
     }, 0);
   };
+  // 自己ベストを更新した瞬間の「YOU WIN!」(1.4)。1.8秒で消える。タップでも消える。
+  // Watch で入れたセットは applyWatchOps 経由なのでここを通らない(Watch は保存後の完了画面に自己ベストが出る)
+  const [bestWin, setBestWin] = useState(null); // { name, from, to, key }
+  const bestWinTimerRef = useRef(null);
+  const celebratedRef = useRef(new Set()); // 祝ったセット(記録の開始時刻:種目id:行)。アプリを開き直すと空に戻る
+  const celebrateBest = (name, from, to) => {
+    clearTimeout(bestWinTimerRef.current);
+    setBestWin({ name, from, to, key: Date.now() });
+    beep(2);
+    bestWinTimerRef.current = setTimeout(() => setBestWin(null), 1800);
+  };
+  useEffect(() => () => clearTimeout(bestWinTimerRef.current), []);
   // 記録中の種目の最大重量(実際に挙げた重量。回数1以上のセットのみ)
   const liveMaxWeight = (ex) => {
     const isDb = resolveIsDb(ex.name, ex.isDb);
@@ -3409,6 +3479,26 @@ function App() {
         </div>
       )}
 
+      {/* ===== 自己ベスト更新(YOU WIN!、1.4) ===== */}
+      {/* RIR を入れたタップでインターバルの全画面(zIndex 90)も開くので、その上に出す */}
+      {bestWin && (
+        <div key={bestWin.key} className="win-overlay" role="status" aria-live="assertive" onClick={() => { clearTimeout(bestWinTimerRef.current); setBestWin(null); }}
+          style={{ position: "fixed", inset: 0, zIndex: 120, background: "rgba(10,11,12,0.97)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 24, textAlign: "center", cursor: "pointer" }}>
+          <div style={{ fontSize: 13, fontWeight: 800, color: C.muted, letterSpacing: 2, marginBottom: 6 }}>{t("win.sub")}</div>
+          <div className="win-word" style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: "min(24vw, 112px)", lineHeight: 0.95, color: C.yellow, letterSpacing: 1 }}>{t("win.title")}</div>
+          <div style={{ fontSize: 15, fontWeight: 700, color: C.text, marginTop: 22 }}>{exName(bestWin.name)}</div>
+          <div style={{ marginTop: 4, display: "flex", alignItems: "baseline" }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: C.muted, marginRight: 10 }}>{t("compare.est1RM")}</span>
+            <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 30, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>
+            <span style={{ color: C.muted }}>{toU(bestWin.from).toFixed(1)}</span>
+            <span style={{ color: C.muted, margin: "0 8px" }}>→</span>
+            <span style={{ color: C.green }}>{toU(bestWin.to).toFixed(1)}</span>
+            <span style={{ fontSize: 16, color: C.muted, marginLeft: 3 }}>{uLabel()}</span>
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* ===== インターバル全画面表示 ===== */}
       {restFull && restStartAt != null && (() => {
         // 桁数でサイズを落とす。fmtClockは分を丸めないので、タイマーを止め忘れたまま
@@ -3499,10 +3589,26 @@ function App() {
             lead: t("guide.step2Lead"),
             body: t("guide.step2Body"),
           },
+          // RIR・AIコーチ・Apple Watch のページは 1.4 で足した(北村さんの要望、2026-10-09)
+          {
+            art: "rir", title: t("guide.stepRir"),
+            lead: t("guide.stepRirLead"),
+            body: t("guide.stepRirBody"),
+          },
           {
             art: "progress", title: t("guide.step3"),
             lead: t("guide.step3Lead"),
             body: t("guide.step3Body"),
+          },
+          {
+            art: "coach", title: t("guide.stepCoach"),
+            lead: t("guide.stepCoachLead"),
+            body: t("guide.stepCoachBody"),
+          },
+          {
+            art: "watch", title: t("guide.stepWatch"),
+            lead: t("guide.stepWatchLead"),
+            body: t("guide.stepWatchBody"),
           },
         ];
         const step = steps[guideStep];
@@ -3812,6 +3918,12 @@ function App() {
                   <span key={m} style={{ ...chip(false), cursor: "default", background: C.bg }}>{muscleName(m)}{d != null && <span style={{ color: C.yellow }}> ・{d === 0 ? t("common.today") : t("common.daysAgo", { n: d })}</span>}</span>
                 ); })}
               </div>
+              {/* AIコーチの入口(北村さんの要望で、部位のすぐ下に大きく。2026-10-09)。始める前は今日のメニューを丸ごと、
+                  記録中は残りを組み直してもらう。375px ではチップが折り返すので、同じ行ではなくすぐ下に置く */}
+              <button onClick={() => openCoach(today.length > 0 ? "replan" : "plan")}
+                style={{ ...btn(C.yellow, "#14171C"), width: "100%", padding: 13, fontSize: 15, fontWeight: 800, marginTop: 12,
+                  display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+                <Icon name="chat" size={17} />{t(today.length > 0 ? "coach.replanButton" : "coach.button")}</button>
             </div>
           )}
 
@@ -3877,36 +3989,20 @@ function App() {
                   </div>
                 );
               })}
-              {/* AIコーチの入口(始める前)。案を取り込んだら、前回の引き継ぎに戻せるようにする */}
-              {coachMenuActive ? (
+              {/* AIコーチの案を取り込んだら、前回の引き継ぎに戻せるようにする(相談の入口は上の今日のセッションカード) */}
+              {coachMenuActive && (
                 <button onClick={() => setCoachMenu(null)} style={{ ...btn(C.surface2, C.text), width: "100%", padding: 11, fontSize: 13, marginTop: 6 }}>{t("coach.revert")}</button>
-              ) : (
-                <button onClick={() => openCoach("plan")} style={{ ...btn(C.surface2, C.text), width: "100%", padding: 11, fontSize: 13, marginTop: 6, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
-                  <Icon name="chat" size={15} />{t("coach.button")}</button>
               )}
               <button onClick={startAutoMenu} style={{ ...btn(C.red), width: "100%", padding: 14, fontSize: 15, marginTop: 8 }}>{t("menu.start")}</button>
             </div>
           )}
 
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, margin: "8px 0 12px" }}>
-            <h2 style={{ fontSize: 16, fontWeight: 900, margin: 0 }}>{t("log.title")}</h2>
-            {/* 記録中のAIコーチの入口(残りの組み直し)。浮かせると入力欄に乗るので、見出しと一覧の最後に置く */}
-            {today.length > 0 && (
-              <button onClick={() => openCoach("replan")} className="tapArea"
-                style={{ ...btn("transparent", C.yellow), padding: "4px 0", fontSize: 13, fontWeight: 700, display: "inline-flex", alignItems: "center", gap: 5, flexShrink: 0 }}>
-                <Icon name="chat" size={14} />{t("coach.fab")}</button>
-            )}
-          </div>
+          <h2 style={{ fontSize: 16, fontWeight: 900, margin: "8px 0 12px" }}>{t("log.title")}</h2>
 
           {today.length === 0 && (
             <div style={{ border: `1px dashed ${C.border}`, borderRadius: 14, padding: 20, color: C.muted, fontSize: 14, textAlign: "center", marginBottom: 16 }}>
               {todayDay && menuItems.length > 0 ? t("log.emptyWithMenu") : t("log.empty")}
               {!split && <><br />{t("log.emptyHint")}</>}
-              {/* 記録の無い Day(今日のメニューが出ない)でも、AIに種目選びから組んでもらえるように */}
-              {todayDay && menuItems.length === 0 && (
-                <button onClick={() => openCoach("plan")} style={{ ...btn(C.surface2, C.text), padding: "9px 14px", fontSize: 13, marginTop: 12, display: "inline-flex", alignItems: "center", gap: 6 }}>
-                  <Icon name="chat" size={15} />{t("coach.button")}</button>
-              )}
             </div>
           )}
 
@@ -3978,8 +4074,14 @@ function App() {
                         回数が直近の最高を下回っている間は「上げどき」と言わず事実だけ渡す
                         (実データで15kg×13回→9回の後退局面に「そろそろ上げどき」が出ていた)。
                         加重できない種目(常に自重のみ)では重量の助言自体が成立しないので出さない。 */}
+                    {/* 同じ重量で3回とも余力0のまま回数も伸びていない(stalledAtFailure、1.4)。ディロードを知らせるだけで、数字は変えない */}
                     {ins.topWeight != null && ins.streak >= 3 && ins.canAddWeight && (
-                      ins.readyToProgress ? (
+                      ins.stalledAtFailure ? (
+                        // 文が長く2行に折り返すので、上げどきのピル(角丸999)ではなく角丸8の帯にする
+                        <span style={{ fontSize: 12, fontWeight: 800, color: C.yellow, background: "rgba(232,179,60,0.15)", padding: "4px 8px", borderRadius: 8, lineHeight: 1.5 }}>
+                          <Icon name="warn" size={12} style={{ marginRight: 4 }} />{t("log.deloadHint")}
+                        </span>
+                      ) : ins.readyToProgress ? (
                         <span style={{ fontSize: 12, fontWeight: 800, color: C.yellow, background: "rgba(232,179,60,0.15)", padding: "2px 8px", borderRadius: 999 }}>
                           <Icon name="warn" size={12} style={{ marginRight: 4 }} />{t("log.plateauAlert", { n: ins.streak })}
                         </span>
@@ -4325,7 +4427,25 @@ function App() {
                         border: `1px solid ${C.border}`, background: C.surface2, color: i === 0 ? C.border : C.muted }}>⧉</button>
                     <div style={{ flex: 2.4, opacity: s.warmup ? 0.35 : 1, pointerEvents: s.warmup ? "none" : "auto" }}>
                       <RirSelect value={s.rir === "" ? null : num(s.rir)} onChange={v => {
+                        const wasEmpty = s.rir === "" || s.rir == null;
                         updateSet(ex.id, i, "rir", v === "" ? "" : v);
+                        // 自己ベストの更新を祝う(YOU WIN!、1.4)。RIR を空から入れたセットだけ。比べる今日の最高は、
+                        // 行の 1RM と同じく showsSet1RM を通るセットに揃える(13回以上の推定値で祝い損ねないように)
+                        if (v !== "" && wasEmpty && show1RM) {
+                          const isDb = resolveIsDb(ex.name, ex.isDb);
+                          const todayBest = ex.sets.reduce((m, x, xi) => {
+                            if (xi === i || x.rir === "" || x.rir == null) return m;
+                            const w = effWeight(fromU(x.weight), isDb, ex.bwFactor || 0, profile.bodyweight), r = Math.round(num(x.reps));
+                            return showsSet1RM(x, w, r) ? Math.max(m, est1RM(w, r)) : m;
+                          }, 0);
+                          // 同じセットで余力を外して入れ直しても、2回目は出さない(入れ間違いを直すたびに全画面が出ないように)
+                          const winKey = `${startAt}:${ex.id}:${i}`;
+                          if (isNew1RMBest({ set1RM: row1RM, pastBest: pastBest1RM, todayBest }) && !celebratedRef.current.has(winKey)) {
+                            celebratedRef.current.add(winKey);
+                            // 「前」は、保存済みの自己ベストと今日それまでの最高の高い方(同じ日に2回更新したら、1回目の値から)
+                            celebrateBest(ex.name, Math.max(pastBest1RM, todayBest), row1RM);
+                          }
+                        }
                         if (v !== "" && isLastInGroup(exIdx)) { startRest(); setRestFull(true); }
                       }} />
                     </div>
@@ -5291,7 +5411,7 @@ function App() {
       {view === "settings" && (
         <div style={{ padding: "0 16px" }}>
           {/* 見出し(タブ名)は上の header に出るので、ここでは繰り返さない */}
-          <button onClick={() => { setGuideStep(0); setGuideSeen(false); }}
+          <button onClick={() => { setGuideStep(0); setGuideFromSettings(true); setGuideSeen(false); }}
             style={{ ...btn(C.surface2, C.text), width: "100%", padding: 14, fontSize: 14, marginBottom: 12, border: `1px solid ${C.border}` }}>
             <Icon name="book" size={16} style={{ marginRight: 6 }} />{t("settings.guideAgain")}
           </button>
@@ -5582,6 +5702,20 @@ function App() {
               <p style={{ color: C.yellow, fontSize: 13, margin: "10px 0 0", lineHeight: 1.6 }}>
                 {t("settings.notifyDenied")}
               </p>
+            )}
+            {/* 休憩をロック画面・Dynamic Island に出す(Live Activity)。音・通知とは別なので、音がオフでも出す。iOS 版だけ */}
+            {isNativeApp() && (
+              <div style={{ borderTop: `1px solid ${C.border}`, marginTop: 14, paddingTop: 14 }}>
+                <label style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 14, gap: 12 }}>
+                  {t("settings.liveActivity")}
+                  <button onClick={() => persist({ profile: { ...profile, restLiveActivity: !profile.restLiveActivity } })}
+                    role="switch" aria-checked={!!profile.restLiveActivity} aria-label={t("settings.liveActivity")}
+                    style={{ width: 52, height: 30, borderRadius: 999, border: "none", cursor: "pointer", background: profile.restLiveActivity ? C.green : C.grey, position: "relative", flexShrink: 0 }}>
+                    <span style={{ position: "absolute", top: 3, left: profile.restLiveActivity ? 25 : 3, width: 24, height: 24, borderRadius: "50%", background: "#fff", transition: "left .15s" }} />
+                  </button>
+                </label>
+                <p style={{ color: C.muted, fontSize: 13, margin: "8px 0 0", lineHeight: 1.6 }}>{t("settings.liveActivityDesc")}</p>
+              </div>
             )}
           </div>
 

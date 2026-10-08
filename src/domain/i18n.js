@@ -111,7 +111,12 @@ const STRINGS = {
   // 同じ重量が続いていても回数が落ちている場合。「上げどき」とは言わず事実だけ渡す。
   // {best}は直近数回での最高であって「前々回」ではないので、矢印で繋がない。
   // 連続回数({n})は隣のlog.streakが既に言っているので繰り返さない。
+  // 同じ重量で3回とも余力0、回数も伸びていない(insight.js の stalledAtFailure)。勧めるのではなく選択肢として渡す
+  "log.deloadHint":    { ja: "3回とも余力0で止まっています。ディロード(約10%軽く)も選択肢です", en: "Stuck at failure 3 sessions running — a deload (about 10% lighter) is an option" },
   "log.repsDown":      { ja: "直近3セッションの最高 {best}回 / 前回 {prev}回", en: "Best {best} reps in the last 3 sessions, {prev} last time" },
+  // 自己ベスト更新の瞬間(1.4)。英語のまま出す(北村さんの指定)
+  "win.title":         { ja: "YOU WIN!",               en: "YOU WIN!" },
+  "win.sub":           { ja: "自己ベスト更新",         en: "NEW PERSONAL BEST" },
   "compare.est1RM":    { ja: "推定1RM",               en: "Est. 1RM" },
   "compare.line":      { ja: "推定1RM {now}{unit}(ベスト比 {diff}{unit})", en: "Est. 1RM {now}{unit} ({diff}{unit} vs best)" },
   "compare.lineFirst": { ja: "初回記録 推定1RM {v}{unit}", en: "First record: est. 1RM {v}{unit}" },
@@ -224,8 +229,7 @@ const STRINGS = {
   "menu.saveNo":       { ja: "今回はしない",           en: "Not now" },
   // AIコーチ(手動版、1.4)。相談文をコピーしてチャットAIに送り、答えを貼って取り込む(src/domain/aiCoach.js)
   "coach.button":      { ja: "AIコーチに相談",         en: "Ask AI Coach" },
-  "coach.fab":         { ja: "AIコーチ",               en: "AI Coach" },
-  "coach.replanButton": { ja: "残りをAIコーチに組み直してもらう", en: "Ask AI Coach to rework the rest" },
+  "coach.replanButton": { ja: "残りをAIコーチに組み直してもらう", en: "Rework the rest with AI" },
   "coach.title":       { ja: "AIコーチ",               en: "AI Coach" },
   "coach.leadPlan":    { ja: "今日のメニューをAIに組んでもらいます。案を見てから、使うかどうかを決められます。", en: "Have an AI build today's menu. You'll see the plan before anything changes." },
   "coach.leadReplan":  { ja: "ここまでの記録をもとに、残りをAIに組み直してもらいます。実施済み(RIR入力済み)のセットは変わりません。", en: "Have an AI rework the rest of today's session. Sets you've finished (RIR entered) stay as they are." },
@@ -341,12 +345,21 @@ const STRINGS = {
   "guide.step1":       { ja: "① 分割を決める",         en: "① Choose a split" },
   "guide.step1Lead":   { ja: "「分割」タブで、あなたのトレーニング分割を作ります。", en: "Build your training split in the Split tab." },
   "guide.step1Body":   { ja: "全身・上下・PPL・5分割のプリセットから選ぶか、ゼロから作成。各日にやる種目を登録しておくと、その日のメニューが自動で組まれます。保存するたびに次の日へ自動で進みます。", en: "Pick a preset — full body, upper/lower, PPL, 5-day — or start from scratch. Register the exercises for each day and that day's menu builds itself. Every save advances to the next day." },
-  "guide.step2":       { ja: "② 記録する",             en: "② Log your sets" },
-  "guide.step2Lead":   { ja: "「記録」タブで、重量・回数・「あと何回できた?(RIR)」を入力。", en: "In the Log tab, enter weight, reps, and reps left (RIR)." },
-  "guide.step2Body":   { ja: "「あと何回できた?」を入力したセットが実施済みとして記録されます。セット番号のタップでウォームアップ(W)や補助あり(補)に切り替え、連続する種目はスーパーセットにまとめられます。休憩は入力後に自動でタイマーが動き、1分ごとに通知音が鳴ります。", en: "A set counts as done once you enter the reps you had left. Tap the set number to mark it warm-up (W) or assisted (A), and link consecutive exercises into a superset. The rest timer starts on its own and chimes every minute." },
-  "guide.step3":       { ja: "③ 伸びを確認する",       en: "③ Watch your progress" },
+  "guide.step2":       { ja: "② 記録して、|前回と比べる", en: "② Log it, beat last time" },
+  "guide.step2Lead":   { ja: "各セットの横に、|前回の同じセットが並びます。", en: "Every set sits next to |the same set from last time." },
+  "guide.step2Body":   { ja: "「前回 24×11 RIR1」は、前回の同じ番手のセットです。今日はそれを超えにいきましょう。行の右の数字は推定1RM。自己ベストを超えると緑になり、そのセットに余力を入れると「YOU WIN!」が出ます。\n\n同じ重量が3回続くと「そろそろ上げどき」、3回とも余力0で止まっているとディロードを知らせます。数字を決めるのは、いつもあなたです。", en: "\"Last 24×11 RIR1\" is the matching set from last session — today, aim to beat it. The number on the right is the estimated 1RM; beat your best and it turns green, and entering your reps left on that set brings up a \"YOU WIN!\".\n\nAfter three sessions at the same weight you'll see \"time to add more\", or a deload hint if all three ended at RIR 0. The numbers are always yours to choose." },
+  "guide.stepRir":     { ja: "③ 「あと何回できた?」|を入れる", en: "③ Enter reps left (RIR)" },
+  "guide.stepRirLead": { ja: "セットが終わったら、|あと何回挙げられたかをタップ。", en: "After each set, tap how many |more reps you had left." },
+  "guide.stepRirBody": { ja: "限界まで挙げたら 0、あと2回いけそうなら 2、余裕があれば 3+。\nこれを入れて初めて、そのセットが実施済みになります(薄い行は、まだやっていないセット)。入れると休憩タイマーが始まり、設定した時間に通知でお知らせします。\n\nセット番号をタップすると、ウォームアップ(W)・補助あり(補)に切り替えられます。", en: "Went to failure? 0. Two more in the tank? 2. Plenty left? 3+.\nA set only counts as done once you enter this (faded rows are sets you haven't done yet). Entering it starts the rest timer, which alerts you at the times you choose.\n\nTap the set number to switch it to warm-up (W) or assisted (A)." },
+  "guide.step3":       { ja: "④ 伸びを確認する",       en: "④ Watch your progress" },
   "guide.step3Lead":   { ja: "Max 1RMと今日の1RMがその場で比較できます。", en: "Compare your best 1RM against today's, right on the spot." },
   "guide.step3Body":   { ja: "種目ごとに推定1RMと過去のベストとの差が表示され、セットで自己ベストを超えると更新バッジが出ます。ベストを長く更新していないときも知らせるので、停滞にすぐ気付けます。\n\nデータは端末内だけに保存されます。設定タブから定期的にバックアップを書き出してください。", en: "Each exercise shows its estimated 1RM against your best, with a badge on the set that beats it. It also tells you when your best has stood for a long time, so plateaus are obvious.\n\nYour data is stored only on this device. Export a backup regularly from the Settings tab." },
+  "guide.stepCoach":   { ja: "⑤ AIコーチに相談する",   en: "⑤ Ask AI Coach" },
+  "guide.stepCoachLead":{ ja: "今日のメニューを、|ChatGPT などのAIに組んでもらえます。", en: "Have ChatGPT or another AI |build today's session." },
+  "guide.stepCoachBody":{ ja: "記録タブの「AIコーチに相談」→ 相談文をコピーしてAIを開く → AIの答えをまるごとコピーして、アプリに貼り付け。種目・順番・各セットの重量と回数の案が並びます。使うかどうかは、案を見てから決められます。\n\n記録の途中でも、終えたセットはそのままに残りだけを組み直せます。アプリから記録が送られることはありません。", en: "Tap \"Ask AI Coach\" on the Log tab → copy the request and open the AI → copy its whole answer and paste it back. You'll see exercises, order, and weight and reps for every set — and decide whether to use it.\n\nMid-workout, it can rework just the rest; finished sets stay put. The app never sends your log anywhere." },
+  "guide.stepWatch":   { ja: "⑥ Apple Watch で|入力する", en: "⑥ Log from Apple Watch" },
+  "guide.stepWatchLead":{ ja: "iPhone を出さずに、|手首でセットを進められます。", en: "Keep your phone in your pocket |and log from your wrist." },
+  "guide.stepWatchBody":{ ja: "Watch の KURABELL で −/+ を押して重量と回数を合わせ、余力をタップするだけ。iPhone の記録にそのまま入ります。\n\n設定で「ヘルスケアと連携」をオンにすると、iPhone で記録を始めたときに Watch のアプリが自動で起動し、心拍数と消費カロリー付きのワークアウトが記録されます。Watch が無くても、すべての機能は iPhone だけで使えます。", en: "In KURABELL on your Watch, set weight and reps with −/+ and tap the reps you had left — it lands straight in your iPhone log.\n\nTurn on \"Connect to Apple Health\" in Settings and the Watch app opens by itself when you start logging on your iPhone, recording a workout with heart rate and calories. No Watch? Everything works on the iPhone alone." },
   "guide.start":       { ja: "はじめる",               en: "Get started" },
   "guide.next":        { ja: "次へ",                   en: "Next" },
   "guide.skip":        { ja: "スキップ",               en: "Skip" },
@@ -490,6 +503,8 @@ const STRINGS = {
   "settings.equipment": { ja: "器具",                  en: "Equipment" },
   "settings.other":    { ja: "その他",                 en: "Other" },
   "settings.sound":    { ja: "インターバルの通知",     en: "Rest timer alerts" },
+  "settings.liveActivity":     { ja: "休憩をロック画面に表示", en: "Show rest on the Lock Screen" },
+  "settings.liveActivityDesc": { ja: "休憩の経過時間をロック画面と Dynamic Island に出します(ライブアクティビティ)。上の通知とは別です。", en: "Shows the rest timer on the Lock Screen and in the Dynamic Island (Live Activity). Separate from the alerts above." },
   "settings.restMinutes": { ja: "知らせる経過時間(複数選べます)", en: "Alert after (choose any)" },
   "settings.soundDesc": { ja: "インターバル中、下で選んだ経過時間に知らせます。通知を許可しておくと、アプリを閉じていても届き、Apple Watchを着けていれば手元でも気づけます。", en: "Alerts you at the times you pick below during your rest. If you allow notifications, they arrive even when the app is closed — and on your wrist if you wear an Apple Watch." },
   // 通知音もアプリ内の音も、iPhoneのサイレントスイッチには従う。以前は「許可していない場合」に

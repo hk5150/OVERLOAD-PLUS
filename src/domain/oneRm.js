@@ -45,6 +45,17 @@ function showsSet1RM(s, effW, reps) {
   return !s.warmup && !s.assisted && effW > 0 && reps >= 1 && reps <= SET_1RM_MAX_REPS;
 }
 
+// 自己ベストの更新を祝う(YOU WIN!、1.4)かどうか。RIR を入れたその1セットについて判定する。
+//   set1RM:   そのセットの推定1RM(行に 1RM を出せないセット=13回以上・補助ありは 0 で渡す)
+//   pastBest: 保存済みの記録での自己ベスト(prMap。今日の分は入っていない)
+//   todayBest: 今日それまでに実施したセットの最高(このセットを入れる前の値)
+// 過去の記録が無い種目(pastBest が 0)では祝わない。初めての種目は毎セットが「更新」になってしまう。
+// 0.01 の差を要るのは、行の緑・⚡(index.html)と同じく、計算の端数で同じ値を「超えた」と言わないため。
+function isNew1RMBest({ set1RM, pastBest, todayBest }) {
+  if (!(set1RM > 0) || !(pastBest > 0)) return false;
+  return set1RM > pastBest + 0.01 && set1RM > (todayBest || 0) + 0.01;
+}
+
 // ブラウザの<script>グローバルスコープではconst宣言もbare identifierとして参照できるが、
 // vmサンドボックス(テスト環境)ではcontextオブジェクトのプロパティにならないため明示的に公開する。
 globalThis.est1RM = est1RM;
@@ -52,3 +63,4 @@ globalThis.effWeight = effWeight;
 globalThis.dayBest1RM = dayBest1RM;
 globalThis.SET_1RM_MAX_REPS = SET_1RM_MAX_REPS;
 globalThis.showsSet1RM = showsSet1RM;
+globalThis.isNew1RMBest = isNew1RMBest;
