@@ -307,3 +307,27 @@ describe("dayBest1RM は13回以上のセットを数えない", () => {
     expect(dayBest1RM([{ weight: 40, reps: 15 }], false, 0, 70)).toBe(0);
   });
 });
+
+// YOU WIN!(1.4)を出すかどうか。RIR を入れたその1セットで判定する。
+describe("isNew1RMBest(自己ベストの更新を祝うか)", () => {
+  const { isNew1RMBest } = loadDomainModule("src/domain/oneRm.js");
+
+  it("過去の自己ベストと、今日それまでの最高の両方を超えたら真", () => {
+    expect(isNew1RMBest({ set1RM: 101, pastBest: 100, todayBest: 98 })).toBe(true);
+  });
+  it("今日すでに超えていて、それを上回らない2セット目では偽(1回の更新で何度も出さない)", () => {
+    expect(isNew1RMBest({ set1RM: 101, pastBest: 100, todayBest: 102 })).toBe(false);
+  });
+  it("今日の最高をさらに超えたら、また真", () => {
+    expect(isNew1RMBest({ set1RM: 103, pastBest: 100, todayBest: 102 })).toBe(true);
+  });
+  it("初めての種目(過去の自己ベストが無い)では偽", () => {
+    expect(isNew1RMBest({ set1RM: 80, pastBest: 0, todayBest: 0 })).toBe(false);
+  });
+  it("端数だけの差は更新と言わない", () => {
+    expect(isNew1RMBest({ set1RM: 100.005, pastBest: 100, todayBest: 0 })).toBe(false);
+  });
+  it("1RM を出さないセット(0)では偽", () => {
+    expect(isNew1RMBest({ set1RM: 0, pastBest: 100, todayBest: 0 })).toBe(false);
+  });
+});

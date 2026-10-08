@@ -616,6 +616,50 @@ Claude in Chrome で App Store Connect を操作して入力した(北村さん�
   - メディアマネージャーは「すべて削除」の後、6.9インチの欄が畳まれる。開き直してから入れる。1枚入れるたびに file input の ref が変わるので、毎回探し直す
   - 入力の途中で2回、サインインが切れた
 
+## 1.4(AIコーチ)の掲載情報(案、2026-10-09)
+
+中身は `docs/AIコーチ.md`。「次の一手」は外したので、1.4 (16) は出さない。1.4 (17) で出す。
+**まだ App Store Connect には何も入れていない。** TestFlight で北村さんが実物の ChatGPT などで試してから確定する。
+
+### このバージョンの最新情報(What's New)
+
+日本語:
+```
+・AIコーチ:今日のメニューを、ChatGPT・Claude・Gemini などのAIに組んでもらえるようになりました。相談文をコピーしてAIに送り、返ってきた答えを貼り付けると、種目・順番・各セットの重量と回数の案が並びます。使うかどうかは、案を見てから決められます
+・記録の途中でも、終えたセットはそのままに、残りだけを組み直してもらえます
+・種目ごとの「AI相談」は「AIコーチ」にまとめました
+```
+
+English:
+```
+• AI Coach: have ChatGPT, Claude, Gemini or another AI build today's session. Copy the request, send it to the AI, and paste the answer back — you'll see exercises, order, and weight and reps for every set. Nothing changes until you choose to use the plan.
+• Mid-workout, ask it to rework just the rest. Sets you've finished stay as they are.
+• The per-exercise "Ask AI" is now part of AI Coach.
+```
+
+### 概要(Description)の差し替え
+- 「■ 記録をそのままAIに相談」/「■ Ask AI about your training」の節を置き換える:
+  - ja:
+    ```
+    ■ 今日のメニューをAIコーチに相談
+    「AIコーチに相談」を押すと、記録と相談文がクリップボードにコピーされ、設定で選んだAIチャットが開きます。貼り付けて送り、返ってきた答えをアプリに貼り付けると、今日のメニューの案が並びます。使うかどうかはあなたが決めます。記録がアプリから自動で送信されることはありません。
+    ```
+  - en:
+    ```
+    ■ Ask AI Coach for today's session
+    Tap "Ask AI Coach" and your log is copied to the clipboard along with a request, then the AI chat you picked in Settings opens. Send it, paste the answer back, and the plan appears in the app — you decide whether to use it. The app never sends your log anywhere on its own.
+    ```
+- 「次の重量を決めるのは、アプリではなくあなたです。」はそのまま(AIの案も、使うかどうかを決めるのは利用者)
+
+### 審査メモ
+- 英語の冒頭の版の1文: `Version 1.4 adds AI Coach, which copies a request to the clipboard and reads back an answer the user pastes in; it adds no new data handling or external services.`
+- 外部サービスの段落の「"Ask AI" button」を `"AI Coach" (and "Ask AI" on the split and history screens)` に。送信しない・URL に載せない、の説明はそのまま
+- 審査員が AI を使わなくても確かめられるように、貼り付け用の答えの見本をメモに入れるか検討(提出時に決める)
+
+### プライバシーポリシー
+- `privacy.html`(日英)の「AIに相談」の項を、AIコーチを含む書き方に直し、「答えの取り込みは端末の中だけ」を足した(最終更新日 2026-10-09)
+- **公開ページは GitHub Pages の `web-v137` ブランチから出ている。** main やこのブランチで直しても公開ページは変わらないので、提出前に `web-v137` へ `privacy.html` だけを反映する(北村さんの確認を取ってから)
+
 ## 次のバージョン(1.2.1 など)で差し替えるキーワード(日本語)
 
 2026-10-04 に決めた。1.2 は提出済みで審査待ちの間は変えられないので、1.2 には入れず、次に版を作るときに差し替える。サブタイトルは変えない(「ジムで前回超え。サブスクなし」のまま)。

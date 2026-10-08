@@ -387,3 +387,42 @@ describe("canAddWeight (加重できない種目に重量の助言をしない)"
     expect(exerciseInsight(ws, NAME).canAddWeight).toBe(true);
   });
 });
+
+// ディロードの知らせ(1.4)。同じ重量が3回続き、3回ともトップセットが余力0で、直近の回数が伸びていないときだけ。
+// 2026-08-23 に見送った「全体の RIR0 の割合」(docs/vite移行.md)とは別物。記録に見えている事実だけで決まる。
+describe("stalledAtFailure(限界で止まっている)", () => {
+  const withRir = (tops) => tops.map(([weight, reps, rir], i) =>
+    sampleWorkout({ date: `2026-09-0${i + 1}`, sets: [sampleSet({ weight, reps, rir })] }));
+
+  it("3回とも余力0で同じ回数なら真。このとき「上げどき」は出さない", () => {
+    const ins = exerciseInsight(withRir([[24, 8, 0], [24, 8, 0], [24, 8, 0]]), NAME);
+    expect(ins.stalledAtFailure).toBe(true);
+    expect(ins.readyToProgress).toBe(false);
+  });
+
+  it("回数が落ちていても真(限界のまま後退している)", () => {
+    expect(exerciseInsight(withRir([[24, 9, 0], [24, 8, 0], [24, 7, 0]]), NAME).stalledAtFailure).toBe(true);
+  });
+
+  it("1回でも余力が残っていれば偽", () => {
+    expect(exerciseInsight(withRir([[24, 8, 0], [24, 8, 1], [24, 8, 0]]), NAME).stalledAtFailure).toBe(false);
+  });
+
+  it("直近の回数が伸びていれば偽(限界でも前に進んでいる)", () => {
+    const ins = exerciseInsight(withRir([[24, 7, 0], [24, 8, 0], [24, 9, 0]]), NAME);
+    expect(ins.stalledAtFailure).toBe(false);
+    expect(ins.readyToProgress).toBe(true);
+  });
+
+  it("同じ重量が2回だけなら偽", () => {
+    expect(exerciseInsight(withRir([[22, 8, 0], [24, 8, 0], [24, 8, 0]]), NAME).stalledAtFailure).toBe(false);
+  });
+
+  it("余力が未入力の回があれば偽(限界だったかは分からない)", () => {
+    expect(exerciseInsight(withRir([[24, 8, 0], [24, 8, ""], [24, 8, 0]]), NAME).stalledAtFailure).toBe(false);
+  });
+
+  it("3回より前の回は見ない(4回前に余力があっても、直近3回が限界なら真)", () => {
+    expect(exerciseInsight(withRir([[24, 8, 2], [24, 8, 0], [24, 8, 0], [24, 8, 0]]), NAME).stalledAtFailure).toBe(true);
+  });
+});

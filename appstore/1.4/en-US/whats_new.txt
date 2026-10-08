@@ -1,3 +1,7 @@
-• AI Coach: have ChatGPT, Claude, Gemini or another AI build today's session. Copy the request, send it to the AI, and paste the answer back — you'll see exercises, order, and weight and reps for every set. Nothing changes until you choose to use the plan.
+• AI Coach: have ChatGPT, Claude, Gemini or another AI build today's session. Tap "Ask AI Coach" on the Log tab, send the request to the AI and paste the answer back — you'll see exercises, order, and weight and reps for every set. Nothing changes until you choose to use the plan.
 • Mid-workout, ask it to rework just the rest. Sets you've finished stay as they are.
+• Beat your best estimated 1RM and you'll get a "YOU WIN!".
+• Stuck at the same weight at RIR 0 for three sessions? You'll see a deload as an option.
+• The guide now covers RIR, AI Coach and Apple Watch, and you can reopen it from Settings.
+• The rest timer on the Lock Screen (Live Activity) can now be switched on or off in Settings. It's off by default.
 • The per-exercise "Ask AI" is now part of AI Coach.

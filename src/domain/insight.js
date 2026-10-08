@@ -18,6 +18,8 @@ const INSIGHT_TREND_LEN = 4;   // 推移として並べるセッション数
 // 食い違うことがある。文言(log.repsDown)側に「直近3セッションの」と範囲を書いてあるのは
 // そのため。ここを変えるなら文言も一緒に直すこと。
 const INSIGHT_REPS_WINDOW = 3;
+// 限界で止まっていると見なす連続回数(stalledAtFailure)
+const INSIGHT_STALL_SESSIONS = 3;
 
 function insightNum(v) { const n = parseFloat(v); return isNaN(n) ? 0 : n; }
 
@@ -73,7 +75,7 @@ function exerciseInsight(workouts, name, isDbOf) {
   // 代表セットが取れない日(全セットが補助あり、または回数未入力)。重量にまつわる判断材料は
   // 出せないので、消費側が畳めるよう topWeight を null にして知らせる。
   if (!prevTop) {
-    return { ...base, topWeight: null, topReps: null, topRir: null, streak: 0, readyToProgress: false, bestRecentReps: 0 };
+    return { ...base, topWeight: null, topReps: null, topRir: null, streak: 0, readyToProgress: false, bestRecentReps: 0, stalledAtFailure: false };
   }
 
   const prevWeight = insightNum(prevTop.weight);
@@ -93,7 +95,19 @@ function exerciseInsight(workouts, name, isDbOf) {
   // 1セットしかやらなかった日の値だった)。
   const recentTops = entries.slice(0, Math.min(streak, INSIGHT_REPS_WINDOW)).map(e => topSetOf(e.ex)).filter(Boolean);
   const bestRecentReps = recentTops.reduce((max, t) => Math.max(max, insightNum(t.reps)), 0);
-  const readyToProgress = prevReps >= bestRecentReps;
+
+  // 限界で止まっている(ディロードの知らせ、1.4)。同じ重量が INSIGHT_STALL_SESSIONS 回続き、
+  // その全回のトップセットが余力0(RIR が 0 以下)で、直近の回数がそれ以前の最高を超えていない。
+  // 2026-08-23 に見送った「アプリ全体の RIR0 の割合」(docs/vite移行.md)と違い、記録に見えている事実だけで決まる。
+  // このときは「上げどき」と言わない(毎回限界で同じ回数なら、重量を上げる段階ではない)。数字は変えない。
+  let stalledAtFailure = false;
+  if (streak >= INSIGHT_STALL_SESSIONS) {
+    const win = entries.slice(0, INSIGHT_STALL_SESSIONS).map(e => topSetOf(e.ex));
+    const allFailure = win.every(t => t && t.rir !== "" && t.rir != null && insightNum(t.rir) <= 0);
+    const earlierBest = win.slice(1).reduce((max, t) => Math.max(max, insightNum(t.reps)), 0);
+    stalledAtFailure = allFailure && prevReps <= earlierBest;
+  }
+  const readyToProgress = !stalledAtFailure && prevReps >= bestRecentReps;
 
   return {
     ...base,
@@ -103,6 +117,7 @@ function exerciseInsight(workouts, name, isDbOf) {
     streak,
     readyToProgress,
     bestRecentReps,
+    stalledAtFailure,
   };
 }
 
