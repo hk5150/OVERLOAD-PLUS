@@ -16,6 +16,11 @@ KURABELL Workout Log は漸進性過負荷にもとづく筋トレ記録PWA。**
 
 ## 配布経路が2つあり、実行のしかたが違う
 
+**Web 版は v137 で止めてある(2026-10-08、北村さんの判断)。** GitHub Pages の配信元は `main` ではなくブランチ `web-v137`。
+main に push しても Web 版は変わらない(更新したくなったら `web-v137` を進めるか、Pages の配信元を戻す)。
+以後の新機能は iOS 版で確かめれば足りる。ただし `index.html` の `#appsrc` は Web のランタイム Babel 経路と共通なので、
+Web 版の起動確認(8765)は開発中の確認手段としては引き続き使える。
+
 | | Web (GitHub Pages) | iOS (Capacitor) |
 |---|---|---|
 | 配信元 | リポジトリ直下の `index.html` | `www/`(生成物・gitignore) |
