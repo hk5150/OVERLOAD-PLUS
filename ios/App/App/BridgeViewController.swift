@@ -12,5 +12,6 @@ class BridgeViewController: CAPBridgeViewController {
         bridge?.registerPluginInstance(WatchPlugin())
         bridge?.registerPluginInstance(FileExportPlugin())
         bridge?.registerPluginInstance(ReviewPlugin())
+        bridge?.registerPluginInstance(AiPlugin())
     }
 }

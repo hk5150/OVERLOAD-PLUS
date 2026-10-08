@@ -199,6 +199,8 @@
       globals:['resolveCoefficients'] },
     { key:'insight',    urls:['src/domain/insight.js'],
       globals:['exerciseInsight','topSetOf'] },
+    { key:'nextStep',   urls:['src/domain/nextStep.js'],
+      globals:['suggestNextStep','aiTextIsConsistent','nextStepAiAvailable','explainNextStep'] },
     { key:'restNotifications', urls:['src/domain/restNotifications.js'],
       globals:['REST_NOTIFY_MINUTES','REST_NOTIFY_CHOICES','restNotifyId','normalizeRestNotifyMinutes','buildRestNotifications','restNotificationsAvailable','ensureRestNotificationPermission','checkRestNotificationPermission','scheduleRestNotifications','cancelRestNotifications','clearDeliveredRestNotifications','toNativeRestNotifications','REST_ACTIVITY_STALE_MINUTES','buildRestActivityState','syncRestActivity'] },
     { key:'iap',        urls:['src/domain/iap.js'],
@@ -985,6 +987,10 @@ function App() {
   const [swapMuscle, setSwapMuscle] = useState("");  // 種目差し替え時の部位フィルター
   const [openSetKey, setOpenSetKey] = useState(null); // 展開中のセット "exId:index"
   const [openHist, setOpenHist] = useState({});       // 種目カードの履歴パネル開閉
+  // 「次の一手」(1.4)のパネル。exId → { ai: null | "pending" | 文 }。src/domain/nextStep.js
+  const [nextOpen, setNextOpen] = useState({});
+  const [nextAiReady, setNextAiReady] = useState(false); // 端末内AIが使えるか(iOS 26+・対応機種・オン・DL済み)
+  useEffect(() => { nextStepAiAvailable().then(setNextAiReady); }, []);
   const [restFull, setRestFull] = useState(false);    // インターバルの全画面表示
   const [showSplitHistory, setShowSplitHistory] = useState(false); // 上部バーのボリュームタップ→同一分割の履歴一覧
   const splitHistoryModalRef = useRef(null);
@@ -1796,6 +1802,68 @@ function App() {
   // 判定そのものは src/domain/insight.js へ移設した(テストのため)。
   // ローカル名が同名なので window. 経由で呼ぶ(付けないと自己再帰になる)。
   const exerciseInsight = (name) => window.exerciseInsight(workouts, name, resolveIsDb);
+
+  // ---- 次の一手(1.4)。数字は規則(src/domain/nextStep.js)、理由の文は端末内AIが使えればAI、使えなければ定型文 ----
+  // 案を並べるだけで記録は書き換えない。「この案で入れる」を押したときだけ、まだ実施していないセットに入れる。
+  const nextStepFor = (ex, ins) => suggestNextStep({
+    insight: ins, topWeight: ins && ins.topWeight != null ? wU(ins.topWeight) : 0,
+    increment: incU(num(ex.increment) || 2.5), repLow: num(ex.repLow) || 8, repHigh: num(ex.repHigh) || 12,
+  });
+  const nextStepText = (s) => t(s.reason.key, { ...s.reason.params, unit: uLabel() });
+  const toggleNextStep = (ex, ins) => {
+    if (nextOpen[ex.id]) { setNextOpen(o => { const n = { ...o }; delete n[ex.id]; return n; }); return; }
+    const s = nextStepFor(ex, ins);
+    if (!s) return;
+    setNextOpen(o => ({ ...o, [ex.id]: { ai: nextAiReady ? "pending" : null } }));
+    if (!nextAiReady) return;
+    // AI には規則の結論と理由だけを1行で渡し、言い換えだけを頼む(推移まで渡すと、事実と違う説明を作りやすかった)。
+    // 数字が案と違えば捨てる(aiTextIsConsistent)。安全機能が誤って止めた(加重しない種目で毎回起きた)ときも定型文のまま
+    const p = s.reason.params;
+    const facts = t("next.facts", { plan: nextStepPlanText(s, ins.isDb), text: nextStepText(s) });
+    const allowed = [p.w, p.r, p.rir, p.lo, p.hi, p.inc, p.next, p.best, p.target, s.weight, s.repsLow, s.repsHigh,
+      ...ins.trend.flatMap(v => [wU(v.weight), v.reps])];
+    explainNextStep(facts, lang).then(text => {
+      const ok = text && aiTextIsConsistent(text, allowed);
+      setNextOpen(o => o[ex.id] ? { ...o, [ex.id]: { ai: ok ? text : null } } : o);
+    });
+  };
+  // ダンベルは片手の重量(記録と同じ)なので、そうと書く
+  const nextStepPlanText = (s, isDb) => {
+    const reps = s.repsLow === s.repsHigh ? `${s.repsLow}` : `${s.repsLow}${lang === "en" ? "–" : "〜"}${s.repsHigh}`;
+    const w = s.weight > 0 ? `${s.weight}${uLabel()}${isDb ? t("menu.perHand") : ""}` : t("next.bodyweight");
+    return t("next.plan", { w, reps }) + (s.inc > 0 ? t("next.inc", { inc: s.inc, unit: uLabel() }) : "");
+  };
+  // まだ RIR を入れていない本番セットだけに入れる(実施済み・ウォームアップは触らない)
+  const applyNextStep = (exId, s) => {
+    setToday(t => t.map(e => e.id !== exId ? e : { ...e, sets: e.sets.map(st =>
+      st.warmup || (st.rir !== "" && st.rir != null) ? st : { ...st, weight: String(s.weight), reps: String(s.repsLow) }) }));
+    setNextOpen(o => { const n = { ...o }; delete n[exId]; return n; });
+  };
+  const renderNextStep = (ex, ins) => {
+    const s = nextStepFor(ex, ins);
+    if (!s) return null;
+    const st = nextOpen[ex.id] || {};
+    const aiText = typeof st.ai === "string" && st.ai !== "pending" ? st.ai : null;
+    return (
+      <div role="region" aria-label={t("next.button")} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 12px", marginTop: -4, marginBottom: 10 }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+          <span style={{ fontSize: 12, color: C.muted, flexShrink: 0 }}>{t("next.label")}</span>
+          <span style={{ fontSize: 15, fontWeight: 800, flex: 1, minWidth: 0 }}>{nextStepPlanText(s, ins.isDb)}</span>
+          <button onClick={() => toggleNextStep(ex, ins)} aria-label={t("common.close")} className="tapArea"
+            style={{ ...btn("transparent", C.muted), padding: "0 4px", fontSize: 14, lineHeight: 1 }}>✕</button>
+        </div>
+        <div aria-live="polite" style={{ fontSize: 13, color: C.text, lineHeight: 1.6, marginTop: 6 }}>
+          {aiText || nextStepText(s)}
+          {aiText && <span style={{ fontSize: 10, fontWeight: 800, color: C.muted, border: `1px solid ${C.border}`, borderRadius: 4, padding: "0 4px", marginLeft: 6 }}>{t("next.aiBadge")}</span>}
+          {st.ai === "pending" && <span style={{ fontSize: 11, color: C.muted, marginLeft: 6 }}>{t("next.aiPending")}</span>}
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 8 }}>
+          <button onClick={() => applyNextStep(ex.id, s)} style={{ ...btn(C.surface2, C.text), padding: "7px 12px", fontSize: 13, border: `1px solid ${C.border}` }}>{t("next.apply")}</button>
+          <span style={{ fontSize: 11, color: C.muted }}>{t("next.note")}</span>
+        </div>
+      </div>
+    );
+  };
 
   // ---- 種目リスト(内蔵 + 保存済みカスタム) ----
   const allExercises = useMemo(
@@ -3869,6 +3937,7 @@ function App() {
                 const hasTrend = ins.trend.length >= 2;
                 const unit = ins.isDb ? t("share.perHand", { unit: uLabel() }) : uLabel();
                 return (
+                  <>
                   <div style={{ background: C.bg, borderRadius: 10, padding: "6px 10px", marginBottom: 10, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
                     <span style={{ fontSize: 12, color: C.muted }}>{t("log.lastDate", { date: fmtDate(ins.date) })}</span>
                     {/* 加重できない種目(腕立てなど)では重量の連続に意味がない。「0kgで5セッション連続」
@@ -3903,7 +3972,15 @@ function App() {
                         })}
                       </span>
                     )}
+                    {nextStepFor(ex, ins) && (
+                      <button onClick={() => toggleNextStep(ex, ins)} aria-expanded={!!nextOpen[ex.id]} className="tapArea"
+                        style={{ ...btn("transparent", nextOpen[ex.id] ? C.yellow : C.text), marginLeft: "auto", padding: "2px 0", fontSize: 12, fontWeight: 700 }}>
+                        {t("next.button")} ›
+                      </button>
+                    )}
                   </div>
+                  {nextOpen[ex.id] && renderNextStep(ex, ins)}
+                  </>
                 );
               })()}
 
