@@ -211,6 +211,8 @@
       globals:['fileExportAvailable','shareTextFile'] },
     { key:'review',     urls:['src/domain/review.js'],
       globals:['REVIEW_REQUESTED_KEY','shouldRequestReview','requestAppReview'] },
+    { key:'aiCoach',    urls:['src/domain/aiCoach.js'],
+      globals:['normalizeCoachText','extractCoachPlan','coachNameKey','makeCoachNameResolver','validateCoachPlan','coachSetDone','mergeCoachPlan','revertCoachPlan'] },
     // iOS版のSQLite永続化層。Web版では何もしない(nativeSqliteDriver()がnullを返すだけ)。
     { key:'dbSchema',    urls:['src/domain/db/schema.js'],
       globals:['SCHEMA_VERSION','SCHEMA_STATEMENTS'] },
@@ -318,7 +320,7 @@ const WATCH_FINISHED_KEY = "watch-finished-v1"; // 保存したら Watch に出�
 const PRE_IMPORT_BACKUP_KEY = "workout-log-v1-pre-import"; // バックアップ復元前のデータ退避(復元に失敗した場合の保険)
 // ヘッダーのバージョンバッジとバックアップのappVersionで共有する単一の定数。
 // sw.js の CACHE 定数とは tests/version.test.js が数字の一致を機械的に縛っている(CLAUDE.md参照)。
-const APP_VERSION = "v138";
+const APP_VERSION = "v139";
 // store(保存レイヤ)は src/domain/storage.js へ移設(テストのため)。
 // LIBSで<script src>読み込み済みなのでグローバルの store をそのまま参照できる。
 const uid = () => Math.random().toString(36).slice(2, 8);
@@ -1520,6 +1522,8 @@ function App() {
   // ---- Apple Watchで入力されたセットを合流させる(src/domain/watch.js、docs/Watchアプリ.md) ----
   // 操作はネイティブのキューに溜まっている(iPhoneのアプリが裏で寝ている間も)。起動時・前面復帰時・
   // 受信時に読み、まだ合流させていないものだけをtodayへ。キューから消すのは下書きの保存後(上のeffect)。
+  // AIコーチの案を記録中に取り込む前にも呼ぶ(合流前の today に当てると、届く途中の Watch の入力と行がずれる)
+  const drainWatchRef = useRef(null);
   useEffect(() => {
     if (!loaded) return;
     // ここではackしない。合流済みなのにキューに残っている分も、下書きの保存後にまとめてackする
@@ -1565,6 +1569,7 @@ function App() {
         setRestStartAt(cur => (cur == null || r.restStartAt > cur ? r.restStartAt : cur));
       }
     };
+    drainWatchRef.current = drain;
     drain();
     const sub = onWatchOps(drain);
     const onVisible = () => { if (document.visibilityState === "visible") drain(); };
@@ -1979,18 +1984,156 @@ function App() {
     // workouts/todayDayからの導出値だが、useMemoの依存漏れ検出を素直に通すため明示している。
   }, [lastSameSession, todayDay, workouts, profile.bodyweight, lang]);
 
+  // メニュー1項目(buildMenuItem の prescription)から、今日の種目カードを作る
+  const exerciseFromPrescription = (p, sets) => ({ id: uid(), name: p.name, muscle: p.muscle, bwFactor: p.bwFactor, isDb: p.isDb, rom: p.rom ?? 1.0,
+    repLow: p.repLow, repHigh: p.repHigh, targetRirLow: p.targetRirLow, targetRirHigh: p.targetRirHigh, increment: p.increment,
+    formBroke: false, pain: false, sets });
+
   const startAutoMenu = () => {
     ensureStarted();
+    if (coachMenuActive) {
+      setToday(mergeCoachPlan([], coachMenu.plan, { newExercise: coachNewExercise }));
+      setCoachMenu(null);
+      return;
+    }
     setToday(autoMenu.map(it => {
       const p = it.prescription;
       // 前回のセット構成があればそれをそのまま、なければ目標回数で組む
       const sets = p.prevSets
         ? p.prevSets.map(s => ({ weight: wStr(s.weight), reps: String(s.reps), rir: "", warmup: !!s.warmup, ...(s.assisted ? { assisted: true } : {}) }))
         : p.targetReps.map(r => ({ weight: wStr(p.weight), reps: String(r), rir: "", warmup: false }));
-      return { id: uid(), name: p.name, muscle: p.muscle, bwFactor: p.bwFactor, isDb: p.isDb, rom: p.rom ?? 1.0,
-        repLow: p.repLow, repHigh: p.repHigh, targetRirLow: p.targetRirLow, targetRirHigh: p.targetRirHigh, increment: p.increment,
-        formBroke: false, pain: false, sets };
+      return exerciseFromPrescription(p, sets);
     }));
+  };
+
+  // ---- AIコーチ(手動版、src/domain/aiCoach.js、docs/AIコーチ.md) ----
+  // 始める前は今日のメニューを丸ごと、記録中は残りを、チャットAIに組んでもらう。相談文をコピーして
+  // 設定で選んだAIを開き、返ってきた答えを貼って読む。案は一覧で見せるだけで、「この案を使う」を
+  // 押したときだけ入れ替える(数字を決めるのは利用者。アプリからAIへは何も送らない)。
+  const [coachMode, setCoachMode] = useState(null); // null | "plan"(始める前)| "replan"(記録中)
+  const [coachAnswer, setCoachAnswer] = useState("");
+  const [coachResult, setCoachResult] = useState(null); // { error } または validateCoachPlan の結果
+  const [coachCopied, setCoachCopied] = useState(false);
+  // 始める前に取り込んだ案。メモリにだけ持つ。Day か日付が変わったら使わない(前の日の案で始めないように)
+  const [coachMenu, setCoachMenu] = useState(null); // { plan, day, date, unit }
+  // 案の重量は読み込んだときの表示単位の数字なので、単位を切り替えたら使わない
+  const coachMenuActive = !!coachMenu && !!todayDay && coachMenu.day === todayDay.name && coachMenu.date === new Date().toDateString() && coachMenu.unit === getUnit();
+  const coachModalRef = useRef(null);
+  const closeCoach = () => { setCoachMode(null); setCoachResult(null); setCoachCopied(false); };
+  useModalA11y(coachMode != null, closeCoach, coachModalRef);
+  const openCoach = (mode) => { setCoachMode(mode); setCoachAnswer(""); setCoachResult(null); setCoachCopied(false); };
+  // AI が書いた種目名 → 保存用の名前。表示名に加えて英語名でも引く(日本語で頼んでも英語名で返すAIがある)
+  const coachResolveName = useMemo(
+    () => makeCoachNameResolver(allExercises.map(e => ({ name: e.n, labels: [exName(e.n), EX_NAMES_EN[e.n]] }))),
+    [allExercises, lang]);
+  // 案で新しく入る種目のカード。設定(目標回数・刻み・係数)は今日のメニューと同じ経路で引く
+  const coachNewExercise = (name) => exerciseFromPrescription(buildMenuItem(name).prescription, []);
+  // 今日のメニューカードに出す中身。AIコーチの案を取り込んでいればそれ、無ければ前回の引き継ぎ。
+  // 案のセットは表示単位なので、カードの表示(prevSets は kg)に合わせて直す
+  const menuItems = coachMenuActive
+    ? coachMenu.plan.exercises.map(e => {
+        const it = buildMenuItem(e.name);
+        // baseType: 初めての種目なら「初回」の印とフォーム動画の案内を、前回の引き継ぎと同じく出す
+        return { ...it, type: "coach", baseType: it.type, prescription: { ...it.prescription,
+          prevSets: e.sets.map(x => ({ weight: fromU(x.w), reps: x.r, warmup: x.wu, assisted: false })), sets: e.sets.length } };
+      })
+    : autoMenu;
+  const COACH_SESSIONS = 3; // 種目ごとに渡す直近の記録の回数(スマホで貼るには長すぎないように)
+
+  const coachPromptText = (mode) => {
+    const unit = uLabel();
+    const shortDate = (iso) => { const d = new Date(iso); return `${d.getMonth() + 1}/${d.getDate()}`; };
+    const names = mode === "replan" ? today.map(e => e.name) : autoMenu.map(it => it.prescription.name);
+    const lines = [t(mode === "replan" ? "coach.p.replan" : "coach.p.plan"), ""];
+    lines.push(t("coach.p.me"), t("coach.p.meLine", { bw: `${wU(profile.bodyweight)}${unit}`, unit, reps: profile.defTargetReps }));
+    if (split && todayDay) {
+      const i = split.cursor % split.days.length;
+      lines.push("", t("coach.p.day"), t("share.dayMeta", { split: splitName(split.name), n: i + 1, total: split.days.length, name: dayName(todayDay.name) }));
+      const muscles = (todayDay.muscles || []).map(m => muscleName(m)).join(" / ");
+      if (muscles) lines.push(t("share.dayMuscles", { muscles }));
+      // 他の日の担当を渡す。無いと、この日に他の日の部位の種目を足してくる(dayToText と同じ理由)
+      const others = split.days
+        .map((o, oi) => oi === i ? null : `${dayName(o.name)}(${(o.muscles || []).map(m => muscleName(m)).join(", ") || "-"})`)
+        .filter(Boolean);
+      if (others.length) lines.push(t("share.dayOthers", { list: others.join(" / ") }));
+    }
+    // 種目ごとの直近の記録。全セットと余力を渡す(トップセットだけだと「後半は軽くする」組み方を読めない)。
+    // 重量は記録の値そのまま(ダンベルは片手、自重種目は加重分)。答えも同じ基準で書いてもらうので、
+    // dayToText のように実効重量へは直さない
+    lines.push("", t("coach.p.exercises"));
+    if (names.length === 0) lines.push(t("coach.p.noHistory"));
+    names.forEach((name, k) => {
+      const cfg = today.find(e => e.name === name) || lastConfig(name);
+      const isDb = resolveIsDb(name, cfg.isDb);
+      lines.push(`${k + 1}. ${exName(name)}${isDb ? t("coach.p.perHand") : (cfg.bwFactor || 0) > 0 ? t("coach.p.added") : ""}`);
+      lines.push(`   ${t("coach.p.target", { lo: cfg.repLow, hi: cfg.repHigh, inc: `${incU(cfg.increment ?? profile.defIncrement)}${unit}` })}`);
+      const past = workouts
+        .map(w => ({ date: w.date, ex: w.exercises.find(e => e.name === name) }))
+        .filter(e => e.ex && (e.ex.sets || []).length > 0)
+        .slice(-COACH_SESSIONS);
+      if (past.length === 0) lines.push(`   ${t("coach.p.noHistory")}`);
+      past.forEach(e => lines.push(`   ${shortDate(e.date)}  ${e.ex.sets.map(s => shareSetLine(s, wU(s.weight), "")).join(" / ")}`));
+      if (exerciseNotes[name]) lines.push(`   📌 ${exerciseNotes[name]}`);
+    });
+    if (mode === "replan") {
+      // 実施済みはRIRの有無で決める(前回の値が自動で入っているので、回数だけでは判定できない)
+      const done = today.map(ex => ({ ex, sets: ex.sets.filter(coachSetDone) })).filter(x => x.sets.length);
+      lines.push("", t("coach.p.today"));
+      if (done.length === 0) lines.push(t("coach.p.noHistory"));
+      done.forEach(({ ex, sets }) => lines.push(`${exName(ex.name)}: ${sets.map(s => shareSetLine(s, num(s.weight), "")).join(" / ")}`));
+    }
+    // 選べる種目。アプリに無い名前を返されると取り込めないので、この中から選ばせる
+    const muscleSet = new Set(names.map(n => findExercise(n)?.m).filter(Boolean));
+    const cands = allExercises.filter(e => todayDay ? muscleMatchesDay(e.m, todayDay) : muscleSet.has(e.m));
+    lines.push("", t("coach.p.catalog"));
+    [...MUSCLES, ""].forEach(m => {
+      const ns = cands.filter(e => muscleGroupOf(e) === m).map(e => exName(e.n));
+      if (ns.length) lines.push(`${m ? muscleName(m) : t("settings.other")}: ${ns.join(" / ")}`);
+    });
+    // 記録中の追加の約束は、最後の「形式のブロックを出して」の行より前に入れる(ブロックの直前の指示が一番効く)
+    const rules = t("coach.p.rules", { unit }).split("\n");
+    if (mode === "replan") rules.splice(rules.length - 1, 0, t("coach.p.rulesReplan"));
+    lines.push("", ...rules);
+    lines.push("", "```kurabell", '{"kurabell":1,"exercises":[',
+      ` {"name":"${t("coach.p.exName")}","sets":[{"w":40,"r":10,"wu":true},{"w":60,"r":8},{"w":60,"r":8}]}`,
+      "]}", "```");
+    lines.push("", t("share.rirNote"), "— KURABELL Workout Log");
+    return lines.join("\n");
+  };
+
+  const copyCoachPrompt = () => {
+    // consultAi と同じく、window.open はコピーと同じ同期の流れで呼ぶ(await を挟むと開かない)
+    const text = coachPromptText(coachMode);
+    if (!copyToClipboard(text)) { window.prompt(t("err.copyFailed"), text); return; }
+    setCoachCopied(true);
+    window.open(aiServiceOf(profile.aiService).url, "_blank", "noopener,noreferrer");
+  };
+
+  const readCoachAnswer = () => {
+    const r = extractCoachPlan(coachAnswer);
+    if (!r.ok) { setCoachResult({ error: r.error }); return; }
+    const v = validateCoachPlan(r.plan, {
+      resolveName: coachResolveName,
+      weightInRange: (w) => isSetValueInRange("weight", fromU(w)),
+      maxReps: Math.min(100, SET_VALUE_LIMITS.reps[1]),
+    });
+    setCoachResult(v.exercises.length ? v : { ...v, error: "none" });
+  };
+
+  const applyCoach = async () => {
+    const plan = coachResult;
+    if (!plan?.exercises?.length) return;
+    const mode = coachMode;
+    closeCoach();
+    if (mode === "plan") {
+      setCoachMenu({ plan, day: todayDay?.name ?? null, date: new Date().toDateString(), unit: getUnit() });
+      return;
+    }
+    // 先に Watch の入力を合流させてから、その today に当てる(実施済みの判定と行番号を最新にする)
+    try { await drainWatchRef.current?.(); } catch { /* 合流できなくても取り込みは進める */ }
+    const holder = {};
+    setToday(t => { holder.before = t; return mergeCoachPlan(t, plan, { newExercise: coachNewExercise }); });
+    showNotice({ kind: "coach", holder });
   };
 
   // ---- 記録操作 ----
@@ -2139,6 +2282,11 @@ function App() {
     clearNotice();
     const dayIdx = split && todayDay && r.dayIdx >= 0 && split.cursor === r.cursor && split.days[r.dayIdx] === todayDay ? r.dayIdx : -1;
     const dayEx = dayIdx >= 0 ? (todayDay.exercises || []) : null;
+    if (r.kind === "coach") {
+      // 入れ替える前の today に戻す。ただし、5秒の間にセットを終えた種目は今のまま残す(revertCoachPlan)
+      if (r.holder.before) setToday(t => revertCoachPlan(r.holder.before, t));
+      return;
+    }
     if (r.kind === "removed") {
       // 5秒の間に同じ種目を足し直していたら戻さない(同名が2枚あると、名前で引く前回の記録が片方にしか付かない)
       setToday(t => t.some(e => e.id === r.ex.id || e.name === r.ex.name) ? t : [...t.slice(0, r.idx), r.ex, ...t.slice(r.idx)]);
@@ -2758,7 +2906,7 @@ function App() {
     return lines.join("\n");
   };
 
-  // セット1つ分の表記。種目単位(exerciseToText)と分割の日単位(dayToText)で共通。
+  // セット1つ分の表記。AIコーチ(coachPromptText)と分割の日単位(dayToText)・履歴で共通。
   // 重量と単位は呼び出し側で作って渡す(記録中のセットは表示単位の文字列、保存済みはkg、
   // 自重種目は実効重量、と作り方が違うため)。同じ整形をコピーして持つと、v104で踏んだ
   // 「同じ計算が3通りに割れる」を繰り返すのでここに集約する。
@@ -2770,85 +2918,11 @@ function App() {
     return `${weight}${unit}×${s.reps}${rir}${tags.length ? `[${tags.join("/")}]` : ""}`;
   };
 
-  // 種目1つ分の相談プロンプト。「次にどの重量・回数で組むか」を判断するのに要る材料を、
-  // 数値の羅列ではなく前提込みで渡す。RIRの説明を必ず添えるのは、注記が無いとAIが
-  // 「余力2」を「2回しかできない」等と誤読して逆方向の助言をするため。
+  // 相談プロンプトに渡す履歴の回数
   const MAX_PROMPT_SESSIONS = 5;
-  const exerciseToText = (ex) => {
-    const name = exName(ex.name);
-    const meta = findExercise(ex.name);
-    const isDb = resolveIsDb(ex.name, ex.isDb);
-    const bwF = ex.bwFactor || 0;
-    // 重量の意味づけ。片手/体重込みのときだけ書く(通常の種目では自明で、書くと冗長)。
-    // これが無いとダンベルの「22kg」を両手合計と誤読して負荷を半分に見積もられる。
-    const unitNote = isDb ? t("share.perHand", { unit: uLabel() })
-      : bwF > 0 ? t("share.withBw", { unit: uLabel() }) : null;
-    // プロンプト内の日付は曜日なし。fmtDateは「8/12 (水)」を返すため、
-    // 「推定1RM 110kg(8/12 (水))」のように括弧が二重になって読みにくくなる。
-    const shortDate = (iso) => { const d = new Date(iso); return `${d.getMonth() + 1}/${d.getDate()}`; };
-    // 保存済みの記録(past)はkg、記録中のセット(today)は表示単位の文字列を持つ
-    // (todayの他の参照は全て fromU() を通している)。ここを一律 wU() にすると、
-    // lb表示のユーザーで今日の分だけ二重換算され、過去と桁が食い違う。
-    const setLine = (s, isKg) => shareSetLine(s, isKg ? wU(s.weight) : num(s.weight), uLabel());
 
-    const lines = [t("share.exPrompt", { name }), ""];
-    lines.push(t("share.exMeta", {
-      name,
-      muscle: ex.muscle ? muscleName(ex.muscle) : "-",
-      eq: meta?.eq ? eqName(meta.eq) : "-",
-    }));
-    if (unitNote) lines.push(t("share.exUnit", { unit: unitNote }));
-    lines.push(t("share.exProfile", {
-      bw: `${wU(profile.bodyweight)}${uLabel()}`,
-      reps: ex.repHigh ?? profile.defTargetReps,
-      inc: `${wU(ex.increment ?? profile.defIncrement)}${uLabel()}`,
-    }));
-    const pr = prMap[ex.name];
-    if (pr && (pr.best1RM > 0 || pr.bestWeight > 0)) {
-      // 13回以上しか記録していない種目は推定1RMが無いので、最大重量だけ渡す
-      lines.push(pr.best1RM > 0 ? t("share.exPr", {
-        // 推定1RMは計算値で端数が出る(39.199999999999996 のような値になる)。
-        // 画面側と同じく小数1桁に丸める。
-        rm: `${toU(pr.best1RM).toFixed(1)}${uLabel()}`, rmDate: shortDate(pr.date),
-        top: `${toU(pr.bestWeight).toFixed(1)}${uLabel()}`, topDate: shortDate(pr.weightDate),
-      }) : t("share.exPrTop", { top: `${toU(pr.bestWeight).toFixed(1)}${uLabel()}`, topDate: shortDate(pr.weightDate) }));
-      // prMapの値は実効重量(ダンベルは両手合計・自重は体重込み)。セット行は片手/加重の生値なので、
-      // 但し書きが無いとAIが「自己ベスト44kgに対して今日22kgは大幅減」と誤読する。
-      if (unitNote) lines.push(t("share.exPrEff"));
-    }
-
-    // 直近の記録(古い順)。ウォームアップも含めて実施内容をそのまま渡す
-    const past = workouts
-      .map(w => ({ date: w.date, ex: w.exercises.find(e => e.name === ex.name) }))
-      .filter(e => e.ex && (e.ex.sets || []).length > 0)
-      .slice(-MAX_PROMPT_SESSIONS);
-    lines.push("", t("share.exHistory"));
-    if (past.length === 0) {
-      lines.push(t("share.exNoHistory"));
-    } else {
-      past.forEach(e => lines.push(`${fmtDate(e.date)} ${e.ex.sets.map(s => setLine(s, true)).join(" / ")}`));
-      const ins = exerciseInsight(ex.name);
-      if (ins && ins.streak >= 2) {
-        lines.push(t("share.exStreak", { v: `${wU(ins.topWeight)}${uLabel()}`, n: ins.streak }));
-      }
-    }
-
-    // 今日ここまでの入力。これがあると「次回」だけでなく「次のセット」も相談できる。
-    // 判定は必ずRIRの有無で行う。種目を追加すると前回のセットが重量・回数ごと自動入力されるため、
-    // reps>0 だけで絞ると「まだやっていないセット」を実施済みとしてAIに渡してしまう
-    // (実際にダンベルフライで、前回と同じ14kg×12/14kg×10が「今日ここまで」に出ていた)。
-    const doneToday = (ex.sets || []).filter(s => s.rir !== "" && s.rir != null && Number(s.reps) > 0);
-    if (doneToday.length > 0) {
-      lines.push("", t("share.exToday"), doneToday.map(s => setLine(s, false)).join(" / "));
-    }
-    if (exerciseNotes[ex.name]) lines.push("", `📌 ${exerciseNotes[ex.name]}`);
-
-    lines.push("", t("share.rirNote"), "— KURABELL Workout Log");
-    return lines.join("\n");
-  };
-
-  // 分割の1日分の相談プロンプト。種目単位(exerciseToText)が「次の重量・回数」を聞くのに対し、
-  // こちらは「この日の種目の選び方・並び・量」を聞く。分割全体の中での位置づけ(何分割の何日目、
+  // 分割の1日分の相談プロンプト。AIコーチ(coachPromptText)が「今日のメニュー」を組ませるのに対し、
+  // こちらは分割を組むときの「この日の種目の選び方・並び・量」を聞く。分割全体の中での位置づけ(何分割の何日目、
   // 他の日が何を担当しているか)が無いと、AIは「胸の日に背中も入れては」のような、
   // 分割の設計と衝突する助言をしてくる。
   const dayToText = (d, i) => {
@@ -2881,7 +2955,7 @@ function App() {
           // 負荷を半分に見積もられる。
           // 自重種目だけは実効重量(体重×係数+加重)に置き換える。記録側のweightは加重だけなので、
           // そのまま「(体重込)」と書くと懸垂が「0kg(体重込)×10」になり、AIは総負荷0と読む。
-          // ここは種目ごとに単位が変わるためexerciseToTextのようなメタ行に逃がせず、
+          // ここは種目ごとに単位が変わるためメタ行に逃がせず、
           // 体重を別に渡しても復元をAIに任せることになるので、数値の側を実効重量にする。
           const isDb = resolveIsDb(ex.name, ex.isDb);
           const bwF = ex.bwFactor || 0;
@@ -3308,7 +3382,7 @@ function App() {
       {/* 記録タブでは種目カードが縦に長く連なり、種目を足そうと下まで行くと入力中の種目を見失う。
           タブバー(56px)のすぐ上に置く。インターバル展開パネル(zIndex 90)が出ているときは
           そちらが優先されて隠れるが、休憩中は時間の方を見たいので意図どおり。 */}
-      {view === "log" && currentEx && !currentExVisible && (
+      {view === "log" && today.length > 0 && (
         // 他の固定要素(インターバルパネル・タブバー)と同じく520pxのアプリ列に追従させる。
         // ビューポート右端に貼ると、520pxより広い画面で列の外側に浮いてしまう。
         // 下端から100px上げているのは「ワークアウトを保存」を避けるため。保存ボタンは
@@ -3316,20 +3390,32 @@ function App() {
         // ここを詰めると保存ボタンの右3分の1がこのボタンに食われ、押したつもりがスクロールする
         // (64pxで実際に26px重なっていた)。
         // ラッパーは画面幅いっぱいなのでpointerEventsを切り、ボタンだけ拾う。
+        // 左は「AIコーチ」(記録中は常に出す。残りの組み直しの入口)、右は「現在の種目へ」(種目が画面外のときだけ)。
         <div style={{
           position: "fixed", left: 0, right: 0, bottom: "calc(56px + env(safe-area-inset-bottom) + 100px)", zIndex: 40,
           maxWidth: 520, margin: "0 auto", padding: "0 16px",
-          display: "flex", justifyContent: "flex-end", pointerEvents: "none",
+          display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 8, pointerEvents: "none",
         }}>
-          <button onClick={scrollToCurrentEx}
+          <button onClick={() => openCoach("replan")} aria-label={t("coach.button")}
             style={{
-              ...btn(C.surface2, C.text), padding: "10px 14px", fontSize: 12, fontWeight: 700,
+              ...btn(C.surface2, C.yellow), padding: "10px 14px", fontSize: 12, fontWeight: 700,
               border: `1px solid ${C.border}`, boxShadow: "0 4px 16px rgba(0,0,0,0.5)",
-              maxWidth: "60%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+              display: "inline-flex", alignItems: "center", gap: 6, whiteSpace: "nowrap", flexShrink: 0,
               pointerEvents: "auto",
             }}>
-            {t("log.toCurrent")}
+            <Icon name="chat" size={14} />{t("coach.fab")}
           </button>
+          {currentEx && !currentExVisible && (
+            <button onClick={scrollToCurrentEx}
+              style={{
+                ...btn(C.surface2, C.text), padding: "10px 14px", fontSize: 12, fontWeight: 700,
+                border: `1px solid ${C.border}`, boxShadow: "0 4px 16px rgba(0,0,0,0.5)",
+                maxWidth: "60%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                pointerEvents: "auto",
+              }}>
+              {t("log.toCurrent")}
+            </button>
+          )}
         </div>
       )}
 
@@ -3601,29 +3687,25 @@ function App() {
               </button>
             )}
           </div>
-          {/* 種目を消した直後の「元に戻す」と、AI相談のあとの貼り付けの案内(改善要望 11)。
+          {/* 種目を消した直後・AIコーチの案に入れ替えた直後の「元に戻す」(改善要望 11)。
               バーの直下に重ねて出す。カードの中に出すと、消えるときに下の入力欄がずれる。
               画面の下側は「ワークアウトを保存」と重なり、押し間違えを招く */}
           {/* role="status" は常駐させ、中身だけを出し入れする(出すたびにライブリージョンごと挿入すると、
-              VoiceOver では読まれないことが多い)。貼り付けの案内はボタンが無いので、下のタップを通す */}
+              VoiceOver では読まれないことが多い) */}
           <div role="status" style={{
             position: "absolute", left: 0, right: 0, top: "calc(100% + 8px)", maxWidth: 520, margin: "0 auto", padding: "0 16px", pointerEvents: "none",
           }}>
-            {view === "log" && (notice || (copiedIdx || "").startsWith("ex:")) && (
+            {view === "log" && notice && (
               <div style={{
-                display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 12, pointerEvents: notice ? "auto" : "none",
+                display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 12, pointerEvents: "auto",
                 background: C.surface2, border: `1px solid ${C.border}`, boxShadow: "0 6px 20px rgba(0,0,0,0.5)", fontSize: 13,
               }}>
-                {notice ? (
-                  <>
-                    <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {notice.kind === "removed" ? t("log.removed", { name: exName(notice.ex.name) }) : t("log.addedToDay", { day: dayName(notice.dayName) })}
-                    </span>
-                    <button onClick={undoNotice} style={{ ...btn("transparent", C.yellow), padding: "4px 2px", fontSize: 13, fontWeight: 800, flexShrink: 0 }}>{notice.kind === "removed" ? t("log.undo") : t("log.undoAdd")}</button>
-                  </>
-                ) : (
-                  <span style={{ color: C.green }}>{t("log.pasteHint")}</span>
-                )}
+                <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {notice.kind === "removed" ? t("log.removed", { name: exName(notice.ex.name) })
+                    : notice.kind === "coach" ? t("coach.applied")
+                    : t("log.addedToDay", { day: dayName(notice.dayName) })}
+                </span>
+                <button onClick={undoNotice} style={{ ...btn("transparent", C.yellow), padding: "4px 2px", fontSize: 13, fontWeight: 800, flexShrink: 0 }}>{notice.kind === "dayAdded" ? t("log.undoAdd") : t("log.undo")}</button>
               </div>
             )}
           </div>
@@ -3744,19 +3826,21 @@ function App() {
           )}
 
           {/* 今日の自動メニュー(分割があるとき、記録開始前に表示) */}
-          {todayDay && today.length === 0 && autoMenu.length > 0 && (
-            <div style={{ background: C.surface, borderRadius: 14, padding: 14, marginBottom: 14, border: `1px solid ${C.border}` }}>
+          {todayDay && today.length === 0 && menuItems.length > 0 && (
+            <div style={{ background: C.surface, borderRadius: 14, padding: 14, marginBottom: 14, border: `1px solid ${coachMenuActive ? C.yellow : C.border}` }}>
               <div style={{ fontSize: 13, fontWeight: 900, marginBottom: 2 }}>{t("menu.title")}</div>
-              <div style={{ fontSize: 12, color: C.muted, marginBottom: 10, lineHeight: 1.6 }}>
+              <div style={{ fontSize: 12, color: coachMenuActive ? C.yellow : C.muted, marginBottom: 10, lineHeight: 1.6 }}>
+                {coachMenuActive ? t("coach.menuFrom") : <>
                 {/* autoMenuの3分岐(分割の登録種目 > 前回同セッション > 部位一致の履歴)と1対1で対応させる。
                     以前は3分岐目(部位一致で複数の過去記録から寄せ集め)もfromLastと表示しており、
                     特定の「前回のセッション」から来たかのように読めて不正確だった。 */}
                 {t("menu.carryover", { src: todayDay.exercises && todayDay.exercises.length ? t("menu.fromSplit") : (lastSameSession ? t("menu.fromLast") : t("menu.fromHistory")) })}
+                </>}
               </div>
-              {autoMenu.map((it, i) => {
+              {menuItems.map((it, i) => {
                 const p = it.prescription;
                 return (
-                  <div key={i} style={{ marginBottom: 10, paddingBottom: 8, borderBottom: i < autoMenu.length - 1 ? `1px solid ${C.border}` : "none" }}>
+                  <div key={i} style={{ marginBottom: 10, paddingBottom: 8, borderBottom: i < menuItems.length - 1 ? `1px solid ${C.border}` : "none" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, marginBottom: 3 }}>
                       <span style={{ fontSize: 13, minWidth: 0, lineHeight: 1.4 }}>
                         {exName(p.name)}<span style={{ color: C.muted, fontSize: 12, marginLeft: 6 }}>{muscleName(p.muscle)}</span>
@@ -3765,21 +3849,22 @@ function App() {
                           (初めての種目は従来どおり「初回」のバッジ) */}
                       <span style={{ flexShrink: 0 }}>
                         {(() => {
-                          if (it.type === "new_start") return <JudgeBadge type={it.type} />;
+                          const type = it.baseType ?? it.type;
+                          if (type === "new_start") return <JudgeBadge type={type} />;
                           const last = exerciseInsight(p.name)?.date;
-                          if (!last) return <JudgeBadge type={it.type} />;
+                          if (!last) return <JudgeBadge type={type} />;
                           const d = Math.max(0, Math.floor((Date.now() - new Date(last).getTime()) / 86400000));
                           return <span style={{ fontSize: 12, color: C.yellow, fontWeight: 700 }}>{d === 0 ? t("common.today") : t("common.daysAgo", { n: d })}</span>;
                         })()}
                       </span>
                     </div>
                     {p.prevSets ? (
-                      <div style={{ fontSize: 13, color: C.grey, lineHeight: 1.7, opacity: 0.6 }}>
+                      <div style={{ fontSize: 13, color: it.type === "coach" ? C.muted : C.grey, lineHeight: 1.7, opacity: it.type === "coach" ? 1 : 0.6 }}>
                         {p.prevSets.map((s, si) => (
                           <span key={si}>
                             {si > 0 && " / "}
                             {s.warmup ? t("menu.warmupShort") : ""}{s.assisted ? t("menu.assistedShort") : ""}
-                            <span style={{ color: C.grey, fontWeight: s.warmup ? 400 : 700 }}>
+                            <span style={{ color: it.type === "coach" ? C.text : C.grey, fontWeight: s.warmup ? 400 : 700 }}>
                               {wU(s.weight)}{p.isDb ? t("menu.perHand") : ""}×{s.reps}
                             </span>
                           </span>
@@ -3793,7 +3878,7 @@ function App() {
                       </div>
                     )}
                     {/* 初めての種目は、まずフォームを見てから始められるように(改善要望 10b) */}
-                    {it.type === "new_start" && (
+                    {(it.baseType ?? it.type) === "new_start" && (
                       <button onClick={() => openYouTube(p.name)} className="tapArea"
                         style={{ ...btn("transparent", C.text), padding: "6px 0", fontSize: 12, marginTop: 2, display: "inline-flex", alignItems: "center", gap: 5 }}>
                         <Icon name="youtube" size={14} />{t("menu.watchForm")}
@@ -3802,7 +3887,14 @@ function App() {
                   </div>
                 );
               })}
-              <button onClick={startAutoMenu} style={{ ...btn(C.red), width: "100%", padding: 14, fontSize: 15, marginTop: 6 }}>{t("menu.start")}</button>
+              {/* AIコーチの入口(始める前)。案を取り込んだら、前回の引き継ぎに戻せるようにする */}
+              {coachMenuActive ? (
+                <button onClick={() => setCoachMenu(null)} style={{ ...btn(C.surface2, C.text), width: "100%", padding: 11, fontSize: 13, marginTop: 6 }}>{t("coach.revert")}</button>
+              ) : (
+                <button onClick={() => openCoach("plan")} style={{ ...btn(C.surface2, C.text), width: "100%", padding: 11, fontSize: 13, marginTop: 6, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+                  <Icon name="chat" size={15} />{t("coach.button")}</button>
+              )}
+              <button onClick={startAutoMenu} style={{ ...btn(C.red), width: "100%", padding: 14, fontSize: 15, marginTop: 8 }}>{t("menu.start")}</button>
             </div>
           )}
 
@@ -3810,8 +3902,13 @@ function App() {
 
           {today.length === 0 && (
             <div style={{ border: `1px dashed ${C.border}`, borderRadius: 14, padding: 20, color: C.muted, fontSize: 14, textAlign: "center", marginBottom: 16 }}>
-              {todayDay && autoMenu.length > 0 ? t("log.emptyWithMenu") : t("log.empty")}
+              {todayDay && menuItems.length > 0 ? t("log.emptyWithMenu") : t("log.empty")}
               {!split && <><br />{t("log.emptyHint")}</>}
+              {/* 記録の無い Day(今日のメニューが出ない)でも、AIに種目選びから組んでもらえるように */}
+              {todayDay && menuItems.length === 0 && (
+                <button onClick={() => openCoach("plan")} style={{ ...btn(C.surface2, C.text), padding: "9px 14px", fontSize: 13, marginTop: 12, display: "inline-flex", alignItems: "center", gap: 6 }}>
+                  <Icon name="chat" size={15} />{t("coach.button")}</button>
+              )}
             </div>
           )}
 
@@ -3963,7 +4060,6 @@ function App() {
                   この行は折り返さないので .tapArea を付けてよい(set 行と同じ扱い) */}
               {(() => {
                 const ssOn = inGroup && prevEx && prevEx.ssGroup === ex.ssGroup;
-                const copied = copiedIdx === `ex:${ex.id}`;
                 const cell = (on, faint) => ({
                   ...btn("transparent", on ? C.yellow : faint ? C.grey : C.muted),
                   flex: 1, minWidth: 0, padding: "4px 0", display: "flex", flexDirection: "column", alignItems: "center", gap: 3,
@@ -3985,9 +4081,6 @@ function App() {
                       <Icon name="settings" size={16} />{t("act.config")}</button>
                     <button onClick={() => openYouTube(ex.name)} aria-label={t("log.youtube")} className="tapArea" style={cell(false)}>
                       <Icon name="youtube" size={16} />{t("act.form")}</button>
-                    <button onClick={() => consultAi(exerciseToText(ex), `ex:${ex.id}`)} aria-label={t("log.consultAi")} className="tapArea"
-                      style={{ ...cell(false), color: copied ? C.green : C.muted }}>
-                      <Icon name={copied ? "check" : "chat"} size={16} />{copied ? t("act.copied") : t("act.ai")}</button>
                     <button onClick={() => { setSwapEx(swapEx === ex.id ? null : ex.id); setSwapSearch(""); setSwapMuscle(""); }} aria-label={t("log.swapAria")} aria-expanded={swapEx === ex.id} className="tapArea" style={cell(swapEx === ex.id)}>
                       <Icon name="swap" size={16} />{t("log.swap")}</button>
                     <button onClick={() => setOpenHist({ ...openHist, [ex.id]: !openHist[ex.id] })} aria-label={t("log.historyAria")} aria-expanded={!!openHist[ex.id]} className="tapArea" style={cell(openHist[ex.id])}>
@@ -5586,6 +5679,86 @@ function App() {
           </p>
         </div>
       )}
+
+      {/* ===== AIコーチ(相談文のコピー → 答えの貼り付け → 案の確認) ===== */}
+      {coachMode && (() => {
+        // 案の見た目は、取り込んだ後の today と同じものを作って見せる(記録中は実施済みのセットも並ぶ)
+        const preview = coachResult?.exercises?.length
+          ? mergeCoachPlan(coachMode === "replan" ? today : [], coachResult, { newExercise: coachNewExercise }) : null;
+        const stepHead = (n, label) => (
+          <div style={{ display: "flex", alignItems: "baseline", gap: 8, margin: "16px 0 8px" }}>
+            <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 18, fontWeight: 800, color: C.yellow }}>{n}</span>
+            <span style={{ fontSize: 13, fontWeight: 800 }}>{label}</span>
+          </div>
+        );
+        return (
+          <div onClick={closeCoach} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.6)", zIndex: 50, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+            <div ref={coachModalRef} onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-label={t("coach.title")} tabIndex={-1}
+              style={{ background: C.surface, borderTop: `3px solid ${C.yellow}`, borderRadius: "16px 16px 0 0", padding: "18px 20px calc(20px + env(safe-area-inset-bottom))", width: "100%", maxWidth: 520, maxHeight: "88vh", overflowY: "auto" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+                <strong style={{ fontSize: 15 }}>{t("coach.title")}</strong>
+                <button onClick={closeCoach} style={{ ...btn(C.surface2, C.muted), padding: "4px 12px", fontSize: 13 }}>{t("common.close")}</button>
+              </div>
+              <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.6, marginTop: 6 }}>{t(coachMode === "replan" ? "coach.leadReplan" : "coach.leadPlan")}</div>
+
+              {stepHead(1, t("coach.step1"))}
+              <button onClick={copyCoachPrompt} style={{ ...btn(C.surface2, C.text), width: "100%", padding: 12, fontSize: 14, border: `1px solid ${C.border}` }}>
+                {t("coach.copy", { ai: aiServiceOf(profile.aiService).label })}</button>
+              {coachCopied && <div style={{ fontSize: 12, color: C.green, marginTop: 6, lineHeight: 1.5 }}>{t("coach.copied")}</div>}
+
+              {stepHead(2, t("coach.step2"))}
+              {/* 16px 未満にすると iOS がフォーカス時に画面を拡大する */}
+              <textarea value={coachAnswer} onChange={e => { setCoachAnswer(e.target.value); setCoachResult(null); }} rows={4}
+                aria-label={t("coach.pasteLabel")} placeholder={t("coach.pasteLabel")}
+                style={{ width: "100%", background: C.bg, color: C.text, border: `1px solid ${C.border}`, borderRadius: 10, padding: 10, fontSize: 16, lineHeight: 1.4, resize: "vertical", fontFamily: "inherit" }} />
+              <button onClick={readCoachAnswer} disabled={!coachAnswer.trim()}
+                style={{ ...btn(C.surface2, coachAnswer.trim() ? C.text : C.grey), width: "100%", padding: 12, fontSize: 14, marginTop: 8, border: `1px solid ${C.border}` }}>
+                {t("coach.read")}</button>
+              {coachResult?.error && (
+                <div role="alert" style={{ fontSize: 13, color: C.red, marginTop: 8, lineHeight: 1.6 }}>
+                  {t(coachResult.error === "empty" ? "coach.err.empty" : coachResult.error === "none" ? "coach.err.none" : "coach.err.notFound")}
+                </div>
+              )}
+              {coachResult?.unknown?.length > 0 && (
+                <div style={{ fontSize: 12, color: C.yellow, marginTop: 8, lineHeight: 1.6 }}>{t("coach.unknown", { list: coachResult.unknown.join(" / ") })}</div>
+              )}
+              {coachResult?.dropped > 0 && (
+                <div style={{ fontSize: 12, color: C.yellow, marginTop: 4, lineHeight: 1.6 }}>{t("coach.dropped", { n: coachResult.dropped })}</div>
+              )}
+
+              {preview && (
+                <>
+                  {stepHead(3, t("coach.step3"))}
+                  {preview.map((ex, i) => {
+                    const isDb = resolveIsDb(ex.name, ex.isDb);
+                    return (
+                      <div key={ex.id} style={{ padding: "8px 0", borderTop: i > 0 ? `1px solid ${C.border}` : "none" }}>
+                        <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 3 }}>
+                          {exName(ex.name)}{isDb && <span style={{ color: C.muted, fontWeight: 400, fontSize: 12, marginLeft: 4 }}>{t("menu.perHand")}</span>}
+                        </div>
+                        <div style={{ fontSize: 13, lineHeight: 1.7, color: C.text }}>
+                          {ex.sets.map((x, si) => {
+                            const done = coachSetDone(x);
+                            return (
+                              <span key={si} style={{ color: done ? C.grey : C.text }}>
+                                {si > 0 && <span style={{ color: C.grey }}> / </span>}
+                                {x.warmup ? t("menu.warmupShort") : ""}
+                                <span style={{ fontWeight: x.warmup ? 400 : 700 }}>{num(x.weight)}×{x.reps}</span>
+                                {done && <span style={{ fontSize: 11 }}> {t("coach.doneMark")}</span>}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                  <button onClick={applyCoach} style={{ ...btn(C.red), width: "100%", padding: 14, fontSize: 15, marginTop: 10 }}>{t("coach.apply")}</button>
+                </>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ===== 同一分割の履歴モーダル(上部バーのボリュームタップ) ===== */}
       {showSplitHistory && todayDay && (
