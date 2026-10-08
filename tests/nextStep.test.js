@@ -43,6 +43,10 @@ describe("suggestNextStep(次の一手の規則)", () => {
     expect(suggestNextStep(args({ insight: { topReps: 10 }, rest: { topWeight: 155, increment: 5 } }))).toMatchObject({ weight: 160, inc: 5 });
   });
 
+  it("前回が自重だけ(重量0)なら、理由は「前回は0kgで」ではなく自重の文", () => {
+    expect(suggestNextStep(args({ insight: { topReps: 8 }, rest: { topWeight: 0 } })).reason.key).toBe("next.reason.repsBw");
+  });
+
   it("刻みが0なら増量の案は出さず、回数の案にする", () => {
     expect(suggestNextStep(args({ insight: { topReps: 10 }, rest: { increment: 0 } }))).toMatchObject({ kind: "reps", repsLow: 11 });
   });

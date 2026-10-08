@@ -1809,22 +1809,27 @@ function App() {
     insight: ins, topWeight: ins && ins.topWeight != null ? wU(ins.topWeight) : 0,
     increment: incU(num(ex.increment) || 2.5), repLow: num(ex.repLow) || 8, repHigh: num(ex.repHigh) || 12,
   });
-  const nextStepText = (s) => t(s.reason.key, { ...s.reason.params, unit: uLabel() });
+  // RIR の無い古い記録では「(RIR-)」と出さない
+  const nextStepText = (s) => t(s.reason.key, { ...s.reason.params, unit: uLabel(),
+    rirNote: s.reason.params.rir === "-" ? "" : t("next.rirNote", { rir: s.reason.params.rir }) });
+  // AI に渡す1行。AI の文はこれと一緒に持ち、今の案から作った値と一致するときだけ出す(種目の差し替えでも ex.id は変わらない)
+  const nextStepFacts = (s, ins) => t("next.facts", { plan: nextStepPlanText(s, ins.isDb), text: nextStepText(s) });
   const toggleNextStep = (ex, ins) => {
     if (nextOpen[ex.id]) { setNextOpen(o => { const n = { ...o }; delete n[ex.id]; return n; }); return; }
     const s = nextStepFor(ex, ins);
     if (!s) return;
-    setNextOpen(o => ({ ...o, [ex.id]: { ai: nextAiReady ? "pending" : null } }));
-    if (!nextAiReady) return;
+    if (!nextAiReady) { setNextOpen(o => ({ ...o, [ex.id]: { ai: null } })); return; }
     // AI には規則の結論と理由だけを1行で渡し、言い換えだけを頼む(推移まで渡すと、事実と違う説明を作りやすかった)。
     // 数字が案と違えば捨てる(aiTextIsConsistent)。安全機能が誤って止めた(加重しない種目で毎回起きた)ときも定型文のまま
     const p = s.reason.params;
-    const facts = t("next.facts", { plan: nextStepPlanText(s, ins.isDb), text: nextStepText(s) });
+    const facts = nextStepFacts(s, ins);
+    setNextOpen(o => ({ ...o, [ex.id]: { ai: "pending", facts } }));
     const allowed = [p.w, p.r, p.rir, p.lo, p.hi, p.inc, p.next, p.best, p.target, s.weight, s.repsLow, s.repsHigh,
       ...ins.trend.flatMap(v => [wU(v.weight), v.reps])];
     explainNextStep(facts, lang).then(text => {
       const ok = text && aiTextIsConsistent(text, allowed);
-      setNextOpen(o => o[ex.id] ? { ...o, [ex.id]: { ai: ok ? text : null } } : o);
+      // 届くまでの間に閉じた・別の案になった(種目の差し替え・単位や言語の切り替え)ときは捨てる
+      setNextOpen(o => o[ex.id] && o[ex.id].facts === facts ? { ...o, [ex.id]: { ai: ok ? text : null, facts } } : o);
     });
   };
   // ダンベルは片手の重量(記録と同じ)なので、そうと書く
@@ -1833,17 +1838,21 @@ function App() {
     const w = s.weight > 0 ? `${s.weight}${uLabel()}${isDb ? t("menu.perHand") : ""}` : t("next.bodyweight");
     return t("next.plan", { w, reps }) + (s.inc > 0 ? t("next.inc", { inc: s.inc, unit: uLabel() }) : "");
   };
-  // まだ RIR を入れていない本番セットだけに入れる(実施済み・ウォームアップは触らない)
+  // まだ RIR を入れていない本番セットだけに入れる(実施済み・ウォームアップ・補助ありは触らない)
   const applyNextStep = (exId, s) => {
     setToday(t => t.map(e => e.id !== exId ? e : { ...e, sets: e.sets.map(st =>
-      st.warmup || (st.rir !== "" && st.rir != null) ? st : { ...st, weight: String(s.weight), reps: String(s.repsLow) }) }));
+      st.warmup || st.assisted || (st.rir !== "" && st.rir != null) ? st : { ...st, weight: String(s.weight), reps: String(s.repsLow) }) }));
     setNextOpen(o => { const n = { ...o }; delete n[exId]; return n; });
   };
   const renderNextStep = (ex, ins) => {
     const s = nextStepFor(ex, ins);
     if (!s) return null;
     const st = nextOpen[ex.id] || {};
-    const aiText = typeof st.ai === "string" && st.ai !== "pending" ? st.ai : null;
+    const fresh = st.facts === nextStepFacts(s, ins);
+    const aiText = fresh && typeof st.ai === "string" && st.ai !== "pending" ? st.ai : null;
+    const pending = fresh && st.ai === "pending";
+    // 入れる先(まだ実施していない本番セット)が無ければ、ボタンを出さない
+    const canApply = ex.sets.some(x => !x.warmup && !x.assisted && (x.rir === "" || x.rir == null));
     return (
       <div role="region" aria-label={t("next.button")} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 12px", marginTop: -4, marginBottom: 10 }}>
         <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
@@ -1855,11 +1864,11 @@ function App() {
         <div aria-live="polite" style={{ fontSize: 13, color: C.text, lineHeight: 1.6, marginTop: 6 }}>
           {aiText || nextStepText(s)}
           {aiText && <span style={{ fontSize: 10, fontWeight: 800, color: C.muted, border: `1px solid ${C.border}`, borderRadius: 4, padding: "0 4px", marginLeft: 6 }}>{t("next.aiBadge")}</span>}
-          {st.ai === "pending" && <span style={{ fontSize: 11, color: C.muted, marginLeft: 6 }}>{t("next.aiPending")}</span>}
+          {pending && <span style={{ fontSize: 11, color: C.muted, marginLeft: 6 }}>{t("next.aiPending")}</span>}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 8 }}>
-          <button onClick={() => applyNextStep(ex.id, s)} style={{ ...btn(C.surface2, C.text), padding: "7px 12px", fontSize: 13, border: `1px solid ${C.border}` }}>{t("next.apply")}</button>
-          <span style={{ fontSize: 11, color: C.muted }}>{t("next.note")}</span>
+          {canApply && <button onClick={() => applyNextStep(ex.id, s)} style={{ ...btn(C.surface2, C.text), padding: "7px 12px", fontSize: 13, border: `1px solid ${C.border}` }}>{t("next.apply")}</button>}
+          <span style={{ fontSize: 11, color: C.muted }}>{canApply ? t("next.note") : t("next.noTarget")}</span>
         </div>
       </div>
     );
@@ -3953,7 +3962,9 @@ function App() {
                         (実データで15kg×13回→9回の後退局面に「そろそろ上げどき」が出ていた)。
                         加重できない種目(常に自重のみ)では重量の助言自体が成立しないので出さない。 */}
                     {ins.topWeight != null && ins.streak >= 3 && ins.canAddWeight && (
-                      ins.readyToProgress ? (
+                      // 「次の一手」が増量の案でないとき(上限回数に届いていない・余力0)は「上げどき」と言わない。
+                      // 同じ行で「上げどき」と「同じ重量で+1回」が並んでいた(reviewer 指摘)
+                      ins.readyToProgress && (nextStepFor(ex, ins)?.kind ?? "add") === "add" ? (
                         <span style={{ fontSize: 12, fontWeight: 800, color: C.yellow, background: "rgba(232,179,60,0.15)", padding: "2px 8px", borderRadius: 999 }}>
                           <Icon name="warn" size={12} style={{ marginRight: 4 }} />{t("log.plateauAlert", { n: ins.streak })}
                         </span>

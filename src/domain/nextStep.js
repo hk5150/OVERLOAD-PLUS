@@ -41,7 +41,9 @@ function suggestNextStep({ insight, topWeight, increment, repLow, repHigh }) {
     }
   }
   const target = reps + 1;
-  return { kind: "reps", weight: w, repsLow: target, repsHigh: target, inc: 0, reason: { key: "next.reason.reps", params: { ...base, target } } };
+  // 加重したことはあるが、前回は自重だけだった(懸垂など)。「前回は0kgで」と書かない
+  const key = w > 0 ? "next.reason.reps" : "next.reason.repsBw";
+  return { kind: "reps", weight: w, repsLow: target, repsHigh: target, inc: 0, reason: { key, params: { ...base, target } } };
 }
 
 // 端末内AIの文に、案と根拠に無い数字が混ざっていたら使わない(小さいモデルは数字を作りがち)。
