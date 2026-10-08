@@ -106,25 +106,6 @@ const STRINGS = {
   // 元は「回連続」だけ<strong>で囲っていたが、英語だと語順が変わって太字の範囲を保てない。
   // 1文にまとめ、強調は span 側の fontWeight でかける。
   "log.streak":        { ja: "{w}{unit} で {n}セッション連続", en: "{n} sessions in a row at {w}{unit}" },
-  // 次の一手(1.4)。数字は規則、理由の文は端末内AIが使えればAI(src/domain/nextStep.js)
-  "next.button":       { ja: "次の一手", en: "Next step" },
-  "next.label":        { ja: "案", en: "Try" },
-  "next.plan":         { ja: "{w} × {reps}回", en: "{w} × {reps}" },
-  "next.inc":          { ja: "(+{inc}{unit})", en: " (+{inc}{unit})" },
-  "next.bodyweight":   { ja: "自重", en: "Bodyweight" },
-  "next.apply":        { ja: "この案で入れる", en: "Use this" },
-  "next.note":         { ja: "まだ実施していないセットだけに入ります", en: "Fills only the sets you haven't done" },
-  "next.aiBadge":      { ja: "AI", en: "AI" },
-  "next.aiPending":    { ja: "AIが説明を書いています…", en: "Writing an explanation…" },
-  "next.reason.add":   { ja: "前回は{w}{unit}で{r}回{rirNote}と上限の{hi}回に届いたので、{inc}{unit}増やして{lo}回からにします。", en: "Last time you hit {r} reps at {w}{unit}{rirNote}, the top of your range ({hi}), so add {inc}{unit} and start again at {lo}." },
-  "next.reason.hold":  { ja: "前回は{w}{unit}で{r}回と上限に届きましたが、余力がありませんでした。同じ重量・回数で余力を残せたら増やします。", en: "You reached {r} reps at {w}{unit} but with nothing left in the tank. Repeat it with a rep in reserve before adding weight." },
-  "next.reason.reps":  { ja: "前回は{w}{unit}で{r}回。同じ重量で{target}回を目指します。", en: "Last time: {w}{unit} for {r}. Same weight, aim for {target}." },
-  "next.reason.repsBw": { ja: "前回は自重で{r}回。同じく自重で{target}回を目指します。", en: "Last time: bodyweight for {r}. Same again, aim for {target}." },
-  "next.rirNote":      { ja: "(RIR{rir})", en: " (RIR {rir})" },
-  "next.noTarget":     { ja: "入れる先(まだ実施していないセット)がありません", en: "No sets left to fill" },
-  "next.reason.recover": { ja: "この重量では最近{best}回できていましたが、前回は{r}回でした。重量はそのままで{best}回に戻します。", en: "You've managed {best} reps at this weight recently, but only {r} last time. Keep the weight and get back to {best}." },
-  "next.reason.bodyweight": { ja: "加重しない種目なので、回数を1回増やして{target}回を目指します。", en: "No added weight on this one, so aim for one more rep: {target}." },
-  "next.facts":        { ja: "入力: 次の案: {plan} / 理由: {text}", en: "Input: Plan: {plan} / Reason: {text}" },
   "log.trend":         { ja: "推移 {list}",           en: "Trend {list}" },
   "log.plateauAlert":  { ja: "重量が{n}セッション連続で頭打ち。そろそろ上げどき", en: "Stuck at this weight for {n} sessions — time to add more" },
   // 同じ重量が続いていても回数が落ちている場合。「上げどき」とは言わず事実だけ渡す。

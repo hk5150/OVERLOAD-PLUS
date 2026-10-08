@@ -41,7 +41,6 @@ const DOMAIN_FILES = [
   "dayPlan.js",
   "coefficients.js",
   "insight.js",
-  "nextStep.js",
   "restNotifications.js",
   "iap.js",
   "health.js",
