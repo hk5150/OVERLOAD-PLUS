@@ -9,6 +9,8 @@
     "ios:sync": "npm run sync-www && npx cap sync ios",
     "ios:open": "npx cap open ios",
     "ios:upload": "bash scripts/upload-testflight.sh",
+    "asc:status": "node scripts/asc/status.mjs",
+    "asc:reviews": "node scripts/asc/reviews.mjs",
     "test": "vitest run"
   },
   "devDependencies": {

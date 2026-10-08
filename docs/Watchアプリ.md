@@ -34,6 +34,7 @@ Watch でセットを入力するためのアプリ(v120〜)。
   `-- --dry-run` で書き出しまで)。キーは日次の指標取得と同じ `2YZNFKX54V`(10/9 に作成、`~/.appstoreconnect/kurabell.json` と
   `private_keys/AuthKey_2YZNFKX54V.p8`)。証明書まで触れる権限があり、Xcode のサインインが切れていても署名・アップロードが通る(dry-run で確認)。
   `.p8` はリポジトリに入れない(`.gitignore` 済み)
+- **App Store Connect の入力・提出・状態確認・レビューは API の道具で行う**(`scripts/asc/`、`docs/AppStoreConnect_API.md`)。1.4 の掲載文は `appstore/1.4/`
 - アイコン案の比較ページ・画面改善案のページは claude.ai の Artifact(非公開)
 - Watch の小さい画面(42/41/40mm)はシミュレータで確認済み。Series 9 41mm のシミュレータを1台作った(`08E252FC-…`)
 

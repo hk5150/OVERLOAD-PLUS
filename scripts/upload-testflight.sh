@@ -50,3 +50,8 @@ fi
 rm -rf "$OUT"
 xcodebuild -exportArchive -archivePath "$ARCH" -exportOptionsPlist "$OPTS" -exportPath "$OUT" "${AUTH[@]}"
 echo "== 完了: ${VER} (${BUILD}) $([ $DRY = 1 ] && echo "を $OUT に書き出した(アップロードはしていない)" || echo 'をアップロードした')"
+
+# アップロードした後は、TestFlight で使えるようになるまで待って、appstore/<版>/testflight_*.txt があれば「テスト内容」を入れる
+if [ $DRY = 0 ]; then
+  node scripts/asc/testflight.mjs "$BUILD" --wait --apply || echo "TestFlight の後処理は失敗した(アップロード自体は済んでいる): node scripts/asc/testflight.mjs $BUILD --wait --apply で再実行できる"
+fi

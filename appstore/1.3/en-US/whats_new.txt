@@ -1,0 +1,7 @@
+• Every set now shows its estimated 1RM, and turns green when you beat your best.
+• Exercise actions (Settings, Form, Ask AI, Swap, History) are out of the "…" menu. Remove an exercise with × and undo it right away.
+• Volume goal now reads like "480 kg short of last-3 avg".
+• New split days can "Fill with the basics", and you can reorder a day's exercises — today's menu follows that order.
+• Choose when rest alerts fire (1:00–5:00).
+• Apple Watch: hold −/+ to keep stepping, a volume ring, and a "Great work" screen when you save.
+• Estimated 1RM now uses only sets of 12 reps or fewer.
