@@ -22,3 +22,4 @@
 - [種目削除の元に戻す](kurabell-remove-undo.md) — v1.3の✕削除のundoは1枠・Day名で照合・保存後も残る。連打で前の削除のDay登録が戻らない
 - [Day名は履歴のキー](kurabell-day-name-is-history-key.md) — sessionで履歴を引く。自動改名・同名Dayで前回が切れる/混ざる。プリセットDayは登録0件。v1.3でautoMenu登録優先(0→1の崖)
 - [Watch完了画面のsheet](kurabell-watch-finished-sheet.md) — v1.3改善12: 子sheet表示中に親sheetを出す経路が未確認。shown idを閉じた時に書くので固着/再表示の窓
+- [差し替えでex.idは変わらない](kurabell-exid-survives-swap.md) — swapExerciseはid保持。ex.idキーのキャッシュ(1.4次の一手のAI文)が別種目・別単位に持ち越される
