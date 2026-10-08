@@ -10,3 +10,6 @@ www/
 # UI検証時のスクリーンショット・コンソールログ(Playwright MCPが吐く作業用の生成物)
 .playwright-mcp/
 .claude/locks/
+
+# App Store Connect の API キー(リポジトリに入れない。置き場所は ~/.appstoreconnect/private_keys/)
+*.p8

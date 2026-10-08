@@ -1,0 +1,3 @@
+• AI Coach: have ChatGPT, Claude, Gemini or another AI build today's session. Copy the request, send it to the AI, and paste the answer back — you'll see exercises, order, and weight and reps for every set. Nothing changes until you choose to use the plan.
+• Mid-workout, ask it to rework just the rest. Sets you've finished stay as they are.
+• The per-exercise "Ask AI" is now part of AI Coach.
