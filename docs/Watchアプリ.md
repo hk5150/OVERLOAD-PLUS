@@ -30,7 +30,10 @@ Watch でセットを入力するためのアプリ(v120〜)。
 ### 片付け・メモ
 - App Store Connect の API キー `kurabell-upload`(1つ目、`WSJRFU647F`)は無効化済み(2026-10-01、ユーザーとアクセス → 統合で確認)。
   `kurabell-upload2`(キー ID `FDQ5SP8S2F`)も無効化した(2026-10-01、「最終使用日」が 10/1 になっていたため)。アクティブなキーは0個。
-  アップロードは Xcode のサインインで足りている。API キーが要るときは新しく作り、`.p8` は Mac のブラウザで落とす
+  **2026-10-09 から、アップロードは API キーで行う: `npm run ios:upload`**(`scripts/upload-testflight.sh`。テスト → www → cap sync → アーカイブ → アップロード。
+  `-- --dry-run` で書き出しまで)。キーは日次の指標取得と同じ `2YZNFKX54V`(10/9 に作成、`~/.appstoreconnect/kurabell.json` と
+  `private_keys/AuthKey_2YZNFKX54V.p8`)。証明書まで触れる権限があり、Xcode のサインインが切れていても署名・アップロードが通る(dry-run で確認)。
+  `.p8` はリポジトリに入れない(`.gitignore` 済み)
 - アイコン案の比較ページ・画面改善案のページは claude.ai の Artifact(非公開)
 - Watch の小さい画面(42/41/40mm)はシミュレータで確認済み。Series 9 41mm のシミュレータを1台作った(`08E252FC-…`)
 

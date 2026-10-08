@@ -8,6 +8,7 @@
     "ios:add": "npm run sync-www && npx cap add ios",
     "ios:sync": "npm run sync-www && npx cap sync ios",
     "ios:open": "npx cap open ios",
+    "ios:upload": "bash scripts/upload-testflight.sh",
     "test": "vitest run"
   },
   "devDependencies": {
