@@ -1,0 +1,21 @@
+Can you explain "RIR"?
+It's the number that makes your training log smarter.
+
+RIR = Reps In Reserve (how many more reps you could have done)
+• 10 reps, 2 more in the tank → RIR 2
+• Couldn't do one more → RIR 0
+
+✔ Muscle growth tends to increase closer to failure (the authors call it exploratory)
+✔ The latest ACSM position stand lists RIR 2–3 as one target
+✔ Same 155 lb × 10, but RIR 3 today vs RIR 2 last time? You're progressing
+
+📌 Save this and try it next session
+💬 What RIR do you usually stop at?
+👥 Share with a friend who just started logging
+
+KURABELL shows "RIR+1" when you have more left than last time. Link in bio (first 10 workouts free).
+
+References
+Robinson ZP et al. Sports Med 2024 / Currier BS et al. (ACSM Position Stand) Med Sci Sports Exerc 2026
+
+#RIR #hypertrophy #gymtips #progressiveoverload #evidencebasedfitness
