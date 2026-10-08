@@ -3382,7 +3382,7 @@ function App() {
       {/* 記録タブでは種目カードが縦に長く連なり、種目を足そうと下まで行くと入力中の種目を見失う。
           タブバー(56px)のすぐ上に置く。インターバル展開パネル(zIndex 90)が出ているときは
           そちらが優先されて隠れるが、休憩中は時間の方を見たいので意図どおり。 */}
-      {view === "log" && today.length > 0 && (
+      {view === "log" && currentEx && !currentExVisible && (
         // 他の固定要素(インターバルパネル・タブバー)と同じく520pxのアプリ列に追従させる。
         // ビューポート右端に貼ると、520pxより広い画面で列の外側に浮いてしまう。
         // 下端から100px上げているのは「ワークアウトを保存」を避けるため。保存ボタンは
@@ -3390,32 +3390,22 @@ function App() {
         // ここを詰めると保存ボタンの右3分の1がこのボタンに食われ、押したつもりがスクロールする
         // (64pxで実際に26px重なっていた)。
         // ラッパーは画面幅いっぱいなのでpointerEventsを切り、ボタンだけ拾う。
-        // 左は「AIコーチ」(記録中は常に出す。残りの組み直しの入口)、右は「現在の種目へ」(種目が画面外のときだけ)。
+        // AIコーチの入口はここに並べない。常に出すと、その高さのセット行の番号・重量欄に乗る
+        // (320px で実測、2026-10-09)。見出しの右と一覧の最後に置いている。
         <div style={{
           position: "fixed", left: 0, right: 0, bottom: "calc(56px + env(safe-area-inset-bottom) + 100px)", zIndex: 40,
           maxWidth: 520, margin: "0 auto", padding: "0 16px",
-          display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 8, pointerEvents: "none",
+          display: "flex", justifyContent: "flex-end", pointerEvents: "none",
         }}>
-          <button onClick={() => openCoach("replan")} aria-label={t("coach.button")}
+          <button onClick={scrollToCurrentEx}
             style={{
-              ...btn(C.surface2, C.yellow), padding: "10px 14px", fontSize: 12, fontWeight: 700,
+              ...btn(C.surface2, C.text), padding: "10px 14px", fontSize: 12, fontWeight: 700,
               border: `1px solid ${C.border}`, boxShadow: "0 4px 16px rgba(0,0,0,0.5)",
-              display: "inline-flex", alignItems: "center", gap: 6, whiteSpace: "nowrap", flexShrink: 0,
+              maxWidth: "60%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
               pointerEvents: "auto",
             }}>
-            <Icon name="chat" size={14} />{t("coach.fab")}
+            {t("log.toCurrent")}
           </button>
-          {currentEx && !currentExVisible && (
-            <button onClick={scrollToCurrentEx}
-              style={{
-                ...btn(C.surface2, C.text), padding: "10px 14px", fontSize: 12, fontWeight: 700,
-                border: `1px solid ${C.border}`, boxShadow: "0 4px 16px rgba(0,0,0,0.5)",
-                maxWidth: "60%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                pointerEvents: "auto",
-              }}>
-              {t("log.toCurrent")}
-            </button>
-          )}
         </div>
       )}
 
@@ -3898,7 +3888,15 @@ function App() {
             </div>
           )}
 
-          <h2 style={{ fontSize: 16, fontWeight: 900, margin: "8px 0 12px" }}>{t("log.title")}</h2>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, margin: "8px 0 12px" }}>
+            <h2 style={{ fontSize: 16, fontWeight: 900, margin: 0 }}>{t("log.title")}</h2>
+            {/* 記録中のAIコーチの入口(残りの組み直し)。浮かせると入力欄に乗るので、見出しと一覧の最後に置く */}
+            {today.length > 0 && (
+              <button onClick={() => openCoach("replan")} className="tapArea"
+                style={{ ...btn("transparent", C.yellow), padding: "4px 0", fontSize: 13, fontWeight: 700, display: "inline-flex", alignItems: "center", gap: 5, flexShrink: 0 }}>
+                <Icon name="chat" size={14} />{t("coach.fab")}</button>
+            )}
+          </div>
 
           {today.length === 0 && (
             <div style={{ border: `1px dashed ${C.border}`, borderRadius: 14, padding: 20, color: C.muted, fontSize: 14, textAlign: "center", marginBottom: 16 }}>
@@ -4497,6 +4495,12 @@ function App() {
             </React.Fragment>
             );
           })}
+
+          {today.length > 0 && (
+            <button onClick={() => openCoach("replan")}
+              style={{ ...btn(C.surface2, C.text), width: "100%", padding: 11, fontSize: 13, marginBottom: 12, border: `1px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+              <Icon name="chat" size={15} />{t("coach.replanButton")}</button>
+          )}
 
           {/* 種目選択 */}
           <div style={{ background: C.surface, borderRadius: 14, padding: 14, border: `1px solid ${insertAt != null ? C.red : C.border}` }}>

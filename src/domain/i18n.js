@@ -225,6 +225,7 @@ const STRINGS = {
   // AIコーチ(手動版、1.4)。相談文をコピーしてチャットAIに送り、答えを貼って取り込む(src/domain/aiCoach.js)
   "coach.button":      { ja: "AIコーチに相談",         en: "Ask AI Coach" },
   "coach.fab":         { ja: "AIコーチ",               en: "AI Coach" },
+  "coach.replanButton": { ja: "残りをAIコーチに組み直してもらう", en: "Ask AI Coach to rework the rest" },
   "coach.title":       { ja: "AIコーチ",               en: "AI Coach" },
   "coach.leadPlan":    { ja: "今日のメニューをAIに組んでもらいます。案を見てから、使うかどうかを決められます。", en: "Have an AI build today's menu. You'll see the plan before anything changes." },
   "coach.leadReplan":  { ja: "ここまでの記録をもとに、残りをAIに組み直してもらいます。実施済み(RIR入力済み)のセットは変わりません。", en: "Have an AI rework the rest of today's session. Sets you've finished (RIR entered) stay as they are." },
