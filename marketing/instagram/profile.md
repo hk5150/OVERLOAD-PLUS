@@ -1,6 +1,6 @@
 # アカウント設定
 
-**@kurabell_app**(2026-10-04 北村さんが作成。https://www.instagram.com/kurabell_app/ )
+**@kurabell_workout_log_jp**(2026-10-04 北村さんが @kurabell_app で作成、2026-10-10 に改名。https://www.instagram.com/kurabell_workout_log_jp/ )
 
 ## 名前(64文字以内。検索に効く)
 

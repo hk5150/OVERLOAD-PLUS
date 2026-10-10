@@ -1,4 +1,4 @@
-# Instagram 運用(KURABELL公式 @kurabell_app)
+# Instagram 運用(KURABELL公式 @kurabell_workout_log_jp、旧 @kurabell_app)
 
 2026-10-04 開始。日本語のみ。個人アカウント `hajimek_life` の仕組み(`~/Insta`)とは別。
 

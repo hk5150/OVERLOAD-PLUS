@@ -1,6 +1,6 @@
 # Instagram 運用(英語版アカウント)
 
-2026-10-07 開始。英語圏の筋トレ層向け。日本語版 @kurabell_app(`../instagram/`)とは別アカウント。
+2026-10-07 開始。英語圏の筋トレ層向け。日本語版 @kurabell_workout_log_jp(旧 @kurabell_app、`../instagram/`)とは別アカウント。
 流れ(`drafts/` → `approved/` → `published/`)と書くときの約束は `../instagram/README.md` と同じ。
 
 ## 日本語版との違い
