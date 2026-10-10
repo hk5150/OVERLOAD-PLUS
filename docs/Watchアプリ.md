@@ -14,7 +14,7 @@ Watch でセットを入力するためのアプリ(v120〜)。
    - 入れ方: 次の版の `appstore/<版>/ja/name.txt` に名前を置き、`node scripts/asc/metadata.mjs push <版>`(まず dry-run)。
      名前を扱う部分は 2026-10-10 に足したが**未検証**(構文チェックのみ。dry-run は自動モードに止められた)。最初は `--apply` なしで差分を見る
    - 「前回比較」が名前から外れるので、キーワード欄に足すかを同じ版で決める。施策ボードは P005
-   - Instagram の名前(@kurabell_workout_log_jp)は北村さんが iPhone で変える。この Mac の Chrome には _en と hajimek_workout しかログインしていない
+   - Instagram @kurabell_workout_log_jp の名前は「KURABELL|筋トレ記録・前回比較」から変更済み(2026-10-10、Chrome のアカウントセンターで。名前の変更は14日間に2回まで)
 4. スクリーンショットに AIコーチの画面がまだ無い(`screenshots.mjs` で入れ替えられる。`--apply` は未検証)
 5. ~~片付け~~ → 済(2026-10-10 12:40。worktree `-14`・`-14c`・`-14d` とローカルのブランチ v1.4 / v1.4-coach / v1.4-fixes を削除、`.claude/launch.json` の kurabell-14 系も外した)
 
