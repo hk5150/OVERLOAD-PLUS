@@ -659,6 +659,7 @@ English:
   - PlusRep: ドメインと Instagram の @plusrep が取得済み
 - 弱いのは「由来が伝わっていない」ことなので、概要の2段落目(つかみの2行の直後)に由来の一文を足した(`appstore/1.4/*/description.txt`)。
   冒頭に置くと、「もっと見る」の前に見えるつかみが押し出されるため2段落目にした
+- 英語の掲載名は「KURABELL Workout Log」のまま(Lift Log にしない。北村さん、2026-10-10)。「workout」の方が検索が多く、「lifting」はキーワードで拾えているため
 
 ### 審査メモ
 - 英語の冒頭の版の1文: `Version 1.4 adds AI Coach, which copies a request to the clipboard and reads back an answer the user pastes in; it adds no new data handling or external services.`
