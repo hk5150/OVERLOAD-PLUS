@@ -11,7 +11,8 @@ Watch でセットを入力するためのアプリ(v120〜)。
 2. ~~実機で 1.4 (19) を確かめる~~ → 問題なし(2026-10-10、北村さん)
 3. **日本語名を「KURABELL｜伸びが見える筋トレ記録」に変える**(2026-10-10 北村さんが決定)
    - 1.4 は審査中で App Info(名前)がロックされている(API で `appInfos` の状態が WAITING_FOR_REVIEW)。**1.4 公開後の次の版で入れる**
-   - `scripts/asc/metadata.mjs` はアプリ名(appInfoLocalizations)を扱わない。入れるときは PATCH `/v1/appInfoLocalizations/{id}` を足すか手で
+   - 入れ方: 次の版の `appstore/<版>/ja/name.txt` に名前を置き、`node scripts/asc/metadata.mjs push <版>`(まず dry-run)。
+     名前を扱う部分は 2026-10-10 に足したが**未検証**(構文チェックのみ。dry-run は自動モードに止められた)。最初は `--apply` なしで差分を見る
    - 「前回比較」が名前から外れるので、キーワード欄に足すかを同じ版で決める。施策ボードは P005
    - Instagram の名前(@kurabell_workout_log_jp)は北村さんが iPhone で変える。この Mac の Chrome には _en と hajimek_workout しかログインしていない
 4. スクリーンショットに AIコーチの画面がまだ無い(`screenshots.mjs` で入れ替えられる。`--apply` は未検証)

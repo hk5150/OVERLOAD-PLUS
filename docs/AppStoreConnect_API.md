@@ -16,6 +16,7 @@
 | 審査・配信・ビルドの状態(前回から変わったことを先頭に) | `node scripts/asc/status.mjs`(`--json` はルーティン用) |
 | 今の掲載情報をファイルに写す | `node scripts/asc/metadata.mjs pull 1.3` → `appstore/1.3/` |
 | 掲載情報を入れる(版が無ければ作る。読み戻して確かめる) | `node scripts/asc/metadata.mjs push 1.4 --apply` |
+| アプリ名・サブタイトルを変える | `appstore/<版>/ja/name.txt`(`subtitle.txt`)を置いて同じ `push`。App Info 側の項目で、版が審査中・配信中の間はロックされる(2026-10-10 に追加。**まだ一度も通していない**) |
 | 版にビルドを付ける | `node scripts/asc/metadata.mjs build 1.4 17 --apply` |
 | 提出できる状態か確かめる | `node scripts/asc/metadata.mjs check 1.4` |
 | 審査へ提出(**北村さんの確認を取ってから**) | `node scripts/asc/metadata.mjs submit 1.4 --apply --yes-submit` |

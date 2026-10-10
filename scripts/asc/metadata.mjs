@@ -11,13 +11,17 @@
 // ファイルの置き方(appstore/<版>/):
 //   ja/description.txt  ja/keywords.txt  ja/promotional_text.txt  ja/whats_new.txt
 //   en-US/…(同じ4つ)    review_notes.txt(審査メモ。連絡先は App Store Connect 側のまま触らない)
-// 無いファイルの項目は触らない。サブタイトル・アプリ名(appInfo 側)は扱わない(変えないと決めている)。
+//   ja/name.txt  ja/subtitle.txt(アプリ名・サブタイトル。版ではなく App Info 側にあり、版が審査中・配信中の間は変えられない)
+// 無いファイルの項目は触らない。
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import path from "node:path";
 import { api, all, APP_ID, REPO, APPLY, has, positional, checkLocks, findVersion, findBuild, dryNote } from "./client.mjs";
 
 const FIELDS = { description: "description.txt", keywords: "keywords.txt", promotionalText: "promotional_text.txt", whatsNew: "whats_new.txt" };
-const LIMITS = { description: 4000, keywords: 100, promotionalText: 170, whatsNew: 4000, notes: 4000 };
+const INFO_FIELDS = { name: "name.txt", subtitle: "subtitle.txt" };
+const LIMITS = { description: 4000, keywords: 100, promotionalText: 170, whatsNew: 4000, notes: 4000, name: 30, subtitle: 30 };
+// App Info は版ごとに1つある。配信中の版の分と、作業中の版の分。書けるのは後者が下の状態のときだけ
+const INFO_LOCKED = ["READY_FOR_SALE", "READY_FOR_DISTRIBUTION", "WAITING_FOR_REVIEW", "IN_REVIEW", "PENDING_DEVELOPER_RELEASE", "PENDING_APPLE_RELEASE", "ACCEPTED", "PROCESSING_FOR_DISTRIBUTION", "REPLACED_WITH_NEW_INFO"];
 // App Store Connect が「無効な文字」で保存を拒んだ文字(1.3 の提出で踏んだ。APPSTORE.md)。見つけたら止める
 const BAD_CHARS = { "⋯": "⋯ → … に", "✕": "✕ → × に", "♥": "♥ → 文字で書く(1.4 (19) のテスト内容で拒まれた)" };
 const LOCALES = ["ja", "en-US"];
@@ -64,12 +68,19 @@ else if (cmd === "push") {
   if (!existsSync(dir)) { console.error(`${path.relative(REPO, dir)}/ が無い`); process.exit(1); }
   // 先に全部の文面を確かめる(途中まで書いてから止まらないように)
   const want = {};
+  const wantInfo = {};
   const errs = [];
   for (const loc of LOCALES) {
     for (const [f, file] of Object.entries(FIELDS)) {
       const t = read(path.join(dir, loc, file));
       if (t == null) continue;
       (want[loc] ||= {})[f] = t;
+      errs.push(...validate(`${loc}/${f}`, t));
+    }
+    for (const [f, file] of Object.entries(INFO_FIELDS)) {
+      const t = read(path.join(dir, loc, file));
+      if (t == null) continue;
+      (wantInfo[loc] ||= {})[f] = t;
       errs.push(...validate(`${loc}/${f}`, t));
     }
   }
@@ -117,6 +128,29 @@ else if (cmd === "push") {
     }
   }
 
+  // アプリ名・サブタイトル(App Info 側)。版を作った後でないと、書ける App Info が現れない
+  let info = null;
+  if (Object.keys(wantInfo).length) {
+    const infos = await all(`/v1/apps/${APP_ID}/appInfos`);
+    const stateOf = (i) => i.attributes.state ?? i.attributes.appStoreState;
+    info = infos.find(i => !INFO_LOCKED.includes(stateOf(i)));
+    if (!info) {
+      console.error(`  アプリ名・サブタイトル: 書ける App Info が無い(${infos.map(stateOf).join(" / ")})。版が審査中か、まだ作っていない`);
+      if (APPLY) process.exit(1);
+    } else {
+      console.log(`  App Info: ${stateOf(info)}`);
+      const have = Object.fromEntries((await all(`/v1/appInfos/${info.id}/appInfoLocalizations`)).map(l => [l.attributes.locale, l]));
+      for (const [loc, fields] of Object.entries(wantInfo)) {
+        const cur = have[loc];
+        if (!cur) { console.error(`  ${loc}: App Info のローカライズが無い(先に App Store Connect で言語を足す)`); process.exit(1); }
+        const patch = Object.fromEntries(Object.entries(fields).filter(([f, t]) => (cur.attributes[f] ?? "") !== t));
+        const names = Object.keys(patch);
+        console.log(`  ${loc}: ${names.length ? names.map(n => `${n}「${cur.attributes[n] ?? ""}」→「${patch[n]}」`).join(", ") : "名前・サブタイトルは変更なし"}`);
+        if (APPLY && names.length) await api(`/v1/appInfoLocalizations/${cur.id}`, { method: "PATCH", body: { data: { type: "appInfoLocalizations", id: cur.id, attributes: patch } } });
+      }
+    }
+  }
+
   if (APPLY) {
     // 読み戻して、ファイルと一致するかを確かめる(画面の入力で「保存したはずが残っていない」を何度か踏んだ)
     const after = Object.fromEntries((await localizations(v.id)).map(l => [l.attributes.locale, l.attributes]));
@@ -124,6 +158,11 @@ else if (cmd === "push") {
     for (const [loc, fields] of Object.entries(want))
       for (const [f, t] of Object.entries(fields)) if ((after[loc]?.[f] ?? "").replace(/\n+$/, "") !== t) bad.push(`${loc}/${f}`);
     if (notes != null && ((await reviewDetail(v.id))?.attributes.notes ?? "").replace(/\n+$/, "") !== notes) bad.push("審査メモ");
+    if (info) {
+      const afterInfo = Object.fromEntries((await all(`/v1/appInfos/${info.id}/appInfoLocalizations`)).map(l => [l.attributes.locale, l.attributes]));
+      for (const [loc, fields] of Object.entries(wantInfo))
+        for (const [f, t] of Object.entries(fields)) if ((afterInfo[loc]?.[f] ?? "") !== t) bad.push(`${loc}/${f}`);
+    }
     console.log(bad.length ? `\n読み戻すと一致しない: ${bad.join(", ")}` : "\n読み戻して、全部ファイルと一致した");
     if (bad.length) process.exit(1);
   }
