@@ -8,14 +8,12 @@ Watch でセットを入力するためのアプリ(v120〜)。
 ### 次にやること(2026-10-10 12:30)
 1. **1.4 (19) の審査結果を待つ**(12:28 に API で提出)。12時のルーティンが `scripts/asc/status.mjs` で拾う。手で見るなら `npm run asc:status`
    - 差し戻しなら内容に沿って直し、`npm run ios:upload` → `node scripts/asc/metadata.mjs build 1.4 <番号> --apply` → `submit`
-2. **実機で 1.4 (19) を確かめる**(TestFlight のテスト内容のとおり)。シミュレータでは見られなかったもの:
-   - 休憩の通知のずれ・二重、心拍の表示
-   - 共有シートの Instagram と「画像を保存」
-   - 音楽アプリのボタン、ライブアクティビティの切り替え
-3. **北村さんの判断待ち**: App Store の日本語名「KURABELL|筋トレ記録・前回比較」の「前回比較」を「伸びが見える」に揃えるか
-   - X のセッションの提案。X の表示名は「KURABELL|伸びが見える筋トレ記録アプリ」に変更済み
-   - 変えるなら施策ボードに載せ、P001(キーワード、判定 10/15)と時期をずらす
-   - Instagram の名前も同じ判断
+2. ~~実機で 1.4 (19) を確かめる~~ → 問題なし(2026-10-10、北村さん)
+3. **日本語名を「KURABELL｜伸びが見える筋トレ記録」に変える**(2026-10-10 北村さんが決定)
+   - 1.4 は審査中で App Info(名前)がロックされている(API で `appInfos` の状態が WAITING_FOR_REVIEW)。**1.4 公開後の次の版で入れる**
+   - `scripts/asc/metadata.mjs` はアプリ名(appInfoLocalizations)を扱わない。入れるときは PATCH `/v1/appInfoLocalizations/{id}` を足すか手で
+   - 「前回比較」が名前から外れるので、キーワード欄に足すかを同じ版で決める。施策ボードは P005
+   - Instagram の名前(@kurabell_workout_log_jp)は北村さんが iPhone で変える。この Mac の Chrome には _en と hajimek_workout しかログインしていない
 4. スクリーンショットに AIコーチの画面がまだ無い(`screenshots.mjs` で入れ替えられる。`--apply` は未検証)
 5. ~~片付け~~ → 済(2026-10-10 12:40。worktree `-14`・`-14c`・`-14d` とローカルのブランチ v1.4 / v1.4-coach / v1.4-fixes を削除、`.claude/launch.json` の kurabell-14 系も外した)
 
