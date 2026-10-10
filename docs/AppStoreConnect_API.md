@@ -31,6 +31,10 @@
 無いファイルの項目は触らない。サブタイトル・アプリ名は扱わない(変えないと決めている)。
 **`APPSTORE.md` は経緯と判断の記録、`appstore/<版>/` は実際に入れる文面**、と分ける。次の版は、前の版のフォルダを写してから直す。
 
+**プロモーション用テキストは、13時のルーティンが配信中の版を API で書き換えることがある**(施策ボード `Projects/kurabell-pdca.md`)。
+新しい版に `push` する直前に `metadata.mjs pull <配信中の版>` で今の文面を取り直し、`appstore/<新しい版>/*/promotional_text.txt` に写すこと。
+古い文面のまま入れると、実施中の施策を黙って元に戻してしまう(2026-10-10 に P002 で気づいた)。
+
 ## 日次ルーティンとの関係
 「【毎日12時】KURABELL App Store実績」が `status.mjs --json` と `reviews.mjs --json` を読む(審査の変化・差し戻し・新しいレビューの報告)。
 前回の状態は `~/Library/Caches/kurabell-asc/` に残る(キーの置き場の `~/.appstoreconnect/` には書かない)。ルーティンは `--apply` を使わない。

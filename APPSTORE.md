@@ -651,6 +651,15 @@ English:
     ```
 - 「次の重量を決めるのは、アプリではなくあなたです。」はそのまま(AIの案も、使うかどうかを決めるのは利用者)
 
+### 名前の由来の一文(2026-10-10)
+- 改名を検討し、**KURABELL のまま**にした(北村さん)。経緯は Obsidian `Decisions/2026-10-10-kurabell-name.md`。
+  候補は3系統で、どれも埋もれるかぶつかった:
+  - Lift Log 系: App Store に同名・類似が多数ある
+  - Overlift: 同じ考え方の筋トレアプリ「OverLift: Workout Tracker」が豪州で配信中
+  - PlusRep: ドメインと Instagram の @plusrep が取得済み
+- 弱いのは「由来が伝わっていない」ことなので、概要の2段落目(つかみの2行の直後)に由来の一文を足した(`appstore/1.4/*/description.txt`)。
+  冒頭に置くと、「もっと見る」の前に見えるつかみが押し出されるため2段落目にした
+
 ### 審査メモ
 - 英語の冒頭の版の1文: `Version 1.4 adds AI Coach, which copies a request to the clipboard and reads back an answer the user pastes in; it adds no new data handling or external services.`
 - 外部サービスの段落の「"Ask AI" button」を `"AI Coach" (and "Ask AI" on the split and history screens)` に。送信しない・URL に載せない、の説明はそのまま
