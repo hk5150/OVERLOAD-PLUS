@@ -3,20 +3,22 @@
 Watch でセットを入力するためのアプリ(v120〜)。
 経緯: 2026-08-23 には「Watch アプリは作らず、ローカル通知で代替する」としていた。v112 の Time Sensitive 通知と Live Activity を経て、1.0 の審査待ちの間に、記録の入力まで含めて作ることにした。
 
-## 引き継ぎ(2026-10-10 の時点。次のセッションはここから)
+## 引き継ぎ(2026-10-11 の時点。次のセッションはここから)
+
+**1.4 (19) は 2026-10-11 4:06 に公開された**(API で「配信中」、iTunes lookup の日米で 1.4 を確認)。記録は `APPSTORE.md` の「1.4 (ビルド19)」
 
 ### 次にやること(2026-10-10 12:30)
-1. **1.4 (19) の審査結果を待つ**(12:28 に API で提出)。12時のルーティンが `scripts/asc/status.mjs` で拾う。手で見るなら `npm run asc:status`
-   - 差し戻しなら内容に沿って直し、`npm run ios:upload` → `node scripts/asc/metadata.mjs build 1.4 <番号> --apply` → `submit`
+1. ~~1.4 (19) の審査結果を待つ~~ → 承認・公開済み(2026-10-11 4:06)
 2. ~~実機で 1.4 (19) を確かめる~~ → 問題なし(2026-10-10、北村さん)
 3. **日本語名を「KURABELL｜伸びが見える筋トレ記録」に変える**(2026-10-10 北村さんが決定)
-   - 1.4 は審査中で App Info(名前)がロックされている(API で `appInfos` の状態が WAITING_FOR_REVIEW)。**1.4 公開後の次の版で入れる**
+   - 1.4 は審査中で App Info(名前)がロックされている(API で `appInfos` の状態が WAITING_FOR_REVIEW)。**1.4 公開後の次の版で入れる。P001 の判定(10/15)の後に出す版がよい**(名前とキーワードを同時に変えると、どちらが効いたか分けられない。文案は Obsidian `Projects/kurabell-pdca-drafts/P005.md`)
    - 入れ方: 次の版の `appstore/<版>/ja/name.txt` に名前を置き、`node scripts/asc/metadata.mjs push <版>`(まず dry-run)。
      名前を扱う部分は 2026-10-10 に足したが**未検証**(構文チェックのみ。dry-run は自動モードに止められた)。最初は `--apply` なしで差分を見る
    - 「前回比較」が名前から外れるので、キーワード欄に足すかを同じ版で決める。施策ボードは P005
    - Instagram @kurabell_workout_log_jp の名前は「KURABELL|筋トレ記録・前回比較」から変更済み(2026-10-10、Chrome のアカウントセンターで。名前の変更は14日間に2回まで)
-4. スクリーンショットに AIコーチの画面がまだ無い(`screenshots.mjs` で入れ替えられる。`--apply` は未検証)
-5. ~~片付け~~ → 済(2026-10-10 12:40。worktree `-14`・`-14c`・`-14d` とローカルのブランチ v1.4 / v1.4-coach / v1.4-fixes を削除、`.claude/launch.json` の kurabell-14 系も外した)
+4. X のヘッダーを `marketing/x/assets/header-1.4.png`(AIコーチ入り)に差し替える(施策ボード P004 のメモ。X のセッションの作業)
+5. スクリーンショットに AIコーチの画面がまだ無い(`screenshots.mjs` で入れ替えられる。`--apply` は未検証)
+6. ~~片付け~~ → 済(2026-10-10 12:40。worktree `-14`・`-14c`・`-14d` とローカルのブランチ v1.4 / v1.4-coach / v1.4-fixes を削除、`.claude/launch.json` の kurabell-14 系も外した)
 
 ### 今日のセッションで決まったこと(2026-10-09〜10)
 - アプリ名は KURABELL のまま。英語の掲載名も Workout Log のまま(`APPSTORE.md`、Obsidian `Decisions/2026-10-10-kurabell-name.md`)
