@@ -223,3 +223,21 @@ describe("レビューで見つかった穴", () => {
     expect(r[1]).toBe(current[1]);
   });
 });
+
+describe("重量は 1kg 刻み(2026-10-10)", () => {
+  it("weightStep を渡すと、その単位に丸めて数える", () => {
+    const r = validateCoachPlan({ exercises: [{ name: "サイドレイズ", sets: [{ w: 22.5, r: 8 }, { w: 20, r: 10 }, { w: 17.4, r: 12 }] }] },
+      { ...opts, weightStep: 1 });
+    expect(r.exercises[0].sets.map(s => s.w)).toEqual([23, 20, 17]);
+    expect(r.rounded).toBe(2);
+  });
+  it("lb は 2.5 刻み", () => {
+    const r = validateCoachPlan({ exercises: [{ name: "サイドレイズ", sets: [{ w: 46, r: 8 }] }] }, { ...opts, weightStep: 2.5 });
+    expect(r.exercises[0].sets[0].w).toBe(45);
+  });
+  it("渡さなければ丸めない", () => {
+    const r = validateCoachPlan({ exercises: [{ name: "サイドレイズ", sets: [{ w: 22.5, r: 8 }] }] }, opts);
+    expect(r.exercises[0].sets[0].w).toBe(22.5);
+    expect(r.rounded).toBe(0);
+  });
+});

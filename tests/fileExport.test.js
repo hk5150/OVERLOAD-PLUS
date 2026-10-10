@@ -177,3 +177,27 @@ describe("プラグインの失敗(例外を外に出さない)", () => {
     expect(fileExportAvailable()).toBe(false);
   });
 });
+
+// 記録の画像(1.4、お疲れ様の画面の「Instagram 用の画像」)
+describe("shareImageFile(画像を共有シートで渡す)", () => {
+  const nativeWith = (plugin) => ({ window: { Capacitor: { isNativePlatform: () => true, Plugins: { FileExport: plugin } } } });
+
+  it("base64 をそのままネイティブに渡し、completed を返す", async () => {
+    const calls = [];
+    const { shareImageFile } = load(nativeWith({ share: async () => ({}), shareImage: async (a) => { calls.push(a); return { completed: true }; } }));
+    expect(await shareImageFile("iVBORw0KGgo=")).toEqual({ completed: true });
+    expect(calls).toEqual([{ base64: "iVBORw0KGgo=" }]);
+  });
+  it("Web 版(プラグイン無し)では null", async () => {
+    const { shareImageFile } = load();
+    expect(await shareImageFile("x")).toBe(null);
+  });
+  it("shareImage を持たない古いネイティブでは null(例外にしない)", async () => {
+    const { shareImageFile } = load(nativeWith({ share: async () => ({}) }));
+    expect(await shareImageFile("x")).toBe(null);
+  });
+  it("ネイティブの失敗は null(例外を外に出さない)", async () => {
+    const { shareImageFile } = load(nativeWith({ share: async () => ({}), shareImage: async () => { throw new Error("busy"); } }));
+    expect(await shareImageFile("x")).toBe(null);
+  });
+});

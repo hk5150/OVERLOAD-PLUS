@@ -265,6 +265,8 @@ struct RestTimerView: View {
             .background(Color.black.ignoresSafeArea())
             // 休憩画面を開いている間は、設定した経過時間に強めに振動する(改善要望 4a。通知とは別に)。
             // 休憩が替わったら(id が変わる)数え直す。過ぎた時間は鳴らさない
+            .onAppear { store.restViewVisible = true }
+            .onDisappear { store.restViewVisible = false }
             .task(id: r) {
                 for m in store.restNoticeMinutes.sorted() {
                     let wait = startAt.addingTimeInterval(m * 60).timeIntervalSinceNow

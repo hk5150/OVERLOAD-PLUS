@@ -32,6 +32,8 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<!-- ヘルスケア連携の権限ダイアログの文言(英語。日本語は ja.lproj/InfoPlist.strings)。docs/ヘルスケア連携.md -->
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>KURABELL saves the workout image you create to your photo library when you choose "Save Image".</string>
 	<key>NSHealthShareUsageDescription</key>
 	<string>KURABELL reads your latest body weight from Health to calculate bodyweight exercises. If the app is on your Apple Watch, it also reads heart rate and active energy during the workout you record on the watch.</string>
 	<key>NSHealthUpdateUsageDescription</key>

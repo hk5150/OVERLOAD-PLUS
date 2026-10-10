@@ -115,6 +115,12 @@ const STRINGS = {
   "log.deloadHint":    { ja: "3回とも余力0で止まっています。ディロード(約10%軽く)も選択肢です", en: "Stuck at failure 3 sessions running — a deload (about 10% lighter) is an option" },
   "log.repsDown":      { ja: "直近3セッションの最高 {best}回 / 前回 {prev}回", en: "Best {best} reps in the last 3 sessions, {prev} last time" },
   // 自己ベスト更新の瞬間(1.4)。英語のまま出す(北村さんの指定)
+  // お疲れ様の画面(iPhone、1.4)。見出し・数字は Watch の完了画面と同じ watch.* を使う
+  "finish.volume":     { ja: "総ボリューム",           en: "TOTAL VOLUME" },
+  "finish.report":     { ja: "AIコーチに報告",         en: "Report to AI Coach" },
+  "finish.reportDone": { ja: "コピーしました。AIに貼り付けて送信してください", en: "Copied. Paste it into the AI chat and send it" },
+  "finish.image":      { ja: "Instagram 用の画像",     en: "Image for Instagram" },
+  "finish.imageFailed":{ ja: "画像を共有できませんでした。もう一度お試しください。", en: "Couldn't share the image. Please try again." },
   "win.title":         { ja: "YOU WIN!",               en: "YOU WIN!" },
   "win.sub":           { ja: "自己ベスト更新",         en: "NEW PERSONAL BEST" },
   "compare.est1RM":    { ja: "推定1RM",               en: "Est. 1RM" },
@@ -134,6 +140,7 @@ const STRINGS = {
   // ---- 記録タブ ----
   "log.title":         { ja: "今日の記録", en: "Today's workout" },
   "log.elapsed":       { ja: "経過",       en: "Elapsed" },
+  "log.heartRate":     { ja: "心拍数 {n}", en: "Heart rate {n}" },
   "log.volume":        { ja: "ボリューム", en: "Volume" },
   // 上部バーの到達度ゲージの読み上げ用(画面上は数字を出さずゲージだけ)
   "log.volumeRatio":   { ja: "{pct}%(基準 {v}{unit})", en: "{pct}% of baseline ({v}{unit})" },
@@ -168,7 +175,6 @@ const STRINGS = {
   "log.moveDown":      { ja: "下へ移動",               en: "Move down" },
   "log.youtube":       { ja: "YouTubeでフォームを検索", en: "Search form on YouTube" },
   "menu.watchForm":    { ja: "フォームを動画で確認", en: "Watch a form video" },
-  "log.consultAi":     { ja: "AI相談",                 en: "Ask AI" },
   "log.consultAiDone": { ja: "✓ コピー",               en: "✓ Copied" },
   // ボタンのラベルには入れない(minWidth 74の枠に収まらず、押した瞬間に行が折り返す)。
   // ボタン行の下に一時表示する注記として使う。
@@ -245,6 +251,7 @@ const STRINGS = {
   "coach.step3":       { ja: "案を確かめる",           en: "Check the plan" },
   "coach.unknown":     { ja: "アプリに無い種目は取り込みません: {list}", en: "Not in the app, so not imported: {list}" },
   "coach.dropped":     { ja: "取り込めないセットを{n}件除きました(読めない値・範囲外の値・同じ種目の2回目)。", en: "Skipped {n} set(s) that couldn't be imported (unreadable or out-of-range values, or a repeated exercise)." },
+  "coach.rounded":     { ja: "{step}単位でない重量を{n}件、近い重量に丸めました。", en: "Rounded {n} weight(s) to the nearest {step}." },
   "coach.doneMark":    { ja: "済",                     en: "done" },
   "coach.apply":       { ja: "この案を使う",           en: "Use this plan" },
   "coach.applied":     { ja: "AIコーチの案に入れ替えました", en: "Switched to AI Coach's plan" },
@@ -257,14 +264,14 @@ const STRINGS = {
   "coach.p.meLine":    { ja: "体重: {bw} / 重量の単位: {unit} / 既定の目標回数: {reps}回", en: "Bodyweight: {bw} / Weight unit: {unit} / Default target reps: {reps}" },
   "coach.p.day":       { ja: "■ 今日の分割",           en: "■ Today's split day" },
   "coach.p.exercises": { ja: "■ 今日の種目と直近の記録(古い順、重量×回数 余力)", en: "■ Today's exercises and recent sessions (oldest first, weight×reps RIR)" },
-  "coach.p.target":    { ja: "目標 {lo}〜{hi}回 / 刻み {inc}", en: "Target {lo}-{hi} reps / Increment {inc}" },
+  "coach.p.target":    { ja: "目標 {lo}〜{hi}回", en: "Target {lo}-{hi} reps" },
   "coach.p.perHand":   { ja: "(片手の重量)",           en: " (weight per hand)" },
   "coach.p.added":     { ja: "(加重分の重量。体重は含まない)", en: " (added weight only, not bodyweight)" },
   "coach.p.noHistory": { ja: "(記録なし)",             en: "(no sessions yet)" },
   "coach.p.today":     { ja: "■ 今日ここまで(実施済みのセットだけ)", en: "■ Done so far today (finished sets only)" },
   "coach.p.catalog":   { ja: "■ アプリにある種目(種目はこの中から選んでください)", en: "■ Exercises in my app (please choose from these)" },
-  "coach.p.rules":     { ja: "■ お願い\n- 漸進性過負荷の考え方で、各種目の各セットの重量と回数を提案してください\n- 必要なら、種目の入れ替え・追加・順番の変更もしてください(種目名は上の一覧のとおりに)\n- 重量は{unit}で書いてください。ダンベルは片手の重量、自重種目は加重分だけです\n- ウォームアップを入れるなら \"wu\":true を付けてください\n- 余力(RIR)は書かないでください\n- 最初に、なぜその案にしたかを短く説明してください\n- 最後に、アプリに取り込むための下の形式のブロックを1つだけ出してください(数字は例です)",
-                         en: "■ What I'd like\n- Using progressive overload, suggest the weight and reps for every set of every exercise\n- Swap, add or reorder exercises if it helps (use the names exactly as listed above)\n- Write weights in {unit}. Dumbbells are per hand; bodyweight exercises are added weight only\n- Mark any warm-up set with \"wu\":true\n- Don't include RIR\n- Start with a short explanation of why\n- End with exactly one block in the format below so I can import it (the numbers are just an example)" },
+  "coach.p.rules":     { ja: "■ お願い\n- 漸進性過負荷の考え方で、各種目の各セットの重量と回数を提案してください\n- 必要なら、種目の入れ替え・追加・順番の変更もしてください(種目名は上の一覧のとおりに)\n- 重量は{step}単位で書いてください(端数は使えません)。ダンベルは片手の重量、自重種目は加重分だけです\n- ウォームアップを入れるなら \"wu\":true を付けてください\n- 余力(RIR)は書かないでください\n- 最初に、なぜその案にしたかを短く説明してください\n- 最後に、アプリに取り込むための下の形式のブロックを1つだけ出してください(数字は例です)",
+                         en: "■ What I'd like\n- Using progressive overload, suggest the weight and reps for every set of every exercise\n- Swap, add or reorder exercises if it helps (use the names exactly as listed above)\n- Write weights in {step} steps (no other fractions). Dumbbells are per hand; bodyweight exercises are added weight only\n- Mark any warm-up set with \"wu\":true\n- Don't include RIR\n- Start with a short explanation of why\n- End with exactly one block in the format below so I can import it (the numbers are just an example)" },
   "coach.p.exName":    { ja: "一覧の種目名",           en: "Name from the list" },
   "coach.p.rulesReplan": { ja: "- 実施済みのセットは書かず、これからやるセットだけを書いてください。終えた種目は書かなくてかまいません", en: "- Leave out sets I've already done; list only the sets still to do. Finished exercises can be left out" },
 
@@ -328,7 +335,8 @@ const STRINGS = {
   "watch.prTitle":       { ja: "1RM更新", en: "New 1RM" },
   "watch.avgHr":         { ja: "平均心拍", en: "Avg HR" },
   "watch.addSet":      { ja: "セットを追加",           en: "Add set" },
-  "rest.notifyTitle":  { ja: "インターバル",           en: "Rest timer" },
+  // 通知の見出しは Watch の通知(rest.title)と揃える。違う見出しの通知が2通届いて「色々来る」に見えていた(1.4 (18))
+  "rest.notifyTitle":  { ja: "インターバル",           en: "Rest" },
   "rest.notifyBody":   { ja: "{n}分経過しました。次のセットへ。", en: "{n} min elapsed. Time for your next set." },
   // 1.3 から経過分を選べる(1:30 など)ので、経過の表し方を別にした。rest.notifyBody は古い Watch アプリの予備に残す
   "rest.notifyBodyAt": { ja: "{t}経過しました。次のセットへ。", en: "{t} elapsed. Time for your next set." },
@@ -473,6 +481,10 @@ const STRINGS = {
   "settings.iap.restoreFailed": { ja: "復元できませんでした。もう一度お試しください。", en: "Couldn't restore. Please try again." },
   "settings.ai":       { ja: "AIに相談",               en: "Ask AI" },
   "settings.aiDesc":   { ja: "「AI相談」を押すと、記録がクリップボードにコピーされ、ここで選んだAIのチャット画面が開きます。貼り付けて送ってください。記録がアプリから自動で送信されることはありません。", en: "Tapping \"Ask AI\" copies your log to the clipboard and opens the chat you pick here — just paste it. The app never sends your log anywhere on its own." },
+  "settings.music":    { ja: "音楽アプリ",             en: "Music app" },
+  "settings.musicNone":{ ja: "使わない",               en: "None" },
+  "settings.musicDesc":{ ja: "記録タブと休憩の画面に、選んだアプリを開くボタンを出します。曲の操作はそのアプリで行ってください。", en: "Adds a button on the Log tab and the rest screen that opens this app. Control playback in the app itself." },
+  "music.open":        { ja: "{app} を開く",          en: "Open {app}" },
   "settings.language": { ja: "言語",                   en: "Language" },
   "settings.languageDesc": { ja: "種目名・部位名も切り替わります。記録済みのデータは変わりません。", en: "Exercise and muscle names switch too. Your saved records are not changed." },
   "lang.ja":           { ja: "日本語",                 en: "日本語" },
@@ -551,7 +563,12 @@ const STRINGS = {
   "share.perHand":     { ja: "{unit}(片手)",           en: "{unit}/hand" },
   "share.withBw":      { ja: "{unit}(体重込)",         en: "{unit} (incl. bodyweight)" },
   "share.bothHands":   { ja: "{unit}(両手計)",         en: "{unit} (both hands)" },
-  "share.aiPrompt":    { ja: "以下は私の筋トレ記録です。フォーム、重量設定、ボリュームの妥当性についてアドバイスをください。", en: "Below is my workout log. Please advise on form, load selection, and whether the volume is appropriate." },
+  // 保存済みの1回分の相談文(履歴の「AIに相談」・お疲れ様の画面の「AIコーチに報告」)。フォームの助言は数字から判断できないので頼まない
+  "share.workoutPrompt": { ja: "以下は私の筋トレ1回分の記録です。この日の内容を振り返り、漸進性過負荷の観点で、次回の各種目の重量と回数を提案してください(重量は{step}単位で)。", en: "Below is one of my workouts. Please review it and, using progressive overload, suggest the weight and reps for each exercise next time (weights in {step} steps)." },
+  "share.workoutBw":   { ja: "体重 {bw}",              en: "Bodyweight {bw}" },
+  "share.targetReps":  { ja: "目標 {lo}〜{hi}回",      en: "target {lo}-{hi} reps" },
+  "share.flagPain":    { ja: "痛みあり",               en: "pain" },
+  "share.flagForm":    { ja: "フォームが崩れた",       en: "form broke down" },
   // 相談プロンプトの末尾に付ける余力の説明(AIコーチ・分割の Day・履歴で共通)
   "share.rirNote":     { ja: "※「余力」はそのセット後にあと何回挙げられたか(RIR)。0が限界。Wはウォームアップ。", en: "Note: RIR is how many more reps I could have done in that set; 0 means failure. W means warm-up." },
   // 分割の1日分について相談するプロンプト。AIコーチ(coach.p.*)が今日のメニューを組ませるのに対し、

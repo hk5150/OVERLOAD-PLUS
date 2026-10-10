@@ -312,22 +312,22 @@ describe("dayBest1RM は13回以上のセットを数えない", () => {
 describe("isNew1RMBest(自己ベストの更新を祝うか)", () => {
   const { isNew1RMBest } = loadDomainModule("src/domain/oneRm.js");
 
-  it("過去の自己ベストと、今日それまでの最高の両方を超えたら真", () => {
-    expect(isNew1RMBest({ set1RM: 101, pastBest: 100, todayBest: 98 })).toBe(true);
+  it("過去の自己ベストを超えたら真", () => {
+    expect(isNew1RMBest({ set1RM: 101, pastBest: 100 })).toBe(true);
   });
-  it("今日すでに超えていて、それを上回らない2セット目では偽(1回の更新で何度も出さない)", () => {
-    expect(isNew1RMBest({ set1RM: 101, pastBest: 100, todayBest: 102 })).toBe(false);
+  it("今日すでに超えていても、また超えたら真(2連続の更新でも毎回祝う。北村さん 2026-10-10)", () => {
+    expect(isNew1RMBest({ set1RM: 101, pastBest: 100, todayBest: 102 })).toBe(true);
   });
-  it("今日の最高をさらに超えたら、また真", () => {
-    expect(isNew1RMBest({ set1RM: 103, pastBest: 100, todayBest: 102 })).toBe(true);
+  it("過去の自己ベストに届かなければ偽", () => {
+    expect(isNew1RMBest({ set1RM: 99, pastBest: 100 })).toBe(false);
   });
   it("初めての種目(過去の自己ベストが無い)では偽", () => {
-    expect(isNew1RMBest({ set1RM: 80, pastBest: 0, todayBest: 0 })).toBe(false);
+    expect(isNew1RMBest({ set1RM: 80, pastBest: 0 })).toBe(false);
   });
   it("端数だけの差は更新と言わない", () => {
-    expect(isNew1RMBest({ set1RM: 100.005, pastBest: 100, todayBest: 0 })).toBe(false);
+    expect(isNew1RMBest({ set1RM: 100.005, pastBest: 100 })).toBe(false);
   });
   it("1RM を出さないセット(0)では偽", () => {
-    expect(isNew1RMBest({ set1RM: 0, pastBest: 100, todayBest: 0 })).toBe(false);
+    expect(isNew1RMBest({ set1RM: 0, pastBest: 100 })).toBe(false);
   });
 });

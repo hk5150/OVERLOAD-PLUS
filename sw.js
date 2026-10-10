@@ -1,6 +1,6 @@
 // KURABELL+ Service Worker
 // アプリ本体をキャッシュし、オフラインでも起動できるようにする。ライブラリもすべてローカル同梱(CDN不使用)。
-const CACHE = "kurabell-v140";
+const CACHE = "kurabell-v141";
 
 // ネットワーク優先フェッチのタイムアウト(電波が弱い環境でハングし続けるのを防ぐ)
 const NETWORK_TIMEOUT_MS = 4000;
@@ -35,6 +35,7 @@ const APP_ASSETS = [
   "./src/domain/watch.js",
   "./src/domain/fileExport.js",
   "./src/domain/review.js",
+  "./src/domain/superset.js",
   "./src/domain/aiCoach.js",
   "./src/domain/db/schema.js",
   "./src/domain/db/migration.js",
@@ -42,6 +43,20 @@ const APP_ASSETS = [
   "./src/domain/db/capacitorSqliteDriver.js",
   "./fonts/barlow-condensed-600-latin.woff2",
   "./fonts/barlow-condensed-800-latin.woff2",
+  "./guide/ja-1.jpg",
+  "./guide/ja-2.jpg",
+  "./guide/ja-3.jpg",
+  "./guide/ja-4.jpg",
+  "./guide/ja-5.jpg",
+  "./guide/ja-6.jpg",
+  "./guide/ja-7.jpg",
+  "./guide/en-1.jpg",
+  "./guide/en-2.jpg",
+  "./guide/en-3.jpg",
+  "./guide/en-4.jpg",
+  "./guide/en-5.jpg",
+  "./guide/en-6.jpg",
+  "./guide/en-7.jpg",
 ];
 
 // SWのfetch/cache.addAllは既定でブラウザのHTTPキャッシュを通る。GitHub Pagesはmax-age付きで配信し、

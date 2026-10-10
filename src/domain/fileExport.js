@@ -34,5 +34,17 @@ async function shareTextFile(filename, text) {
   } catch { return null; }
 }
 
+// 共有シートで画像(PNG の base64、"data:" の前置きは付けない)を渡す(お疲れ様の画面の「Instagram 用の画像」、1.4)。
+// 戻り値は shareTextFile と同じ。プラグインが無い・古いネイティブ(shareImage が無い)・失敗は null。
+async function shareImageFile(base64) {
+  const plugin = capFileExportPlugin();
+  if (!plugin || typeof plugin.shareImage !== "function") return null;
+  try {
+    const r = await plugin.shareImage({ base64 });
+    return { completed: r?.completed === true };
+  } catch { return null; }
+}
+
 globalThis.fileExportAvailable = fileExportAvailable;
+globalThis.shareImageFile = shareImageFile;
 globalThis.shareTextFile = shareTextFile;

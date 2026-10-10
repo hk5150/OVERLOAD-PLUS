@@ -120,3 +120,19 @@ describe("www/ ビルド生成物", () => {
     expect([...new Set(hits)], `外部通信の経路が増えている: ${hits.join(", ")}`).toEqual([]);
   });
 });
+
+// ガイド(使い方)の実際の画面(1.4)。index.html は `guide/${lang}-${step.img}.jpg`(ja/en × 1〜7)を読む。
+// コピー処理が消えたり、ファイル名が変わったりすると、iOS のガイドの画像が全ページ壊れる
+describe("ガイドの画像が www/ に入る", () => {
+  it("ja/en の 1〜7 がすべてコピーされている", () => {
+    const missing = [];
+    for (const lang of ["ja", "en"]) for (let n = 1; n <= 7; n++) {
+      if (!fs.existsSync(path.join(dest, "guide", `${lang}-${n}.jpg`))) missing.push(`${lang}-${n}.jpg`);
+    }
+    expect(missing).toEqual([]);
+  });
+  it("index.html が読む名前の形(guide/${lang}-${n}.jpg)が変わっていない", () => {
+    const html = fs.readFileSync(path.join(process.cwd(), "index.html"), "utf-8");
+    expect(html).toContain('src={`guide/${lang === "en" ? "en" : "ja"}-${step.img}.jpg`}');
+  });
+});

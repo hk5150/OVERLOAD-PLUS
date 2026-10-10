@@ -12,7 +12,56 @@ public class FileExportPlugin: CAPPlugin, CAPBridgedPlugin {
     public let jsName = "FileExport"
     public let pluginMethods: [CAPPluginMethod] = [
         CAPPluginMethod(name: "share", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "shareImage", returnType: CAPPluginReturnPromise),
     ]
+
+    // { base64 } (PNG) → { completed, activityType }
+    // 記録の画像(お疲れ様の画面の「Instagram 用の画像」、1.4)を共有シートで渡す。ファイルの URL ではなく UIImage を渡すと、
+    // 「Instagram」「画像を保存」が選択肢に出る。テキストの share と違い「コピー」も残す(画像をそのまま貼れるため)。
+    @objc func shareImage(_ call: CAPPluginCall) {
+        guard let b64 = call.getString("base64"), let data = Data(base64Encoded: b64), let image = UIImage(data: data) else {
+            call.reject("base64 PNG required")
+            return
+        }
+        DispatchQueue.main.async { [weak self] in
+            guard let presenter = self?.bridge?.viewController else {
+                call.reject("no view controller")
+                return
+            }
+            guard presenter.presentedViewController == nil else {
+                call.reject("busy")
+                return
+            }
+            let sheet = UIActivityViewController(activityItems: [image], applicationActivities: nil)
+            sheet.excludedActivityTypes = [.print, .assignToContact, .addToReadingList]
+            if let popover = sheet.popoverPresentationController {
+                popover.sourceView = presenter.view
+                popover.sourceRect = CGRect(x: presenter.view.bounds.midX, y: presenter.view.bounds.midY, width: 0, height: 0)
+                popover.permittedArrowDirections = []
+            }
+            var settled = false
+            sheet.completionWithItemsHandler = { [weak sheet] activityType, completed, _, error in
+                if settled { return }
+                if let error = error {
+                    settled = true
+                    call.reject("share failed: \(error.localizedDescription)")
+                    return
+                }
+                if completed || activityType == nil {
+                    settled = true
+                    call.resolve(["completed": completed, "activityType": activityType?.rawValue ?? ""])
+                    return
+                }
+                DispatchQueue.main.async {
+                    if !settled, sheet?.presentingViewController == nil {
+                        settled = true
+                        call.resolve(["completed": false, "activityType": activityType?.rawValue ?? ""])
+                    }
+                }
+            }
+            presenter.present(sheet, animated: true)
+        }
+    }
 
     // { filename, text } → { completed, activityType }
     // completed は、保存やAirDropを最後まで行ったときだけ true(キャンセルは false)。
