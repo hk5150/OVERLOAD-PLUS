@@ -37,6 +37,9 @@ for (const loc of ["ja", "en-US"]) {
   const now = cur?.attributes.whatsNew ?? "";
   if (want == null) { console.log(`  テスト内容 ${loc}: ${now ? `「${now.slice(0, 40)}…」` : "(空)"}(${path.relative(REPO, file)} が無いので触らない)`); continue; }
   if (now.replace(/\n+$/, "") === want) { console.log(`  テスト内容 ${loc}: 変更なし`); continue; }
+  // App Store Connect が「無効な文字」で拒んだ文字(1.4 (19) の「♥」、1.3 の「⋯」「✕」)。先に止める
+  const bad = ["♥", "⋯", "✕"].filter(c => want.includes(c));
+  if (bad.length) { console.error(`  テスト内容 ${loc}: 使えない文字 ${bad.join(" ")} がある(${path.relative(REPO, file)})`); process.exitCode = 1; continue; }
   console.log(`  テスト内容 ${loc}: 入れる(${[...want].length}字)`);
   if (!APPLY) continue;
   if (cur) await api(`/v1/betaBuildLocalizations/${cur.id}`, { method: "PATCH", body: { data: { type: "betaBuildLocalizations", id: cur.id, attributes: { whatsNew: want } } } });
