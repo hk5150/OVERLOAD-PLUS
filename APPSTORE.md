@@ -671,6 +671,15 @@ English:
 - `privacy.html`(日英)の「AIに相談」の項を、AIコーチを含む書き方に直し、「答えの取り込みは端末の中だけ」を足した(最終更新日 2026-10-09)
 - **公開ページは GitHub Pages の `web-v137` ブランチから出ている。** main やこのブランチで直しても公開ページは変わらないので、提出前に `web-v137` へ `privacy.html` だけを反映する(北村さんの確認を取ってから)
 
+### スクリーンショット(v6、次の版で入れる)
+**2026-10-11 に作成: `~/Desktop/KURABELL-appstore-screenshots/v6/{ja,en}/` 1320×2868 各9枚**。登録するのは 01〜08(09 の料金は外す)。
+- **02 に AIコーチを足し**、v5 の 02〜08 を 03〜09 にずらした(ほかの画面は v5 のまま)。見出しは「今日のメニューを、AIと組む」/ `Build today's session with AI`
+- 画面は AIコーチのシートで、答えを貼って「読み込む」を押した後(案の一覧と「この案を使う」)。見本の案は、見本の記録の前回値に沿わせた(重量据え置き・回数+1)。英語は lb の数字で書いた(kg のままだと丸めの注意が出る)
+- ボタンに「ChatGPT」の名前が写る。1.4 の掲載文でも ChatGPT・Claude・Gemini と書いて審査を通っているので、そのままにした
+- 撮り方: `.playwright-mcp/store-v6/`(gitignore 済み)の `coach-{ja,en}.js` → `compose-run.js`。main を 8765 番で配信し、
+  Playwright MCP のブラウザが使用中だったので、scratchpad の `playwright-core@1.63.0` から `~/Library/Caches/ms-playwright/chromium-1234` を直接起動した。
+  シートが画面の下まで届くよう、`compose.html` の `shift`(ja 112 / en 154)で表示を上にずらしている
+
 ### 1.4 (ビルド19) — 2026-10-10 12:28 に審査へ提出
 
 **2026-10-11 4:06 に公開**(審査を通過、自動リリース。iTunes lookup の日米で 1.4 を確認)。

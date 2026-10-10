@@ -19,7 +19,8 @@ Watch でセットを入力するためのアプリ(v120〜)。
    - Instagram @kurabell_workout_log_en の名前は「KURABELL | Shows Your Progress」(30字。名前は30字まで)に変えると決めたが、**「14日以内に2回変更」の制限で今は変えられない**(2026-10-11)。
      今は「KURABELL Workout Log」のまま。10月下旬にアカウントセンター(`accountscenter.instagram.com/profiles/17841423459060308/name/`)で入れ直す。保存時に英語版のパスワードの本人確認が出る
 4. ~~X のヘッダーを `header-1.4.png`(AIコーチ入り)に差し替える~~ → 済(2026-10-11)
-5. スクリーンショットに AIコーチの画面がまだ無い(`screenshots.mjs` で入れ替えられる。`--apply` は未検証)
+5. スクリーンショットに AIコーチの画面を入れる → **画像は作成済み**(2026-10-11、`~/Desktop/KURABELL-appstore-screenshots/v6/{ja,en}/` 各9枚。2枚目が AIコーチ、登録は 01〜08、09 の料金は外す)。
+   入れるには新しい版が要る(1.4 は配信中でロック)。日本語名の変更と同じ版で `screenshots.mjs <版> --dir …/v6 --exclude 09`(`--apply` は未検証、まず dry-run)。撮り方は `APPSTORE.md` の「スクリーンショット(v6)」
 6. ~~片付け~~ → 済(2026-10-10 12:40。worktree `-14`・`-14c`・`-14d` とローカルのブランチ v1.4 / v1.4-coach / v1.4-fixes を削除、`.claude/launch.json` の kurabell-14 系も外した)
 
 ### 今日のセッションで決まったこと(2026-10-09〜10)
