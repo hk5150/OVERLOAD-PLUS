@@ -20,6 +20,7 @@ struct WatchSnapshot: Codable, Equatable {
     var volume: Volume? = nil           // 今日のボリュームと基準(改善要望 8)。記録中で、比べる基準があるときだけ
     var finished: Finished? = nil       // 直近に保存した記録の完了画面の中身(改善要望 12)。記録していない間だけ
     var restNotices: [RestNotice]? = nil // 休憩の知らせの経過分と本文(改善要望 4)。nil は古い iPhone(1・2・3分)、空は通知を切っている
+    var phoneActive: Bool? = nil        // iPhone のアプリが前面にいるか(1.4)。前面のときだけ心拍を送る。nil は古い iPhone(送らない)
 
     struct RestNotice: Codable, Equatable {
         var min: Double             // 経過分(1.5 = 1分30秒)

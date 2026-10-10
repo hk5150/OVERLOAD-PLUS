@@ -48,12 +48,14 @@ function showsSet1RM(s, effW, reps) {
 // 自己ベストの更新を祝う(YOU WIN!、1.4)かどうか。RIR を入れたその1セットについて判定する。
 //   set1RM:   そのセットの推定1RM(行に 1RM を出せないセット=13回以上・補助ありは 0 で渡す)
 //   pastBest: 保存済みの記録での自己ベスト(prMap。今日の分は入っていない)
-//   todayBest: 今日それまでに実施したセットの最高(このセットを入れる前の値)
+// **過去の自己ベストを超えたら毎回祝う**(北村さん、2026-10-10)。1.4 (18) は今日それまでの最高も超えたときだけにしていたが、
+// 2セット目は前のセットを写した同じ値か、疲れて少し低いことが多く、「2連続で更新したのに出ない」になった。
+// 同じセットで何度も出さない印は index.html 側(celebratedRef)で持つ。
 // 過去の記録が無い種目(pastBest が 0)では祝わない。初めての種目は毎セットが「更新」になってしまう。
-// 0.01 の差を要るのは、行の緑・⚡(index.html)と同じく、計算の端数で同じ値を「超えた」と言わないため。
-function isNew1RMBest({ set1RM, pastBest, todayBest }) {
+// 0.01 の差を要るのは、行の緑(index.html の over1RM)と同じく、計算の端数で同じ値を「超えた」と言わないため。
+function isNew1RMBest({ set1RM, pastBest }) {
   if (!(set1RM > 0) || !(pastBest > 0)) return false;
-  return set1RM > pastBest + 0.01 && set1RM > (todayBest || 0) + 0.01;
+  return set1RM > pastBest + 0.01;
 }
 
 // ブラウザの<script>グローバルスコープではconst宣言もbare identifierとして参照できるが、

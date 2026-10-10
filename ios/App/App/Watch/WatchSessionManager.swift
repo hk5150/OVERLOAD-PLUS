@@ -17,6 +17,12 @@ final class WatchSessionManager: NSObject {
 
     // op が届いたとき(JS に知らせる)。WatchPlugin.load() が設定する。
     // 書くのはメインスレッド、読むのは WCSession のキューなので lock の内側で扱う
+    // 記録中の心拍が届いたとき(bpm, at, recordStartAt)。WatchPlugin.load() が設定する
+    private var _onHeartRate: ((Int, Double, Double) -> Void)?
+    var onHeartRate: ((Int, Double, Double) -> Void)? {
+        get { lock.lock(); defer { lock.unlock() }; return _onHeartRate }
+        set { lock.lock(); _onHeartRate = newValue; lock.unlock() }
+    }
     private var _onOpsReceived: (() -> Void)?
     var onOpsReceived: (() -> Void)? {
         get { lock.lock(); defer { lock.unlock() }; return _onOpsReceived }
@@ -125,6 +131,11 @@ extension WatchSessionManager: WCSessionDelegate {
     }
 
     func session(_ session: WCSession, didReceiveMessage message: [String: Any]) {
+        // 記録中の心拍(1.4)。op ではないのでキューに入れず、JS にそのまま渡す
+        if let bpm = message["hr"] as? Int {
+            onHeartRate?(bpm, message["at"] as? Double ?? 0, message["rec"] as? Double ?? 0)
+            return
+        }
         receiveOp(message)
     }
 

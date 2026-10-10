@@ -33,6 +33,8 @@ final class WorkoutManager: NSObject, ObservableObject {
     // このワークアウトが対応する iPhone の記録の startAt(ms)。スナップショットで知る
     private(set) var recordStartAt: Double?
     private(set) var sessionStartMs: Double = 0
+    // 心拍を iPhone に送った最後の時刻(5秒に1回までに絞る。sendMessage は iPhone のアプリを裏で起こすため)
+    private var lastHeartRateSentAt: Date = .distantPast
 
     func start(_ config: HKWorkoutConfiguration) async {
         guard !isBusy, HKHealthStore.isHealthDataAvailable() else { return }
@@ -56,6 +58,8 @@ final class WorkoutManager: NSObject, ObservableObject {
             let session = try HKWorkoutSession(healthStore: store, configuration: config)
             let builder = session.associatedWorkoutBuilder()
             builder.dataSource = HKLiveWorkoutDataSource(healthStore: store, workoutConfiguration: config)
+            // 記録中の心拍を iPhone の画面に出す(1.4、北村さん)
+            builder.delegate = self
             session.delegate = self
             let now = Date()
             session.startActivity(with: now)
@@ -176,5 +180,28 @@ extension WorkoutManager: HKWorkoutSessionDelegate {
 
     nonisolated func workoutSession(_ workoutSession: HKWorkoutSession, didFailWithError error: Error) {
         Task { @MainActor in self.sessionEndedUnexpectedly() }
+    }
+}
+
+// 記録中の心拍を iPhone に送る(1.4、北村さん「心拍数も常時表示 ※Apple Watch 装着時のみ」)。
+// 対応付いた記録があるときだけ、5秒に1回まで。届かない(iPhone が近くにいない)ときは捨てる(古い心拍に意味は無いので、
+// op のように送り直したり保存したりしない)。
+extension WorkoutManager: HKLiveWorkoutBuilderDelegate {
+    nonisolated func workoutBuilderDidCollectEvent(_ workoutBuilder: HKLiveWorkoutBuilder) {}
+
+    nonisolated func workoutBuilder(_ workoutBuilder: HKLiveWorkoutBuilder, didCollectDataOf collectedTypes: Set<HKSampleType>) {
+        let type = HKQuantityType(.heartRate)
+        guard collectedTypes.contains(type),
+              let q = workoutBuilder.statistics(for: type)?.mostRecentQuantity() else { return }
+        let bpm = q.doubleValue(for: HKUnit.count().unitDivided(by: .minute()))
+        Task { @MainActor in self.reportHeartRate(bpm) }
+    }
+
+    fileprivate func reportHeartRate(_ bpm: Double) {
+        // iPhone のアプリが裏にいるときは送らない(届けると裏で起こすだけで、表示されない)
+        guard let r = recordStartAt, SessionStore.shared.snapshot?.phoneActive == true,
+              Date().timeIntervalSince(lastHeartRateSentAt) >= 5 else { return }
+        lastHeartRateSentAt = Date()
+        SessionStore.shared.sendHeartRate(bpm: bpm, recordStartAt: r)
     }
 }

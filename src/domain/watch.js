@@ -38,7 +38,7 @@ const watchRir = (v) => (v === "" || v == null || isNaN(Number(v)) ? null : Numb
 //           記録していない間だけ載せる(次の記録を始めたら外す)。Watch は id ごとに1回だけ出す
 // restNotices: 休憩の知らせ [{ min, body }](改善要望 4)。設定で選んだ経過分と、その通知の本文。通知を切っていれば空
 function buildWatchSnapshot({ now, exercises = [], restStartAt = null, dayName = null, menu = [], labels, applied = [], fmtW,
-  recordStartAt = null, lastSaved = null, volume = null, finished = null, restNotices = [] }) {
+  recordStartAt = null, lastSaved = null, volume = null, finished = null, restNotices = [], phoneActive = true }) {
   const state = exercises.length > 0 ? "active" : menu.length > 0 ? "menu" : "idle";
   return {
     v: WATCH_SNAPSHOT_VERSION,
@@ -51,6 +51,8 @@ function buildWatchSnapshot({ now, exercises = [], restStartAt = null, dayName =
     // 種目を全部消して一時的に active でなくなっても、記録(startAt)が続いている間は載せ続ける。
     // Watch はこれが消えたときに「記録が終わった」と判断する
     recordStartAt,
+    // iPhone のアプリが前面にいるか。Watch は前面のときだけ心拍を送る(1.4。裏のアプリを5秒ごとに起こさないため)
+    phoneActive: !!phoneActive,
     lastSaved,
     dayName,
     labels,
@@ -245,7 +247,32 @@ function onWatchOps(handler) {
   return { remove() { removed = true; if (sub) sub.remove(); } };
 }
 
+// 記録中の心拍(1.4)。Watch のワークアウトが動いている間、5秒に1回まで届く。handler({ bpm, at, recordStartAt })
+function onWatchHeartRate(handler) {
+  const plugin = capWatch();
+  if (!plugin) return { remove() {} };
+  let sub = null;
+  let removed = false;
+  Promise.resolve(plugin.addListener("heartRate", (d) => handler(d || {}))).then((s) => {
+    sub = s;
+    if (removed && sub) sub.remove();
+  }).catch(() => {});
+  return { remove() { removed = true; if (sub) sub.remove(); } };
+}
+
+// 心拍を表示してよいか。この記録のワークアウトが Watch で動いていて、届いた値が新しいとき(15秒以内)だけ
+const WATCH_HR_FRESH_MS = 15000;
+function watchHeartRateToShow(hr, { watchLive, startAt, now }) {
+  if (!watchLive || !hr || !(hr.bpm > 0)) return null;
+  if (hr.recordStartAt && startAt && hr.recordStartAt !== startAt) return null;
+  if (!(now - hr.receivedAt <= WATCH_HR_FRESH_MS)) return null;
+  return Math.round(hr.bpm);
+}
+
 globalThis.WATCH_APPLIED_KEEP = WATCH_APPLIED_KEEP;
+globalThis.onWatchHeartRate = onWatchHeartRate;
+globalThis.watchHeartRateToShow = watchHeartRateToShow;
+globalThis.WATCH_HR_FRESH_MS = WATCH_HR_FRESH_MS;
 globalThis.watchWeightStep = watchWeightStep;
 globalThis.buildWatchSnapshot = buildWatchSnapshot;
 globalThis.applyWatchOps = applyWatchOps;

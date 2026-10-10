@@ -19,7 +19,7 @@ import { api, all, APP_ID, REPO, APPLY, has, positional, checkLocks, findVersion
 const FIELDS = { description: "description.txt", keywords: "keywords.txt", promotionalText: "promotional_text.txt", whatsNew: "whats_new.txt" };
 const LIMITS = { description: 4000, keywords: 100, promotionalText: 170, whatsNew: 4000, notes: 4000 };
 // App Store Connect が「無効な文字」で保存を拒んだ文字(1.3 の提出で踏んだ。APPSTORE.md)。見つけたら止める
-const BAD_CHARS = { "⋯": "⋯ → … に", "✕": "✕ → × に" };
+const BAD_CHARS = { "⋯": "⋯ → … に", "✕": "✕ → × に", "♥": "♥ → 文字で書く(1.4 (19) のテスト内容で拒まれた)" };
 const LOCALES = ["ja", "en-US"];
 
 const [cmd, ver, buildNo] = positional();

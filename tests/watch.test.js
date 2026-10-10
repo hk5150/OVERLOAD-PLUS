@@ -473,7 +473,8 @@ describe("Watch アプリのネイティブ設定", () => {
     expect(mgr).toContain('payload["op"]');
     expect(mgr).toContain('payload["opId"]');
     // sendMessage と transferUserInfo のどちらで届いても同じ受け口に入る
-    expect(mgr).toContain("didReceiveMessage message: [String: Any]) {\n        receiveOp(message)");
+    // sendMessage で届く心拍(1.4、"hr")だけは op ではないので先に分ける。それ以外は必ず op の受け口に入る
+    expect(mgr).toMatch(/didReceiveMessage message: \[String: Any\]\) \{\n(?:\s*\/\/.*\n)*\s*if let bpm = message\["hr"\] as\? Int \{\n[^}]*return\n\s*\}\n\s*receiveOp\(message\)/);
     expect(mgr).toContain("didReceiveUserInfo userInfo: [String: Any] = [:]) {\n        receiveOp(userInfo)");
     expect(mgr).toContain('updateApplicationContext(["snapshot": json])');
     expect(store).toContain('context["snapshot"]');
@@ -493,5 +494,26 @@ describe("index.html のrefの宣言順", () => {
       expect(decl, `${m[1]} の宣言が見つからない`).toBeGreaterThanOrEqual(0);
       expect(decl, `${m[1]} を宣言より前で使っている`).toBeLessThan(m.index);
     }
+  });
+});
+
+// 記録中の心拍(1.4)。Watch のワークアウトが動いていて、新しい値のときだけ出す
+describe("watchHeartRateToShow", () => {
+  const { watchHeartRateToShow } = loadDomainModule("src/domain/watch.js");
+  const hr = { bpm: 128.4, recordStartAt: 1000, receivedAt: 50000 };
+  it("この記録のワークアウトで、15秒以内に届いた値なら丸めて返す", () => {
+    expect(watchHeartRateToShow(hr, { watchLive: true, startAt: 1000, now: 60000 })).toBe(128);
+  });
+  it("Watch のワークアウトが動いていなければ出さない", () => {
+    expect(watchHeartRateToShow(hr, { watchLive: false, startAt: 1000, now: 60000 })).toBe(null);
+  });
+  it("15秒より古ければ出さない", () => {
+    expect(watchHeartRateToShow(hr, { watchLive: true, startAt: 1000, now: 65001 })).toBe(null);
+  });
+  it("別の記録の心拍は出さない", () => {
+    expect(watchHeartRateToShow(hr, { watchLive: true, startAt: 2000, now: 60000 })).toBe(null);
+  });
+  it("値が無ければ出さない", () => {
+    expect(watchHeartRateToShow(null, { watchLive: true, startAt: 1000, now: 60000 })).toBe(null);
   });
 });

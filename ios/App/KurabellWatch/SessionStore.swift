@@ -2,6 +2,7 @@ import Foundation
 import SwiftUI
 import UserNotifications
 import WatchConnectivity
+import WatchKit
 
 // Watch 側の状態のすべて。
 // - base: iPhone から最後に届いたスナップショット(iPhone が正)
@@ -244,6 +245,14 @@ final class SessionStore: NSObject, ObservableObject {
     }
 
     // iPhone への知らせ: "started"(この記録は Watch が記録する)/ "saved" / "discarded"
+    // 記録中の心拍(WorkoutManager から)。届くときだけ送り、届かなければ捨てる(op の流れには入れない)
+    func sendHeartRate(bpm: Double, recordStartAt: Double) {
+        let s = WCSession.default
+        guard s.activationState == .activated, s.isReachable else { return }
+        s.sendMessage(["hr": Int(bpm.rounded()), "at": Date().timeIntervalSince1970 * 1000, "rec": recordStartAt],
+                      replyHandler: nil, errorHandler: nil)
+    }
+
     func sendWorkoutEvent(_ status: String, recordStartAt: Double) {
         let op = WatchOp(opId: UUID().uuidString, kind: "workout", exId: "", setIndex: 0,
                          weight: "", reps: "", rir: nil, restStartAt: nil,
@@ -330,11 +339,22 @@ final class SessionStore: NSObject, ObservableObject {
     // 休憩画面の振動(改善要望 4a)も同じ時間にする
     var restNoticeMinutes: [Double] { restNotices().map(\.min) }
 
+    // 休憩の通知の予約の世代。予約や取り消しのたびに進め、古い予約の続きは捨てる。
+    // 権限の確認と add は非同期で、続けて予約し直すと古い時刻の add が後から入り、ずれた時刻に鳴っていた(1.4 (18)、北村さん「インターバル通知がズレて来る」)
+    private var restNotifyGeneration = 0
+    // 休憩画面を開いているか。開いている間は画面側の振動(Views.swift)で知らせるので、通知は前面に出さない(二重に鳴っていた)
+    var restViewVisible = false
+
     private func scheduleRestNotifications(from start: Date) {
+        restNotifyGeneration += 1
+        let gen = restNotifyGeneration
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { granted, _ in
             guard granted else { return }
             Task { @MainActor in
-                self.cancelRestNotifications()
+                guard gen == self.restNotifyGeneration else { return }
+                self.removeRestNotifications()
+                // 前の休憩の通知が通知センターに溜まり続けないよう、届き済みのものも消す
+                UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: Self.restNotifyIds)
                 // 文言は iPhone のアプリ内言語設定に従わせるため、スナップショットのものを使う
                 let title = self.snapshot?.labels.rest ?? "Rest"
                 for n in self.restNotices() {
@@ -348,16 +368,29 @@ final class SessionStore: NSObject, ObservableObject {
                     let req = UNNotificationRequest(
                         identifier: Self.restNotifyPrefix + String(n.min), content: content,
                         trigger: UNTimeIntervalNotificationTrigger(timeInterval: interval, repeats: false))
+                    // 待っている間に新しい予約・取り消しがあれば、この古い予約は入れない
+                    guard gen == self.restNotifyGeneration else { return }
                     try? await UNUserNotificationCenter.current().add(req)
+                    // add を待つ間に取り消された(保存・休憩の終了など)なら、入れたばかりのものを消す
+                    if gen != self.restNotifyGeneration {
+                        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [req.identifier])
+                        return
+                    }
                 }
             }
         }
     }
 
     private func cancelRestNotifications() {
-        // 1.2 までは "kurabell-watch-rest-1" のように整数で積んでいたので、そちらも消す
-        let ids = Self.restNotifyChoices.map { Self.restNotifyPrefix + String($0) } + [1, 2, 3].map { Self.restNotifyPrefix + String($0) }
-        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ids)
+        restNotifyGeneration += 1
+        removeRestNotifications()
+    }
+
+    // 1.2 までは "kurabell-watch-rest-1" のように整数で積んでいたので、そちらも消す
+    private static let restNotifyIds = restNotifyChoices.map { restNotifyPrefix + String($0) } + [1, 2, 3].map { restNotifyPrefix + String($0) }
+
+    private func removeRestNotifications() {
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: Self.restNotifyIds)
     }
 }
 
@@ -396,6 +429,12 @@ extension SessionStore: WCSessionDelegate {
 extension SessionStore: UNUserNotificationCenterDelegate {
     // Watch アプリを開いているときも、バナーと触覚で知らせる
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
-        [.banner, .sound]
+        // 休憩画面を開いている間は、画面側の振動だけで知らせる(通知も出すと同じ時刻に二重に鳴る)
+        // 手首を下ろしてアプリが止まっている(active でない)ときは、画面側の振動が鳴らないので通知を出す(reviewer 指摘)
+        if notification.request.identifier.hasPrefix("kurabell-watch-rest-"),
+           await MainActor.run(body: { self.restViewVisible && WKApplication.shared().applicationState == .active }) {
+            return []
+        }
+        return [.banner, .sound]
     }
 }

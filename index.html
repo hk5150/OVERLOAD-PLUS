@@ -212,11 +212,13 @@
     { key:'health',     urls:['src/domain/health.js'],
       globals:['healthAvailable','healthSupported','healthRequestAuthorization','healthAuthDecided','healthAuthorizationStatus','healthWorkoutKey','HEALTH_MAX_WORKOUT_MS','healthWorkoutRange','healthSaveWorkout','healthDeleteWorkout','healthStartWatchWorkout','healthLatestBodyMass','healthSaveBodyMass','pickHealthWeight','healthWeightToWrite'] },
     { key:'watch',      urls:['src/domain/watch.js'],
-      globals:['WATCH_APPLIED_KEEP','watchWeightStep','buildWatchSnapshot','applyWatchOps','watchWorkoutFromOps','watchRestCapableFromOps','watchWorkoutStopped','settleWatchHealth','WATCH_HEALTH_CONFIRM_MS','syncWatchSnapshot','peekWatchOps','ackWatchOps','onWatchOps'] },
+      globals:['WATCH_APPLIED_KEEP','watchWeightStep','buildWatchSnapshot','applyWatchOps','watchWorkoutFromOps','watchRestCapableFromOps','watchWorkoutStopped','settleWatchHealth','WATCH_HEALTH_CONFIRM_MS','syncWatchSnapshot','peekWatchOps','ackWatchOps','onWatchOps','onWatchHeartRate','watchHeartRateToShow','WATCH_HR_FRESH_MS'] },
     { key:'fileExport', urls:['src/domain/fileExport.js'],
-      globals:['fileExportAvailable','shareTextFile'] },
+      globals:['fileExportAvailable','shareTextFile','shareImageFile'] },
     { key:'review',     urls:['src/domain/review.js'],
       globals:['REVIEW_REQUESTED_KEY','shouldRequestReview','requestAppReview'] },
+    { key:'superset',   urls:['src/domain/superset.js'],
+      globals:['normalizeSupersets'] },
     { key:'aiCoach',    urls:['src/domain/aiCoach.js'],
       globals:['normalizeCoachText','extractCoachPlan','coachNameKey','makeCoachNameResolver','validateCoachPlan','coachSetDone','mergeCoachPlan','revertCoachPlan'] },
     // iOS版のSQLite永続化層。Web版では何もしない(nativeSqliteDriver()がnullを返すだけ)。
@@ -326,7 +328,7 @@ const WATCH_FINISHED_KEY = "watch-finished-v1"; // 保存したら Watch に出�
 const PRE_IMPORT_BACKUP_KEY = "workout-log-v1-pre-import"; // バックアップ復元前のデータ退避(復元に失敗した場合の保険)
 // ヘッダーのバージョンバッジとバックアップのappVersionで共有する単一の定数。
 // sw.js の CACHE 定数とは tests/version.test.js が数字の一致を機械的に縛っている(CLAUDE.md参照)。
-const APP_VERSION = "v140";
+const APP_VERSION = "v141";
 // store(保存レイヤ)は src/domain/storage.js へ移設(テストのため)。
 // LIBSで<script src>読み込み済みなのでグローバルの store をそのまま参照できる。
 const uid = () => Math.random().toString(36).slice(2, 8);
@@ -375,6 +377,15 @@ const AI_SERVICES = [
   { id: "grok",       label: "Grok",       url: "https://grok.com/" },
 ];
 const DEFAULT_AI_SERVICE = "chatgpt";
+// 音楽アプリを開くボタン(1.4、北村さん)。iOS の制約で、ほかのアプリの音楽はこちらから操作できない
+// (MPMusicPlayerController で触れるのは「ミュージック」アプリだけで、Spotify などは不可)ので、開くだけにする。
+// URL スキームで開く。入っていなければ何も起きない
+const MUSIC_APPS = [
+  { id: "apple",   label: "Apple Music",   url: "music://" },
+  { id: "spotify", label: "Spotify",       url: "spotify://" },
+  { id: "ytmusic", label: "YouTube Music", url: "youtubemusic://" },
+];
+const musicAppOf = (id) => MUSIC_APPS.find(m => m.id === id) || null;
 const aiServiceOf = (id) => AI_SERVICES.find(s => s.id === id) || AI_SERVICES[0];
 
 // 保存データの移行処理。通常の起動読み込みとバックアップ復元(importBackup)の両方から使う。
@@ -402,6 +413,8 @@ const defaultProfile = (p) => ({
   // 休憩の Live Activity(ロック画面・Dynamic Island)。既定はオフ(北村さん、2026-10-09)。1.3 まで常にオンだった利用者も、
   // 保存していない項目なので更新後はオフになる
   restLiveActivity: p?.restLiveActivity === true,
+  // 音楽アプリ(MUSIC_APPS の id。"none" ならボタンを出さない)。既定は全員の iPhone にある Apple Music
+  musicApp: typeof p?.musicApp === "string" ? p.musicApp : "apple",
 });
 
 // extractWorkoutsArray・validateWorkoutsShapeは src/domain/backupValidation.js へ移設(テストのため)。
@@ -674,7 +687,7 @@ function NumInput({ value, onChange, onFocus, onBlur, inputMode = "decimal", sty
 }
 
 // 線画アイコン。絵文字(🏆⚡📌💾🗑など)は端末によって見た目が変わり、暗い画面で浮くので置き換えた。
-// 初回ガイドの GuideArt と同じく、自前の SVG で持つ(外部のアイコンフォントは読み込まない)。
+// 自前の SVG で持つ(外部のアイコンフォントは読み込まない)。
 const ICON_PATHS = {
   pin:     <><path d="M9 4h6l-1 6 3 3H7l3-3z"/><path d="M12 13v7"/></>,
   bolt:    <path d="M13 3 5 14h6l-1 7 8-11h-6z"/>,
@@ -693,6 +706,8 @@ const ICON_PATHS = {
   chat:    <><path d="M4 5h16v11H10l-4 3.5V16H4z"/><path d="M8 9.5h8M8 12.5h5"/></>,
   swap:    <><path d="M4 8h13l-3-3M20 16H7l3 3"/></>,
   link:    <><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></>,
+  share:   <><path d="M12 3v12M7.5 7.5 12 3l4.5 4.5"/><path d="M5 12v7a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-7"/></>,
+  music:   <><path d="M9 18V6l11-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/></>,
   settings:<><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></>,
 };
 function Icon({ name, size = 14, color = "currentColor", style }) {
@@ -719,121 +734,6 @@ function JudgeBadge({ type }) {
 }
 
 // 初回ガイドのビジュアル(絵文字ではなくSVG線画)
-function GuideArt({ kind }) {
-  const R = C.red, Y = C.yellow, B = C.blue, G = C.green, L = C.text, M = C.muted, BR = C.border;
-  const wrap = (children) => (
-    <svg viewBox="0 0 200 150" width="200" height="150" style={{ maxWidth: "68%", height: "auto" }} fill="none" xmlns="http://www.w3.org/2000/svg">
-      {children}
-    </svg>
-  );
-  if (kind === "hero") {
-    // バーベル + 上向き矢印(オーバーロード)
-    return wrap(<>
-      <circle cx="100" cy="75" r="60" stroke={BR} strokeWidth="1.5" strokeDasharray="4 5" opacity="0.6" />
-      {/* シャフト */}
-      <rect x="45" y="88" width="110" height="7" rx="3.5" fill={L} />
-      {/* プレート左右(赤) */}
-      <rect x="38" y="72" width="12" height="39" rx="3" fill={R} />
-      <rect x="150" y="72" width="12" height="39" rx="3" fill={R} />
-      {/* 内側プレート(黄) */}
-      <rect x="54" y="80" width="8" height="23" rx="2" fill={Y} />
-      <rect x="138" y="80" width="8" height="23" rx="2" fill={Y} />
-      {/* 上向き矢印 */}
-      <path d="M100 62 L100 24" stroke={G} strokeWidth="5" strokeLinecap="round" />
-      <path d="M86 38 L100 22 L114 38" stroke={G} strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
-    </>);
-  }
-  if (kind === "split") {
-    // 3日分のカード(分割)
-    return wrap(<>
-      {[0, 1, 2].map((i) => (
-        <g key={i}>
-          <rect x={20 + i * 58} y={38 + i * 6} width="48" height="74" rx="8" fill={C.surface} stroke={i === 0 ? R : BR} strokeWidth={i === 0 ? "2" : "1.5"} />
-          <rect x={28 + i * 58} y={48 + i * 6} width="24" height="5" rx="2.5" fill={[R, B, Y][i]} />
-          <rect x={28 + i * 58} y={60 + i * 6} width="32" height="4" rx="2" fill={M} />
-          <rect x={28 + i * 58} y={70 + i * 6} width="28" height="4" rx="2" fill={M} />
-          <rect x={28 + i * 58} y={80 + i * 6} width="30" height="4" rx="2" fill={M} />
-        </g>
-      ))}
-      <path d="M150 30 a10 10 0 1 1 -3 -7" stroke={G} strokeWidth="3" strokeLinecap="round" />
-      <path d="M147 16 l3 7 l-8 1" stroke={G} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-    </>);
-  }
-  if (kind === "record") {
-    // 記録カード + チェック
-    return wrap(<>
-      <rect x="36" y="26" width="128" height="98" rx="10" fill={C.surface} stroke={BR} strokeWidth="1.5" />
-      <rect x="50" y="40" width="52" height="7" rx="3.5" fill={L} />
-      {[0, 1, 2].map((i) => (
-        <g key={i}>
-          <circle cx="56" cy={64 + i * 20} r="6" fill="none" stroke={i < 2 ? G : M} strokeWidth="2" />
-          {i < 2 && <path d={`M53 ${64 + i * 20} l2.5 2.5 l4 -5`} stroke={G} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />}
-          <rect x="70" y={60 + i * 20} width="34" height="7" rx="3.5" fill={i < 2 ? L : M} opacity={i < 2 ? 1 : 0.5} />
-          <rect x="112" y={60 + i * 20} width="18" height="7" rx="3.5" fill={Y} opacity={i < 2 ? 1 : 0.4} />
-          <rect x="138" y={60 + i * 20} width="14" height="7" rx="3.5" fill={B} opacity={i < 2 ? 1 : 0.4} />
-        </g>
-      ))}
-    </>);
-  }
-  if (kind === "rir") {
-    // セット行 + 「あと何回できた?」の 0 / 1 / 2 / 3+(1 を選んだところ)
-    return wrap(<>
-      <rect x="14" y="16" width="172" height="44" rx="10" fill={C.surface} stroke={BR} strokeWidth="1.5" />
-      <rect x="26" y="28" width="40" height="20" rx="5" fill={L} />
-      <rect x="74" y="28" width="28" height="20" rx="5" fill={L} />
-      <rect x="112" y="34" width="62" height="8" rx="4" fill={M} opacity="0.5" />
-      {["0", "1", "2", "3+"].map((label, i) => (
-        <g key={label}>
-          <rect x={14 + i * 44} y="76" width="40" height="48" rx="10" fill={i === 1 ? Y : C.surface} stroke={i === 1 ? Y : BR} strokeWidth="1.5" />
-          <text x={34 + i * 44} y="108" textAnchor="middle" fontSize="22" fontWeight="800" fontFamily="'Barlow Condensed', sans-serif" fill={i === 1 ? "#14171C" : M}>{label}</text>
-        </g>
-      ))}
-    </>);
-  }
-  if (kind === "coach") {
-    // 相談文(左)→ AI の答え(右)→ 今日のメニューに入る
-    return wrap(<>
-      <rect x="18" y="18" width="92" height="40" rx="10" fill={C.surface} stroke={BR} strokeWidth="1.5" />
-      <rect x="28" y="28" width="60" height="5" rx="2.5" fill={M} />
-      <rect x="28" y="39" width="44" height="5" rx="2.5" fill={M} />
-      <rect x="90" y="52" width="92" height="40" rx="10" fill={Y} opacity="0.92" />
-      <rect x="100" y="62" width="64" height="5" rx="2.5" fill="#14171C" opacity="0.7" />
-      <rect x="100" y="73" width="48" height="5" rx="2.5" fill="#14171C" opacity="0.7" />
-      <path d="M100 100 L100 114" stroke={G} strokeWidth="3" strokeLinecap="round" />
-      <path d="M93 108 L100 115 L107 108" stroke={G} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-      <rect x="40" y="120" width="120" height="22" rx="7" fill={C.surface} stroke={R} strokeWidth="1.5" />
-      <rect x="50" y="128" width="40" height="6" rx="3" fill={L} />
-      <rect x="118" y="128" width="30" height="6" rx="3" fill={Y} />
-    </>);
-  }
-  if (kind === "watch") {
-    // Apple Watch(重量と −/+)
-    return wrap(<>
-      <rect x="76" y="6" width="48" height="22" rx="6" fill={C.surface2} />
-      <rect x="76" y="122" width="48" height="22" rx="6" fill={C.surface2} />
-      <rect x="62" y="24" width="76" height="102" rx="22" fill="#000" stroke={BR} strokeWidth="2" />
-      <rect x="139" y="56" width="5" height="18" rx="2.5" fill={BR} />
-      <text x="100" y="72" textAnchor="middle" fontSize="28" fontWeight="800" fontFamily="'Barlow Condensed', sans-serif" fill={L}>24</text>
-      <text x="100" y="86" textAnchor="middle" fontSize="9" fontWeight="700" fill={M}>kg × 10</text>
-      <circle cx="82" cy="104" r="10" fill={C.surface2} />
-      <circle cx="118" cy="104" r="10" fill={G} />
-      <path d="M77 104 L87 104" stroke={L} strokeWidth="2.5" strokeLinecap="round" />
-      <path d="M113 104 L123 104 M118 99 L118 109" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" />
-    </>);
-  }
-  // progress: 折れ線グラフ(右肩上がり)
-  return wrap(<>
-    <line x1="34" y1="118" x2="168" y2="118" stroke={BR} strokeWidth="1.5" />
-    <line x1="34" y1="26" x2="34" y2="118" stroke={BR} strokeWidth="1.5" />
-    <path d="M40 104 L72 92 L104 70 L136 52 L162 34" stroke={R} strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
-    {[[40, 104], [72, 92], [104, 70], [136, 52], [162, 34]].map(([x, y], i) => (
-      <circle key={i} cx={x} cy={y} r="5" fill={i === 4 ? Y : R} />
-    ))}
-    {/* PRバッジ */}
-    <circle cx="162" cy="34" r="12" fill="none" stroke={Y} strokeWidth="2" opacity="0.8" />
-  </>);
-}
-
 function RirSelect({ value, onChange }) {
   return (
     <div style={{ display: "flex", gap: 3 }}>
@@ -940,7 +840,7 @@ class ErrorBoundary extends React.Component {
 // 新規インストール時、および全データ削除後の既定値(clearAllで再利用し、削除直後に古いprofileが復活しないようにする)
 // defaultProfile() と同じフィールドを持たせる。ここに書き忘れると、初回起動と
 // 「全データ削除」直後だけ値がundefinedになり、設定タブの選択状態が消える。
-const DEFAULT_PROFILE = { bodyweight: 70, soundOn: true, defTargetReps: 10, defIncrement: 2.5, lang: null, unit: null, aiService: DEFAULT_AI_SERVICE, healthOn: false, healthBwAt: 0, restNotifyMinutes: [1, 2, 3], restLiveActivity: false };
+const DEFAULT_PROFILE = { bodyweight: 70, soundOn: true, defTargetReps: 10, defIncrement: 2.5, lang: null, unit: null, aiService: DEFAULT_AI_SERVICE, healthOn: false, healthBwAt: 0, restNotifyMinutes: [1, 2, 3], restLiveActivity: false, musicApp: "apple" };
 
 // ================= アプリ本体 =================
 // 文言中の「|」の位置だけで折り返す(日本語は語の途中でも折り返されるため、意味の切れ目を指定する)。
@@ -1570,6 +1470,22 @@ function App() {
   // 前面復帰(visibilitychange)では呼ばない: ロック画面でスワイプして消した表示を復活させないため。
   // Watch がこの記録のワークアウトを記録している間は出さない(Watch の画面を隠すため。休憩は Watch 側が表示・通知する)。
   const watchLive = watchLiveFor != null && watchLiveFor === startAt;
+  // Watch のワークアウト中の心拍(1.4、src/domain/watch.js)。上部バーの「経過」の見出しの横に出す。
+  // 古い値(15秒より前)・別の記録の値は出さない。上部バーは経過時間で毎秒描き直されるので、古くなれば自然に消える
+  const [watchHr, setWatchHr] = useState(null);
+  // iPhone のアプリが前面にいるか。Watch は前面のときだけ心拍を送る(裏のアプリを5秒ごとに起こさないため。reviewer 指摘)
+  const [pageVisible, setPageVisible] = useState(() => typeof document === "undefined" || document.visibilityState === "visible");
+  useEffect(() => {
+    const onVis = () => setPageVisible(document.visibilityState === "visible");
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
+  }, []);
+  useEffect(() => {
+    if (!loaded) return;
+    const sub = onWatchHeartRate(d => setWatchHr({ bpm: Number(d.bpm), recordStartAt: Number(d.recordStartAt) || null, receivedAt: Date.now() }));
+    return () => sub.remove();
+  }, [loaded]);
+  const heartRateNow = watchHeartRateToShow(watchHr, { watchLive, startAt, now: Date.now() });
   // Watch がこの記録の休憩の通知を受け持っている(1.3 以降の Watch で、ワークアウトを記録中)
   const watchOwnsRest = watchLive && watchRestFor === startAt;
   useEffect(() => {
@@ -1711,6 +1627,14 @@ function App() {
   }, [restStartAt, soundOn, notifyGranted, watchOwnsRest, restMinutesKey, lang]);
 
   const startRest = () => { setRestStartAt(Date.now()); setRestElapsed(0); firedMinRef.current = 0; }; // 記録入力のたびに0から再スタート
+  // 入力欄から指を離したときの休憩開始は、休憩中なら始め直さない。休憩中に次のセットを先に入れておくと、
+  // そのたびに休憩が0に戻り、iPhone と Watch の通知の時刻が後ろへずれ続けていた(北村さん「インターバル通知がズレて来る」、1.4 (18))
+  // ただし、ウォームアップの行(RIR を入れないので、ここでしか休憩が始まらない)と、知らせる最後の分を過ぎた休憩は始め直す
+  // (休憩は「終了」を押すまで続くので、そうしないと次の種目の休憩が計られない。reviewer 指摘)
+  const startRestIfIdle = (isWarmup) => {
+    const lastMin = Math.max(...normalizeRestNotifyMinutes(profile.restNotifyMinutes));
+    if (restStartAt == null || isWarmup || Date.now() - restStartAt > lastMin * 60000) startRest();
+  };
   const stopRest = () => { setRestStartAt(null); setRestElapsed(0); firedMinRef.current = 0; setRestFull(false); };
 
   // 記録開始時にセッションタイマー始動
@@ -1779,6 +1703,122 @@ function App() {
     bestWinTimerRef.current = setTimeout(() => setBestWin(null), 1800);
   };
   useEffect(() => () => clearTimeout(bestWinTimerRef.current), []);
+  // ---- お疲れ様の画面(iPhone、1.4)と、Instagram 用の画像 ----
+  const [finishScreen, setFinishScreen] = useState(null); // { summary: finishedSummary, entry }
+  const [imageBusy, setImageBusy] = useState(false);
+  const [imageError, setImageError] = useState(false);
+  // 閉じた後に、自己ベストを超えた日だけ App Store のレビューを頼む(出すかどうかは iOS が決める。
+  // 依頼した日時だけ残して、次は120日あける。src/domain/review.js)。お疲れ様の画面の上に重ねると、最初に見るのが評価の依頼になる
+  const closeFinish = async () => {
+    const f = finishScreen;
+    setFinishScreen(null); setImageError(false);
+    if (!f?.beatPrevious) return;
+    try {
+      const lastRequestedAt = (await store.get(REVIEW_REQUESTED_KEY))?.value;
+      if (shouldRequestReview({ beatPrevious: true, workoutsCount: f.workoutsCount, lastRequestedAt, now: Date.now() })
+          && await requestAppReview()) {
+        await store.set(REVIEW_REQUESTED_KEY, new Date().toISOString());
+      }
+    } catch { /* noop */ }
+  };
+
+  // 1回分の記録を 1080×1350(Instagram のフィードの縦長)に描く。外部の画像・フォントは使わない
+  // (数字は同梱の Barlow Condensed、日本語は端末のフォント)。種目は上から6つまで、各種目のトップセットを出す
+  const drawWorkoutImage = async (entry, summary) => {
+    try { await Promise.all([document.fonts.load("800 80px 'Barlow Condensed'"), document.fonts.load("600 40px 'Barlow Condensed'")]); } catch { /* 無ければ代わりの字形で描く */ }
+    const W = 1080, H = 1350, P = 84;
+    const cv = document.createElement("canvas");
+    cv.width = W; cv.height = H;
+    const g = cv.getContext("2d");
+    const BAR = "'Barlow Condensed', sans-serif";
+    g.fillStyle = C.bg; g.fillRect(0, 0, W, H);
+    g.textBaseline = "alphabetic";
+    // 見出し: ロゴの文字と日付
+    g.fillStyle = C.yellow; g.font = `800 52px ${BAR}`; g.textAlign = "left";
+    g.fillText("KURABELL", P, 120);
+    const d = new Date(entry.date);
+    g.fillStyle = C.muted; g.font = `600 40px ${BAR}`; g.textAlign = "right";
+    g.fillText(`${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")}`, W - P, 120);
+    // Day の名前
+    g.textAlign = "left"; g.fillStyle = C.text; g.font = `800 64px ${FONT_UI}`;
+    g.fillText(entry.session ? dayName(entry.session) : summary.title, P, 220);
+    // 中身(ボリューム・時間・種目)は、見出しと足もとの間の上下中央に置く(種目が少ない日に下ががら空きにならないように)
+    const shown = entry.exercises.slice(0, 6);
+    const blockH = 330 + shown.length * 92 + (entry.exercises.length > 6 ? 40 : 0);
+    const oy = Math.max(0, Math.round((H - 170 - 260 - blockH) / 2));
+    g.save(); g.translate(0, oy);
+    // ボリューム
+    g.fillStyle = C.muted; g.font = `600 34px ${BAR}`;
+    g.fillText("TOTAL VOLUME", P, 320);
+    const vol = Math.round(toU(entry.totalVolume)).toLocaleString();
+    g.fillStyle = C.text; g.font = `800 190px ${BAR}`;
+    g.fillText(vol, P - 6, 490);
+    const vw = g.measureText(vol).width;
+    g.fillStyle = C.muted; g.font = `700 64px ${BAR}`;
+    g.fillText(uLabel(), P + vw + 10, 490);
+    // 時間・種目数・セット数
+    const sets = entry.exercises.reduce((a, ex) => a + ex.sets.filter(x => !x.warmup).length, 0);
+    g.fillStyle = C.grey; g.font = `600 44px ${BAR}`;
+    const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+    g.fillText(`${entry.durationMin ?? "-"} MIN  ·  ${plural(entry.exercises.length, "EXERCISE", "EXERCISES")}  ·  ${plural(sets, "SET", "SETS")}`, P, 570);
+    g.fillStyle = C.border; g.fillRect(P, 620, W - P * 2, 3);
+    // 種目ごとのトップセット(自己ベストを更新した種目には印)
+    const prs = new Set(summary.prs || []);
+    let y = 710;
+    shown.forEach(ex => {
+      const top = topSetOf(ex);
+      const isPr = prs.has(exName(ex.name));
+      g.textAlign = "left"; g.fillStyle = C.text; g.font = `700 40px ${FONT_UI}`;
+      let name = exName(ex.name);
+      while (g.measureText(name).width > 560 && name.length > 2) name = name.slice(0, -2) + "…";
+      g.fillText(name, P, y);
+      if (isPr) {
+        const nw = g.measureText(name).width;
+        g.fillStyle = C.yellow; g.font = `800 30px ${BAR}`;
+        g.fillText("NEW 1RM", P + nw + 18, y - 4);
+      }
+      if (top) {
+        // 自重種目は加重分なので「BW+10kg」と書く(「10kg」だけだと合計10kgに読める)
+        const bw = (ex.bwFactor || 0) > 0;
+        const w = Number(top.weight) > 0 ? `${bw ? "BW+" : ""}${wU(top.weight)}${uLabel()}` : "BW";
+        g.textAlign = "right"; g.fillStyle = C.text; g.font = `700 52px ${BAR}`;
+        g.fillText(`${w} × ${top.reps}`, W - P, y + 2);
+      }
+      y += 92;
+    });
+    if (entry.exercises.length > 6) {
+      g.textAlign = "left"; g.fillStyle = C.muted; g.font = `600 34px ${BAR}`;
+      g.fillText(`+${entry.exercises.length - 6} MORE`, P, y - 20);
+    }
+    g.restore();
+    // 足もと: アプリ名と Instagram のアカウント(表示言語に合わせる)
+    g.fillStyle = C.border; g.fillRect(P, H - 150, W - P * 2, 3);
+    g.textAlign = "left"; g.fillStyle = C.muted; g.font = `600 36px ${BAR}`;
+    g.fillText("KURABELL WORKOUT LOG", P, H - 80);
+    g.textAlign = "right";
+    g.fillText(lang === "en" ? "@kurabell_workout_log_en" : "@kurabell_workout_log_jp", W - P, H - 80);
+    return cv;
+  };
+
+  const shareWorkoutImage = async () => {
+    if (!finishScreen || imageBusy) return;
+    setImageBusy(true); setImageError(false);
+    try {
+      const cv = await drawWorkoutImage(finishScreen.entry, finishScreen.summary);
+      const dataUrl = cv.toDataURL("image/png");
+      if (fileExportAvailable()) {
+        const r = await shareImageFile(dataUrl.split(",")[1]);
+        if (r == null) setImageError(true);
+      } else {
+        // Web 版はダウンロード
+        const a = document.createElement("a");
+        a.href = dataUrl; a.download = `kurabell-${new Date(finishScreen.entry.date).toLocaleDateString("sv-SE")}.png`;
+        document.body.appendChild(a); a.click(); a.remove();
+      }
+    } catch { setImageError(true); }
+    setImageBusy(false);
+  };
+
   // 記録中の種目の最大重量(実際に挙げた重量。回数1以上のセットのみ)
   const liveMaxWeight = (ex) => {
     const isDb = resolveIsDb(ex.name, ex.isDb);
@@ -2109,6 +2149,8 @@ function App() {
       })
     : autoMenu;
   const COACH_SESSIONS = 3; // 種目ごとに渡す直近の記録の回数(スマホで貼るには長すぎないように)
+  // 重量の単位(表示単位で)。アプリ全体で 1kg 刻み(lb は Watch と同じ 2.5lb)。AIの案もこの単位に丸めて取り込む
+  const COACH_WEIGHT_STEP = () => (uLabel() === "lb" ? 2.5 : 1); // 種目ごとに渡す直近の記録の回数(スマホで貼るには長すぎないように)
 
   const coachPromptText = (mode) => {
     const unit = uLabel();
@@ -2136,7 +2178,8 @@ function App() {
       const cfg = today.find(e => e.name === name) || lastConfig(name);
       const isDb = resolveIsDb(name, cfg.isDb);
       lines.push(`${k + 1}. ${exName(name)}${isDb ? t("coach.p.perHand") : (cfg.bwFactor || 0) > 0 ? t("coach.p.added") : ""}`);
-      lines.push(`   ${t("coach.p.target", { lo: cfg.repLow, hi: cfg.repHigh, inc: `${incU(cfg.increment ?? profile.defIncrement)}${unit}` })}`);
+      // 重量はアプリ全体で 1kg 刻み(Watch の −/+ も 1kg)。種目ごとの「刻み」(2.5kg など)は渡さない(北村さん、2026-10-10)
+      lines.push(`   ${t("coach.p.target", { lo: cfg.repLow, hi: cfg.repHigh })}`);
       const past = workouts
         .map(w => ({ date: w.date, ex: w.exercises.find(e => e.name === name) }))
         .filter(e => e.ex && (e.ex.sets || []).length > 0)
@@ -2161,7 +2204,7 @@ function App() {
       if (ns.length) lines.push(`${m ? muscleName(m) : t("settings.other")}: ${ns.join(" / ")}`);
     });
     // 記録中の追加の約束は、最後の「形式のブロックを出して」の行より前に入れる(ブロックの直前の指示が一番効く)
-    const rules = t("coach.p.rules", { unit }).split("\n");
+    const rules = t("coach.p.rules", { unit, step: `${COACH_WEIGHT_STEP()}${unit}` }).split("\n");
     if (mode === "replan") rules.splice(rules.length - 1, 0, t("coach.p.rulesReplan"));
     lines.push("", ...rules);
     lines.push("", "```kurabell", '{"kurabell":1,"exercises":[',
@@ -2185,6 +2228,7 @@ function App() {
     const v = validateCoachPlan(r.plan, {
       resolveName: coachResolveName,
       weightInRange: (w) => isSetValueInRange("weight", fromU(w)),
+      weightStep: COACH_WEIGHT_STEP(),
       maxReps: Math.min(100, SET_VALUE_LIMITS.reps[1]),
     });
     setCoachResult(v.exercises.length ? v : { ...v, error: "none" });
@@ -2337,9 +2381,11 @@ function App() {
     if (entered && !window.confirm(t("log.confirmRemove", { name: exName(ex.name) }))) return;
     const idx = today.findIndex(e => e.id === ex.id);
     const dayPos = todayDay?.exercises ? todayDay.exercises.indexOf(ex.name) : -1;
+    // 消すとスーパーセットの相手が片割れになり、印が外れる(normalizeSupersets)。取り消しで相手の印も戻すために覚えておく
+    const ssPartners = ex.ssGroup ? [today[idx - 1], today[idx + 1]].filter(e => e && e.ssGroup === ex.ssGroup).map(e => e.id) : [];
     removeExercise(ex.id);
     lastRemoveAtRef.current = Date.now();
-    showNotice({ kind: "removed", ex, idx, ...noticeDay(), dayPos });
+    showNotice({ kind: "removed", ex, idx, ...noticeDay(), dayPos, ssPartners });
   };
   // 今日の Day の位置と cursor(取り消すときに、同じ Day のままかを確かめるため)
   const noticeDay = () => split && todayDay
@@ -2359,7 +2405,11 @@ function App() {
     }
     if (r.kind === "removed") {
       // 5秒の間に同じ種目を足し直していたら戻さない(同名が2枚あると、名前で引く前回の記録が片方にしか付かない)
-      setToday(t => t.some(e => e.id === r.ex.id || e.name === r.ex.name) ? t : [...t.slice(0, r.idx), r.ex, ...t.slice(r.idx)]);
+      setToday(t => {
+        if (t.some(e => e.id === r.ex.id || e.name === r.ex.name)) return t;
+        const back = [...t.slice(0, r.idx), r.ex, ...t.slice(r.idx)];
+        return (r.ssPartners || []).length ? back.map(e => r.ssPartners.includes(e.id) ? { ...e, ssGroup: r.ex.ssGroup } : e) : back;
+      });
       if (dayEx && r.dayPos >= 0 && !dayEx.includes(r.ex.name)) {
         const list = [...dayEx];
         list.splice(Math.min(r.dayPos, list.length), 0, r.ex.name);
@@ -2423,6 +2473,12 @@ function App() {
     }
     return next;
   });
+  // 片割れになったスーパーセットの印を外す(src/domain/superset.js)。解除・並べ替え・削除・下書きの復元など、
+  // today が変わる経路が多いので、変わった後にまとめて直す(変わらなければ同じ配列が返り、更新は起きない)
+  useEffect(() => {
+    const fixed = normalizeSupersets(today);
+    if (fixed !== today) setToday(t => normalizeSupersets(t));
+  }, [today]);
   // 記録中の種目が「同一スーパーセットグループの最後」かどうか
   const isLastInGroup = (idx) => {
     const ex = today[idx];
@@ -2464,6 +2520,7 @@ function App() {
         })),
         applied: watchApplied,
         recordStartAt: startAt,
+        phoneActive: pageVisible,
         lastSaved: watchLastSaved,
         finished: watchFinished,
         // 休憩の知らせの経過分と本文(改善要望 4)。Watch は自分で始めた休憩と、自分がワークアウトを記録している間の
@@ -2490,7 +2547,7 @@ function App() {
       syncWatchSnapshot(snap);
     }, 400);
     return () => clearTimeout(timer);
-  }, [loaded, today, restStartAt, todayDay, autoMenu, watchApplied, workouts, lang, unit, customExercises, exerciseOverrides, startAt, watchLastSaved, watchFinished, profile.bodyweight, soundOn, restMinutesKey]);
+  }, [loaded, today, restStartAt, todayDay, autoMenu, watchApplied, workouts, lang, unit, customExercises, exerciseOverrides, startAt, watchLastSaved, watchFinished, profile.bodyweight, soundOn, restMinutesKey, pageVisible]);
 
   // カロリー(METs×体重×時間, 目安)
   const estimateKcal = (min) => Math.round(5.0 * profile.bodyweight * (min / 60));
@@ -2635,17 +2692,10 @@ function App() {
     setDraftRestored(false);
     try { await store.del(DRAFT_KEY); localStorage.removeItem(DRAFT_KEY); } catch { /* noop */ }
     setView("history");
-    // 保存が済んで履歴画面に移ってから頼む(記録の途中やペイウォールの上には出さない)。
-    // 出すかどうかはiOSが決める。依頼した日時だけ残して、次は120日あける(src/domain/review.js)。
-    if (beatPrevious) {
-      try {
-        const lastRequestedAt = (await store.get(REVIEW_REQUESTED_KEY))?.value;
-        if (shouldRequestReview({ beatPrevious, workoutsCount: workouts.length + 1, lastRequestedAt, now: Date.now() })
-            && await requestAppReview()) {
-          await store.set(REVIEW_REQUESTED_KEY, new Date().toISOString());
-        }
-      } catch { /* noop */ }
-    }
+    // iPhone にも「お疲れ様でした」を出す(北村さん、2026-10-10。Watch の完了画面と同じ中身)。
+    // 「メニューとして保存しますか」は、この画面を閉じた後ろに残っている(zIndex がこちらの方が上)
+    setFinishScreen({ summary: finishedSummary, entry, beatPrevious, workoutsCount: workouts.length + 1 });
+    // レビューの依頼は、お疲れ様の画面を閉じた後に頼む(closeFinish。画面の上に重ねて出さない)
   };
 
   // YouTubeで種目のやり方動画を検索(APIキー不要・新しいタブで開く)
@@ -2939,40 +2989,55 @@ function App() {
   const [copiedIdx, setCopiedIdx] = useState(null);
 
   // 1回分の記録を読みやすいテキストに整形
+  // スーパーセットの一員か(隣に同じ印の種目があるか)。片割れの印は表示しない(src/domain/superset.js と同じ考え)
+  const inSuperset = (list, j) => !!list[j]?.ssGroup && (list[j - 1]?.ssGroup === list[j].ssGroup || list[j + 1]?.ssGroup === list[j].ssGroup);
+
+  // 保存済みの1回分の相談文(履歴の「AIに相談」と、お疲れ様の画面の「AIコーチに報告」)。
+  // 1.4 (18) までは、自重種目が「0kg×10」、ダンベルの印が保存値のまま、セット番号がウォームアップ込み、
+  // 余力の説明なし、頼む内容が数字からは判断できない「フォームの助言」だった(北村さん「プロンプトがおかしい」)。
+  // 重量の書き方は dayToText と同じ(自重は体重込みの実効重量、ダンベルは片手)。セットの書式は shareSetLine に揃える。
   const workoutToText = (w) => {
     const d = new Date(w.date);
-    const lines = [];
+    const exs = normalizeSupersets(w.exercises || []);
+    const lines = [t("share.workoutPrompt", { step: `${COACH_WEIGHT_STEP()}${uLabel()}` }), ""];
     lines.push(`${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}(${weekdayLabel(d.getDay())})${w.session ? ` ${dayName(w.session)}` : ""}`);
 
-    const parts = [...new Set(w.exercises.map(e => e.muscle).filter(Boolean))];
-    if (parts.length) lines.push(parts.join("・"));
+    const parts = [...new Set(exs.map(e => e.muscle).filter(Boolean))].map(m => muscleName(m));
+    if (parts.length) lines.push(parts.join(" / "));
 
-    const vol = Math.round(w.exercises.reduce((a, ex) => a + exVolume(ex), 0));
+    const vol = Math.round(exs.reduce((a, ex) => a + exVolume(ex), 0));
     const meta = [];
     if (w.durationMin != null) meta.push(t("common.minutes", { n: w.durationMin }));
     meta.push(t("share.totalVolume", { v: Math.round(toU(vol)).toLocaleString(), unit: uLabel() }));
+    meta.push(t("share.workoutBw", { bw: `${wU(exs.find(e => e.bwAtLog)?.bwAtLog ?? profile.bodyweight)}${uLabel()}` }));
     lines.push(meta.join(" / "));
     lines.push("");
 
-    w.exercises.forEach((ex, i) => {
-      const prevE = w.exercises[i - 1];
-      const ssStart = ex.ssGroup && (!prevE || prevE.ssGroup !== ex.ssGroup);
-      const prefix = ssStart ? t("share.supersetTag") : (ex.ssGroup ? "  ┗ " : "");
-      lines.push(`■ ${prefix}${exName(ex.name)}`);
-      ex.sets.forEach((s, j) => {
-        const tags = [];
-        if (s.warmup) tags.push("W");
-        if (s.assisted) tags.push(t("share.assisted"));
-        const unit = ex.isDb ? t("share.perHand", { unit: uLabel() }) : uLabel();
-        const rir = s.rir != null ? t("share.rirLeft", { n: s.rir }) : "";
-        lines.push(`  ${s.warmup ? "W" : j + 1}. ${wU(s.weight)}${unit} × ${t("common.reps", { n: s.reps })}${rir}${tags.length && !s.warmup ? ` [${tags.join("/")}]` : ""}`);
+    exs.forEach((ex, i) => {
+      const ss = inSuperset(exs, i);
+      const ssStart = ss && exs[i - 1]?.ssGroup !== ex.ssGroup;
+      const prefix = ssStart ? t("share.supersetTag") : (ss ? "  ┗ " : "");
+      const isDb = resolveIsDb(ex.name, ex.isDb);
+      const bwF = ex.bwFactor || 0;
+      const unit = isDb ? t("share.perHand", { unit: uLabel() }) : bwF > 0 ? t("share.withBw", { unit: uLabel() }) : uLabel();
+      const notes = [];
+      if (ex.repLow != null && ex.repHigh != null) notes.push(t("share.targetReps", { lo: ex.repLow, hi: ex.repHigh }));
+      if (ex.pain) notes.push(t("share.flagPain"));
+      if (ex.formBroke) notes.push(t("share.flagForm"));
+      lines.push(`■ ${prefix}${exName(ex.name)}${notes.length ? `(${notes.join(" / ")})` : ""}`);
+      let n = 0;
+      (ex.sets || []).forEach(s => {
+        const wt = bwF > 0
+          ? Math.round(toU(effWeight(s.weight, false, bwF, ex.bwAtLog ?? profile.bodyweight)) * 10) / 10
+          : wU(s.weight);
+        // 番号はワーキングセットだけで数える(ウォームアップは W)。W の印は番号の側に出すので、行の中には付けない
+        lines.push(`  ${s.warmup ? "W" : ++n}. ${shareSetLine({ ...s, warmup: false }, wt, unit)}`);
       });
       if (exerciseNotes[ex.name]) lines.push(`  📌 ${exerciseNotes[ex.name]}`);
       lines.push("");
     });
 
-    lines.push("— KURABELL Workout Log");
-    lines.unshift(t("share.aiPrompt"), "");
+    lines.push(t("share.rirNote"), "— KURABELL Workout Log");
     return lines.join("\n");
   };
 
@@ -3143,6 +3208,10 @@ function App() {
   // (2026-09-29、「書き出しました」と出ていたのに、書き出したつもりのバックアップが残っていなかった)。
   // iOSでは共有シート(src/domain/fileExport.js)で渡す。プラグインの無い古いネイティブでは、できないことを伝える。
   const isNativeApp = () => !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+  // 音楽アプリを開く(iOS 版だけ。Web からは URL スキームを開けない)
+  const musicApp = musicAppOf(profile.musicApp);
+  const showMusicButton = isNativeApp() && musicApp != null;
+  const openMusicApp = () => { if (musicApp) window.open(musicApp.url, "_blank"); };
   const canExportFile = () => !isNativeApp() || fileExportAvailable();
   // Webはダウンロード、iOSは共有シート。戻り値: 渡し終えたら true、キャンセルは false、失敗は null。
   // 共有シートが出ている間の2回目(連打や、JSONの後にCSV)は受け付けない(キャンセル扱い)。
@@ -3460,13 +3529,21 @@ function App() {
         // ここを詰めると保存ボタンの右3分の1がこのボタンに食われ、押したつもりがスクロールする
         // (64pxで実際に26px重なっていた)。
         // ラッパーは画面幅いっぱいなのでpointerEventsを切り、ボタンだけ拾う。
-        // AIコーチの入口はここに並べない。常に出すと、その高さのセット行の番号・重量欄に乗る
-        // (320px で実測、2026-10-09)。見出しの右と一覧の最後に置いている。
+        // AIコーチの丸いボタンも、このボタンと同じ条件(今の種目が画面の外にあるとき)だけ並べる。
+        // 常に出すと、その高さのセット行の番号・重量欄に乗る(320px で実測、2026-10-09)。今の種目が見えているときは、
+        // 今日のセッションカードの大きなボタンと一覧の最後のボタンを使う(北村さん「フローティングがない」、2026-10-10)
         <div style={{
           position: "fixed", left: 0, right: 0, bottom: "calc(56px + env(safe-area-inset-bottom) + 100px)", zIndex: 40,
           maxWidth: 520, margin: "0 auto", padding: "0 16px",
-          display: "flex", justifyContent: "flex-end", pointerEvents: "none",
+          display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 8, pointerEvents: "none",
         }}>
+          <button onClick={() => openCoach("replan")} aria-label={t("coach.button")} title={t("coach.button")}
+            style={{
+              ...btn(C.yellow, "#14171C"), width: 44, height: 44, borderRadius: 999, padding: 0, flexShrink: 0,
+              display: "grid", placeItems: "center", boxShadow: "0 4px 16px rgba(0,0,0,0.5)", pointerEvents: "auto",
+            }}>
+            <Icon name="chat" size={19} />
+          </button>
           <button onClick={scrollToCurrentEx}
             style={{
               ...btn(C.surface2, C.text), padding: "10px 14px", fontSize: 12, fontWeight: 700,
@@ -3478,6 +3555,43 @@ function App() {
           </button>
         </div>
       )}
+
+      {/* ===== お疲れ様でした(iPhone、1.4)。保存の後に出す ===== */}
+      {finishScreen && (() => {
+        const s = finishScreen.summary;
+        const copied = copiedIdx === "finish";
+        return (
+          <div role="dialog" aria-modal="true" aria-label={s.title}
+            style={{ position: "fixed", inset: 0, zIndex: 110, background: "rgba(10,11,12,0.97)", display: "flex", flexDirection: "column",
+              padding: "calc(28px + env(safe-area-inset-top)) 24px calc(24px + env(safe-area-inset-bottom))", overflowY: "auto" }}>
+            <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", maxWidth: 460, width: "100%", margin: "0 auto" }}>
+              <div style={{ fontSize: 13, fontWeight: 800, color: C.muted }}>{s.stats.join(" · ")}</div>
+              <h2 style={{ fontSize: 28, fontWeight: 900, margin: "6px 0 18px" }}>{s.title}</h2>
+              <div style={{ fontSize: 12, fontWeight: 800, color: C.muted, letterSpacing: 1 }}>{t("finish.volume")}</div>
+              <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 64, fontWeight: 800, lineHeight: 1 }}>{s.volume}</div>
+              {s.lines.length > 0 && (
+                <div style={{ fontSize: 13, color: s.over ? C.green : C.muted, marginTop: 6, lineHeight: 1.6 }}>{s.lines.join(" ")}</div>
+              )}
+              {s.prs.length > 0 && (
+                <div style={{ marginTop: 18, padding: "10px 12px", borderRadius: 10, background: "rgba(232,179,60,0.12)" }}>
+                  <div style={{ fontSize: 12, fontWeight: 800, color: C.yellow, marginBottom: 2 }}><Icon name="bolt" size={12} style={{ marginRight: 4 }} />{s.prTitle}</div>
+                  <div style={{ fontSize: 14, lineHeight: 1.6 }}>{s.prs.join(" / ")}</div>
+                </div>
+              )}
+            </div>
+            <div style={{ maxWidth: 460, width: "100%", margin: "20px auto 0", display: "flex", flexDirection: "column", gap: 8 }}>
+              <button onClick={() => consultAi(workoutToText(finishScreen.entry), "finish")}
+                style={{ ...btn(C.surface2, copied ? C.green : C.text), padding: 13, fontSize: 14, border: `1px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "center", gap: 7 }}>
+                <Icon name={copied ? "check" : "chat"} size={16} />{copied ? t("finish.reportDone") : t("finish.report")}</button>
+              <button onClick={shareWorkoutImage} disabled={imageBusy}
+                style={{ ...btn(C.surface2, C.text), padding: 13, fontSize: 14, border: `1px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "center", gap: 7, opacity: imageBusy ? 0.6 : 1 }}>
+                <Icon name="share" size={16} />{t("finish.image")}</button>
+              {imageError && <div role="alert" style={{ fontSize: 12, color: C.red, textAlign: "center" }}>{t("finish.imageFailed")}</div>}
+              <button onClick={closeFinish} style={{ ...btn(C.red), padding: 15, fontSize: 15, marginTop: 4 }}>{t("common.close")}</button>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ===== 自己ベスト更新(YOU WIN!、1.4) ===== */}
       {/* RIR を入れたタップでインターバルの全画面(zIndex 90)も開くので、その上に出す */}
@@ -3520,6 +3634,12 @@ function App() {
               占め、ゲージ側に110pxしか残らなかった。縦積みにして数字とゲージの両方に幅を与えている。
               このパネルだけ中央揃えなのは、時計として読ませるため(アプリの他の面は左揃え)。
               数字だけを中央にするとラベルとの軸がずれて見えたので、文字要素は揃えてある。 */}
+          {/* 休憩の間に曲を替えたいことが多いので、ここに音楽アプリを開くボタンを置く(北村さん、2026-10-10) */}
+          {showMusicButton && (
+            <button onClick={openMusicApp} aria-label={t("music.open", { app: musicApp.label })} title={t("music.open", { app: musicApp.label })}
+              style={{ ...btn(C.surface2, C.text), position: "absolute", top: 12, right: 14, width: 40, height: 40, borderRadius: 999, padding: 0, display: "grid", placeItems: "center", border: `1px solid ${C.border}` }}>
+              <Icon name="music" size={18} /></button>
+          )}
           <div style={{ fontSize: 11, color: C.muted, letterSpacing: 1, textAlign: "center" }}>{t("rest.title")}</div>
           <div style={{
             fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800,
@@ -3575,38 +3695,38 @@ function App() {
       {loaded && !guideSeen && !loadFailed && (() => {
         const steps = [
           {
-            art: "hero", title: t("guide.welcome"),
+            img: 1, pos: "50% 0%", title: t("guide.welcome"),
             lead: t("guide.welcomeLead"),
             body: t("guide.welcomeBody"),
           },
           {
-            art: "split", title: t("guide.step1"),
+            img: 2, pos: "50% 0%", title: t("guide.step1"),
             lead: t("guide.step1Lead"),
             body: t("guide.step1Body"),
           },
           {
-            art: "record", title: t("guide.step2"),
+            img: 3, pos: "50% 30%", title: t("guide.step2"),
             lead: t("guide.step2Lead"),
             body: t("guide.step2Body"),
           },
           // RIR・AIコーチ・Apple Watch のページは 1.4 で足した(北村さんの要望、2026-10-09)
           {
-            art: "rir", title: t("guide.stepRir"),
+            img: 4, pos: "50% 45%", title: t("guide.stepRir"),
             lead: t("guide.stepRirLead"),
             body: t("guide.stepRirBody"),
           },
           {
-            art: "progress", title: t("guide.step3"),
+            img: 5, pos: "50% 0%", title: t("guide.step3"),
             lead: t("guide.step3Lead"),
             body: t("guide.step3Body"),
           },
           {
-            art: "coach", title: t("guide.stepCoach"),
+            img: 6, pos: "50% 100%", title: t("guide.stepCoach"),
             lead: t("guide.stepCoachLead"),
             body: t("guide.stepCoachBody"),
           },
           {
-            art: "watch", title: t("guide.stepWatch"),
+            img: 7, pos: "50% 50%", title: t("guide.stepWatch"),
             lead: t("guide.stepWatchLead"),
             body: t("guide.stepWatchBody"),
           },
@@ -3618,12 +3738,14 @@ function App() {
             style={{ position: "fixed", inset: 0, zIndex: 100, background: "rgba(10,11,12,0.96)", display: "flex", flexDirection: "column", padding: "calc(24px + env(safe-area-inset-top)) 24px calc(24px + env(safe-area-inset-bottom))", overflowY: "auto" }}>
             <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", maxWidth: 460, width: "100%", margin: "0 auto" }}>
               <div style={{ display: "flex", justifyContent: "center", marginBottom: 24 }}>
+                {/* 実際の画面(1.4、北村さん「チュートリアルの画像を実際の画面で説明する」)。guide/ に日英7枚ずつ同梱。
+                    縦長の画面の、そのページで見せたいところ(pos)を 4:5 の枠で切り出して見せる */}
                 <div style={{
-                  width: 168, height: 168, borderRadius: 28, background: C.surface,
-                  border: `1px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "center",
-                  boxShadow: "0 12px 40px rgba(0,0,0,0.45)",
+                  width: "min(240px, 64vw)", aspectRatio: "4 / 5", borderRadius: 20, overflow: "hidden", background: "#000",
+                  border: `1px solid ${C.border}`, boxShadow: "0 12px 40px rgba(0,0,0,0.45)",
                 }}>
-                  <GuideArt kind={step.art} />
+                  <img src={`guide/${lang === "en" ? "en" : "ja"}-${step.img}.jpg`} alt="" draggable={false}
+                    style={{ width: "100%", height: "100%", objectFit: step.img === 7 ? "contain" : "cover", objectPosition: step.pos, display: "block" }} />
                 </div>
               </div>
               <h2 style={{ fontSize: 24, fontWeight: 900, textAlign: "center", margin: "0 0 14px", lineHeight: 1.35 }}>{withBreaks(step.title)}</h2>
@@ -3696,7 +3818,13 @@ function App() {
         }}>
           <div style={{ display: "flex", alignItems: "stretch", gap: 6, maxWidth: 520, margin: "0 auto" }}>
             <div style={{ textAlign: "center", flexShrink: 0, minWidth: 62 }}>
-              <div style={{ fontSize: 11, color: C.muted, marginBottom: 3 }}>{t("log.elapsed")}</div>
+              {/* 心拍は見出しの行に入れる(行を足すと、出たり消えたりするたびに上部バーの高さが変わり、下の入力欄がずれる) */}
+              <div style={{ fontSize: 11, color: C.muted, marginBottom: 3, whiteSpace: "nowrap" }}>
+                {t("log.elapsed")}
+                {heartRateNow != null && (
+                  <span role="img" aria-label={t("log.heartRate", { n: heartRateNow })} style={{ color: C.red, fontWeight: 800, marginLeft: 4, fontVariantNumeric: "tabular-nums" }}>♥{heartRateNow}</span>
+                )}
+              </div>
               <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: 30, lineHeight: 1 }}>{fmtClock(elapsed)}</div>
             </div>
 
@@ -3997,7 +4125,14 @@ function App() {
             </div>
           )}
 
-          <h2 style={{ fontSize: 16, fontWeight: 900, margin: "8px 0 12px" }}>{t("log.title")}</h2>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, margin: "8px 0 12px" }}>
+            <h2 style={{ fontSize: 16, fontWeight: 900, margin: 0 }}>{t("log.title")}</h2>
+            {showMusicButton && (
+              <button onClick={openMusicApp} className="tapArea"
+                style={{ ...btn("transparent", C.muted), padding: "4px 0", fontSize: 13, fontWeight: 700, display: "inline-flex", alignItems: "center", gap: 5, flexShrink: 0 }}>
+                <Icon name="music" size={14} />{musicApp.label}</button>
+            )}
+          </div>
 
           {today.length === 0 && (
             <div style={{ border: `1px dashed ${C.border}`, borderRadius: 14, padding: 20, color: C.muted, fontSize: 14, textAlign: "center", marginBottom: 16 }}>
@@ -4040,6 +4175,14 @@ function App() {
                   <div style={{ fontSize: 15, fontWeight: 700, lineHeight: 1.4, flex: 1, minWidth: 0, paddingTop: 3 }}>
                     {inGroup && <span style={{ color: C.blue, fontWeight: 800, marginRight: 6 }}>{ssLetter}.</span>}
                     {exName(ex.name)}
+                    {/* 過去の自己ベスト(推定1RM)を名前の横に(北村さん、2026-10-10)。prMap は実効重量なので、
+                        ダンベルは両手計・自重は体重込みと分かるようにする。記録の無い種目には出さない */}
+                    {prMap[ex.name]?.best1RM > 0 && (
+                      <span style={{ display: "inline-block", marginLeft: 8, fontSize: 11, fontWeight: 800, color: C.yellow, whiteSpace: "nowrap", verticalAlign: "1px" }}>
+                        MAX 1RM <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 14 }}>{toU(prMap[ex.name].best1RM).toFixed(1)}</span>
+                        <span style={{ fontWeight: 600, color: C.muted }}>{resolveIsDb(ex.name, ex.isDb) ? t("share.bothHands", { unit: uLabel() }) : (ex.bwFactor || 0) > 0 ? t("share.withBw", { unit: uLabel() }) : uLabel()}</span>
+                      </span>
+                    )}
                     {ex.muscle && <span style={{ color: C.muted, fontSize: 12, fontWeight: 400, marginLeft: 6 }}>{muscleName(ex.muscle)}</span>}
                     {resolveIsDb(ex.name, ex.isDb) && <span style={{ color: C.muted, fontSize: 12, marginLeft: 4 }}>{t("menu.perHandShort")}</span>}
                     {resolveRom(ex.name, ex.rom) < 1 && <span style={{ color: C.muted, fontSize: 12, marginLeft: 4 }}>ROM×{resolveRom(ex.name, ex.rom)}</span>}
@@ -4416,10 +4559,10 @@ function App() {
                       {s.warmup ? "W" : s.assisted ? t("set.assistedShort") : wsIndex}
                     </button>
                     <NumInput inputMode="decimal" value={s.weight} placeholder="0"
-                      onBlur={() => { if ((num(s.weight) > 0 || num(s.reps) > 0) && isLastInGroup(exIdx)) startRest(); }}
+                      onBlur={() => { if ((num(s.weight) > 0 || num(s.reps) > 0) && isLastInGroup(exIdx)) startRestIfIdle(s.warmup); }}
                       onChange={e => updateSet(ex.id, i, "weight", e.target.value)} aria-label={t("set.weightAria", { n: i + 1, unit: uLabel() })} style={{ ...numInput, flex: 1.3, opacity: s.warmup ? 0.6 : 1 }} />
                     <NumInput inputMode="numeric" value={s.reps} placeholder="0"
-                      onBlur={() => { if ((num(s.weight) > 0 || num(s.reps) > 0) && isLastInGroup(exIdx)) startRest(); }}
+                      onBlur={() => { if ((num(s.weight) > 0 || num(s.reps) > 0) && isLastInGroup(exIdx)) startRestIfIdle(s.warmup); }}
                       onChange={e => updateSet(ex.id, i, "reps", e.target.value)} aria-label={t("set.repsAria", { n: i + 1 })} style={{ ...numInput, flex: 1, opacity: s.warmup ? 0.6 : 1 }} />
                     <button onClick={() => copyFromPrev(ex.id, i)} disabled={i === 0}
                       title={t("set.copyPrev")} aria-label={t("set.copyPrevShort")} className="tapArea"
@@ -4429,21 +4572,13 @@ function App() {
                       <RirSelect value={s.rir === "" ? null : num(s.rir)} onChange={v => {
                         const wasEmpty = s.rir === "" || s.rir == null;
                         updateSet(ex.id, i, "rir", v === "" ? "" : v);
-                        // 自己ベストの更新を祝う(YOU WIN!、1.4)。RIR を空から入れたセットだけ。比べる今日の最高は、
-                        // 行の 1RM と同じく showsSet1RM を通るセットに揃える(13回以上の推定値で祝い損ねないように)
+                        // 自己ベストの更新を祝う(YOU WIN!、1.4)。RIR を空から入れたセットが、過去の自己ベストを超えたら毎回
                         if (v !== "" && wasEmpty && show1RM) {
-                          const isDb = resolveIsDb(ex.name, ex.isDb);
-                          const todayBest = ex.sets.reduce((m, x, xi) => {
-                            if (xi === i || x.rir === "" || x.rir == null) return m;
-                            const w = effWeight(fromU(x.weight), isDb, ex.bwFactor || 0, profile.bodyweight), r = Math.round(num(x.reps));
-                            return showsSet1RM(x, w, r) ? Math.max(m, est1RM(w, r)) : m;
-                          }, 0);
                           // 同じセットで余力を外して入れ直しても、2回目は出さない(入れ間違いを直すたびに全画面が出ないように)
                           const winKey = `${startAt}:${ex.id}:${i}`;
-                          if (isNew1RMBest({ set1RM: row1RM, pastBest: pastBest1RM, todayBest }) && !celebratedRef.current.has(winKey)) {
+                          if (isNew1RMBest({ set1RM: row1RM, pastBest: pastBest1RM }) && !celebratedRef.current.has(winKey)) {
                             celebratedRef.current.add(winKey);
-                            // 「前」は、保存済みの自己ベストと今日それまでの最高の高い方(同じ日に2回更新したら、1回目の値から)
-                            celebrateBest(ex.name, Math.max(pastBest1RM, todayBest), row1RM);
+                            celebrateBest(ex.name, pastBest1RM, row1RM);
                           }
                         }
                         if (v !== "" && isLastInGroup(exIdx)) { startRest(); setRestFull(true); }
@@ -4776,25 +4911,8 @@ function App() {
                           {copiedIdx === `day:${i}` ? t("log.pasteHint") : ""}
                         </div>
                       </div>
-                    ) : (
-                    /* ヘッダー行は▲▼・今日にする・編集で埋まっているので、この行に置く。
-                        ペースト注記はボタンの左に横並びにする(下に出すと、Dayの数だけ
-                        高さを常時確保することになる)。カードは丸ごとタップで記録画面へ
-                        飛ぶ領域なので、伝播を止めないと押した瞬間に画面が変わる。 */
-                    <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 8, marginTop: 10 }}
-                      onClick={e => e.stopPropagation()}>
-                      <span role="status" style={{ fontSize: 12, color: C.green, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        {copiedIdx === `day:${i}` ? t("log.pasteHint") : ""}
-                      </span>
-                      <button onClick={() => consultAi(dayToText(d, i), `day:${i}`)}
-                        style={{
-                          ...btn(C.surface2, copiedIdx === `day:${i}` ? C.green : C.muted), padding: "4px 9px", fontSize: 13,
-                          whiteSpace: "nowrap", flexShrink: 0, minWidth: 74, textAlign: "center",
-                        }}>
-                        {copiedIdx === `day:${i}` ? t("log.consultAiDone") : t("log.consultAi")}
-                      </button>
-                    </div>
-                    )}
+                    ) : null}
+                    {/* 種目を登録済みの Day の「AI相談」は外した(北村さん、2026-10-10)。今日のメニューの相談は記録タブの AIコーチで行う */}
 
                     {/* 種目の登録(この日の固定メニュー) */}
                     {editing ? (
@@ -5221,7 +5339,8 @@ function App() {
               {/* 表示モード */}
               {!editing && w.exercises.map((ex, j) => {
                 const prevE = w.exercises[j - 1];
-                const ssStart = ex.ssGroup && (!prevE || prevE.ssGroup !== ex.ssGroup);
+                const ssOn = inSuperset(w.exercises, j); // 片割れの印は表示しない
+                const ssStart = ssOn && (!prevE || prevE.ssGroup !== ex.ssGroup);
                 // この記録より前の自己ベスト1RMを求め、更新したセットを特定する
                 const priorBest = workouts.slice(0, idx).reduce((best, pw) => {
                   const pe = pw.exercises.find(e => e.name === ex.name);
@@ -5242,7 +5361,7 @@ function App() {
                 <div key={j} style={{ fontSize: 13, marginBottom: 8, paddingBottom: 6, borderBottom: j < w.exercises.length - 1 ? `1px solid ${C.border}` : "none" }}>
                   <div style={{ marginBottom: 2, lineHeight: 1.4 }}>
                     {ssStart && <span style={{ background: C.blue, color: "#fff", fontSize: 11, fontWeight: 800, borderRadius: 4, padding: "1px 6px", marginRight: 6 }}>SS</span>}
-                    {ex.ssGroup && !ssStart && <span style={{ color: C.blue, marginRight: 6 }}>┗</span>}
+                    {ssOn && !ssStart && <span style={{ color: C.blue, marginRight: 6 }}>┗</span>}
                     {exName(ex.name)}
                     {ex.pain && <span role="img" style={{ color: "#FF5A4E", marginLeft: 4 }} aria-label={t("log.pain")}><Icon name="warn" size={13} /></span>}
                     {ex.formBroke && <span style={{ color: C.yellow, marginLeft: 4 }}>△</span>}
@@ -5633,6 +5752,25 @@ function App() {
             </p>
           </div>
 
+          {isNativeApp() && (
+            <div style={{ background: C.surface, borderRadius: 14, padding: 16, border: `1px solid ${C.border}`, marginBottom: 12 }}>
+              <div style={{ fontSize: 14, fontWeight: 900, marginBottom: 10 }}>{t("settings.music")}</div>
+              <div role="radiogroup" aria-label={t("settings.music")} style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                {[...MUSIC_APPS, { id: "none", label: t("settings.musicNone") }].map(m => {
+                  const on = (profile.musicApp || "apple") === m.id;
+                  return (
+                    <button key={m.id} role="radio" aria-checked={on}
+                      onClick={() => persist({ profile: { ...profile, musicApp: m.id } })}
+                      style={{ ...btn(on ? C.text : C.surface2, on ? C.bg : C.text), fontSize: 14, padding: "10px 14px" }}>
+                      {m.label}
+                    </button>
+                  );
+                })}
+              </div>
+              <p style={{ color: C.muted, fontSize: 13, margin: "10px 0 0", lineHeight: 1.6 }}>{t("settings.musicDesc")}</p>
+            </div>
+          )}
+
           <div style={{ background: C.surface, borderRadius: 14, padding: 16, border: `1px solid ${C.border}`, marginBottom: 12 }}>
             <div style={{ fontSize: 14, fontWeight: 900, marginBottom: 10 }}>{t("settings.language")}</div>
             <div role="radiogroup" aria-label={t("settings.language")} style={{ display: "flex", gap: 8 }}>
@@ -5862,6 +6000,9 @@ function App() {
               )}
               {coachResult?.dropped > 0 && (
                 <div style={{ fontSize: 12, color: C.yellow, marginTop: 4, lineHeight: 1.6 }}>{t("coach.dropped", { n: coachResult.dropped })}</div>
+              )}
+              {coachResult?.rounded > 0 && (
+                <div style={{ fontSize: 12, color: C.muted, marginTop: 4, lineHeight: 1.6 }}>{t("coach.rounded", { n: coachResult.rounded, step: `${COACH_WEIGHT_STEP()}${uLabel()}` })}</div>
               )}
 
               {preview && (

@@ -47,6 +47,7 @@ const DOMAIN_FILES = [
   "watch.js",
   "fileExport.js",
   "review.js",
+  "superset.js",
   "aiCoach.js",
 ];
 // iOS版のSQLite永続化層(src/domain/db/以下)。DOMAIN_FILESと同じ理由でapp.bundle.jsより先に読み込む。
@@ -82,6 +83,14 @@ function build(dest) {
     fs.copyFileSync(path.join(ROOT, "src", "domain", "db", file), path.join(dest, "src", "domain", "db", file));
   }
   // ローカル同梱フォント(オフラインでも字面が崩れないようにするため。CDNは使わない)
+  // ガイド(使い方)の画面の画像(1.4)。fonts と同じく、フォルダごとコピーする
+  const guideDir = path.join(ROOT, "guide");
+  if (fs.existsSync(guideDir)) {
+    fs.mkdirSync(path.join(dest, "guide"), { recursive: true });
+    for (const file of fs.readdirSync(guideDir)) {
+      fs.copyFileSync(path.join(guideDir, file), path.join(dest, "guide", file));
+    }
+  }
   const fontsDir = path.join(ROOT, "fonts");
   if (fs.existsSync(fontsDir)) {
     fs.mkdirSync(path.join(dest, "fonts"), { recursive: true });

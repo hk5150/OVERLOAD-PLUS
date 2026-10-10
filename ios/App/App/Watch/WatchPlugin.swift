@@ -18,6 +18,10 @@ public class WatchPlugin: CAPPlugin, CAPBridgedPlugin {
         WatchSessionManager.shared.onOpsReceived = { [weak self] in
             self?.notifyListeners("opsReceived", data: [:], retainUntilConsumed: true)
         }
+        // 記録中の心拍。古い値に意味は無いので、リスナーが居なければ捨てる(retainUntilConsumed: false)
+        WatchSessionManager.shared.onHeartRate = { [weak self] bpm, at, rec in
+            self?.notifyListeners("heartRate", data: ["bpm": bpm, "at": at, "recordStartAt": rec], retainUntilConsumed: false)
+        }
     }
 
     // { snapshot: JSON文字列 }

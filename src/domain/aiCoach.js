@@ -123,11 +123,12 @@ function makeCoachNameResolver(entries) {
 //   resolveName: makeCoachNameResolver の戻り値
 //   weightInRange(w): 表示単位の重量 w が保存できる範囲か(index.html で kg に直して SET_VALUE_LIMITS と比べる)
 //   maxReps: 回数の上限
-// 戻り値: { exercises: [{ name, sets: [{ w, r, wu }] }], unknown: [AI が書いた名前], dropped: 捨てたセットの数 }
+//   weightStep: 重量の単位(表示単位)。渡すと、その単位に丸めて数える(アプリ全体で 1kg 刻み、2026-10-10)
+// 戻り値: { exercises: [{ name, sets: [{ w, r, wu }] }], unknown: [AI が書いた名前], dropped: 捨てたセットの数, rounded: 丸めた数 }
 // 同じ種目が2回出てきたら、後の方は捨てる(同名のカードが2枚あると前回の記録が片方にしか付かない)。
-function validateCoachPlan(plan, { resolveName, weightInRange, maxReps }) {
+function validateCoachPlan(plan, { resolveName, weightInRange, maxReps, weightStep }) {
   const exercises = [], unknown = [];
-  let dropped = 0;
+  let dropped = 0, rounded = 0;
   const seen = new Set();
   (plan?.exercises || []).forEach(raw => {
     const rawName = typeof raw === "string" ? raw : (raw?.name ?? raw?.exercise ?? raw?.n);
@@ -139,14 +140,19 @@ function validateCoachPlan(plan, { resolveName, weightInRange, maxReps }) {
     rawSets.forEach(s => {
       const v = coachSetOf(s);
       const r = v ? Math.round(v.r) : NaN;
-      if (!v || !Number.isFinite(v.w) || v.w < 0 || !weightInRange(v.w) || !Number.isFinite(r) || r < 1 || r > maxReps) { dropped++; return; }
-      sets.push({ w: v.w, r, wu: v.wu });
+      if (!v || !Number.isFinite(v.w) || v.w < 0 || !Number.isFinite(r) || r < 1 || r > maxReps) { dropped++; return; }
+      // 単位に丸めてから範囲を確かめる(丸めた結果が範囲外になるものは取り込まない)
+      let w = v.w;
+      if (weightStep > 0) w = Math.round(Math.round(w / weightStep) * weightStep * 100) / 100;
+      if (!weightInRange(w)) { dropped++; return; }
+      if (Math.abs(w - v.w) > 1e-9) rounded++;
+      sets.push({ w, r, wu: v.wu });
     });
     if (sets.length === 0) return; // セットが1つも残らない種目は入れない(捨てた数は上で数えた)
     seen.add(name);
     exercises.push({ name, sets });
   });
-  return { exercises, unknown, dropped };
+  return { exercises, unknown, dropped, rounded };
 }
 
 // 実施済み = ウォームアップでなく、RIR が入っている(index.html の他の判定と同じ)

@@ -1,7 +1,9 @@
-• AI Coach: have ChatGPT, Claude, Gemini or another AI build today's session. Tap "Ask AI Coach" on the Log tab, send the request to the AI and paste the answer back — you'll see exercises, order, and weight and reps for every set. Nothing changes until you choose to use the plan.
-• Mid-workout, ask it to rework just the rest. Sets you've finished stay as they are.
-• Beat your best estimated 1RM and you'll get a "YOU WIN!".
+• AI Coach: have ChatGPT, Claude, Gemini or another AI build today's session. Tap "Ask AI Coach" on the Log tab, send the request and paste the answer back — you'll see exercises, order, and weight and reps for every set. Nothing changes until you choose to use the plan. Mid-workout, it can rework just the rest.
+• A "Great work" screen on iPhone after you save: report the session to AI Coach or make an image for Instagram.
+• Live heart rate on iPhone while your Apple Watch is recording the workout.
+• Beat your best estimated 1RM and you'll get a "YOU WIN!". Each exercise shows its MAX 1RM next to the name.
 • Stuck at the same weight at RIR 0 for three sessions? You'll see a deload as an option.
-• The guide now covers RIR, AI Coach and Apple Watch, and you can reopen it from Settings.
+• The guide now walks through real screens, and you can reopen it from Settings.
+• Open your music app from the Log tab and the rest screen.
 • The rest timer on the Lock Screen (Live Activity) can now be switched on or off in Settings. It's off by default.
-• The per-exercise "Ask AI" is now part of AI Coach.
+• Fixed rest alerts that could arrive twice or at shifted times, a superset label that could stay after unlinking, and the "Ask AI" text in History.
