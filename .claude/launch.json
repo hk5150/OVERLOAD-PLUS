@@ -22,18 +22,6 @@
         "www"
       ],
       "port": 8766
-    },
-    {
-      "name": "kurabell-14",
-      "runtimeExecutable": "python3",
-      "runtimeArgs": [
-        "-m",
-        "http.server",
-        "8776",
-        "--directory",
-        "/Users/hajimekitamura/OVERLOAD-PLUS-14"
-      ],
-      "port": 8776
     }
   ]
 }

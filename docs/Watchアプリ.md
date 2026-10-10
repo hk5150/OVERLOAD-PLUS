@@ -17,11 +17,7 @@ Watch でセットを入力するためのアプリ(v120〜)。
    - 変えるなら施策ボードに載せ、P001(キーワード、判定 10/15)と時期をずらす
    - Instagram の名前も同じ判断
 4. スクリーンショットに AIコーチの画面がまだ無い(`screenshots.mjs` で入れ替えられる。`--apply` は未検証)
-5. 片付けてよい:
-   - worktree `../OVERLOAD-PLUS-14`(ブランチ v1.4、「次の一手」の古いもの)
-   - worktree `../OVERLOAD-PLUS-14c`(v1.4-coach、main に取り込み済み)
-   - worktree `../OVERLOAD-PLUS-14d`(v1.4-fixes、取り込み済み)
-   - `.claude/launch.json` の kurabell-14 / 14c / 14d の設定
+5. ~~片付け~~ → 済(2026-10-10 12:40。worktree `-14`・`-14c`・`-14d` とローカルのブランチ v1.4 / v1.4-coach / v1.4-fixes を削除、`.claude/launch.json` の kurabell-14 系も外した)
 
 ### 今日のセッションで決まったこと(2026-10-09〜10)
 - アプリ名は KURABELL のまま。英語の掲載名も Workout Log のまま(`APPSTORE.md`、Obsidian `Decisions/2026-10-10-kurabell-name.md`)
