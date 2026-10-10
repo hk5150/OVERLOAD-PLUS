@@ -3,7 +3,33 @@
 Watch でセットを入力するためのアプリ(v120〜)。
 経緯: 2026-08-23 には「Watch アプリは作らず、ローカル通知で代替する」としていた。v112 の Time Sensitive 通知と Live Activity を経て、1.0 の審査待ちの間に、記録の入力まで含めて作ることにした。
 
-## 引き継ぎ(2026-10-09 の時点。次のセッションはここから)
+## 引き継ぎ(2026-10-10 の時点。次のセッションはここから)
+
+### 次にやること(2026-10-10 12:30)
+1. **1.4 (19) の審査結果を待つ**(12:28 に API で提出)。12時のルーティンが `scripts/asc/status.mjs` で拾う。手で見るなら `npm run asc:status`
+   - 差し戻しなら内容に沿って直し、`npm run ios:upload` → `node scripts/asc/metadata.mjs build 1.4 <番号> --apply` → `submit`
+2. **実機で 1.4 (19) を確かめる**(TestFlight のテスト内容のとおり)。シミュレータでは見られなかったもの:
+   - 休憩の通知のずれ・二重、心拍の表示
+   - 共有シートの Instagram と「画像を保存」
+   - 音楽アプリのボタン、ライブアクティビティの切り替え
+3. **北村さんの判断待ち**: App Store の日本語名「KURABELL|筋トレ記録・前回比較」の「前回比較」を「伸びが見える」に揃えるか
+   - X のセッションの提案。X の表示名は「KURABELL|伸びが見える筋トレ記録アプリ」に変更済み
+   - 変えるなら施策ボードに載せ、P001(キーワード、判定 10/15)と時期をずらす
+   - Instagram の名前も同じ判断
+4. スクリーンショットに AIコーチの画面がまだ無い(`screenshots.mjs` で入れ替えられる。`--apply` は未検証)
+5. 片付けてよい:
+   - worktree `../OVERLOAD-PLUS-14`(ブランチ v1.4、「次の一手」の古いもの)
+   - worktree `../OVERLOAD-PLUS-14c`(v1.4-coach、main に取り込み済み)
+   - worktree `../OVERLOAD-PLUS-14d`(v1.4-fixes、取り込み済み)
+   - `.claude/launch.json` の kurabell-14 / 14c / 14d の設定
+
+### 今日のセッションで決まったこと(2026-10-09〜10)
+- アプリ名は KURABELL のまま。英語の掲載名も Workout Log のまま(`APPSTORE.md`、Obsidian `Decisions/2026-10-10-kurabell-name.md`)
+- Instagram のユーザー名は @kurabell_workout_log_jp / _en に変更(北村さん)。自己紹介に名前の由来を入れた
+- 重量はアプリ全体で 1kg 刻み(AIコーチの案も)。YOU WIN! は過去のベストを超えたら毎回
+- App Store Connect の作業は API で行う(`scripts/asc/`、`docs/AppStoreConnect_API.md`)。アップロードは `npm run ios:upload`
+
+## 以前の引き継ぎ(2026-10-09 の時点)
 
 ### いまの状態(3行で)
 - **1.4 (19) は審査待ち**(2026-10-10 12:28 に API で提出。AIコーチ・お疲れ様の画面・心拍・13件の修正)。記録は `APPSTORE.md` の「1.4 (ビルド19)」
