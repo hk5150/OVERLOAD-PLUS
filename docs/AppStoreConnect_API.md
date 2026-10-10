@@ -45,5 +45,6 @@
   - `metadata pull 1.3`。`push 1.3` でも差分が出ず、往復で一致する
   - `testflight 17 --apply`(1.4 (17) に「テスト内容」を入れ、読み戻して一致)
   - `screenshots`(差分の表示まで)
-- まだ: `metadata push --apply`(版を作るところから)・`build`・`submit`・`screenshots --apply`。1.4 の提出のときに初めて実際に動かす。
+- 2026-10-10 に確かめた: `metadata push --apply`(版の作成から)・`build`・`submit`。1.4 (19) をこれで審査に出した
+- まだ: `screenshots --apply`。
   失敗したら、画面で直してから、このファイルに罠を書き足す
