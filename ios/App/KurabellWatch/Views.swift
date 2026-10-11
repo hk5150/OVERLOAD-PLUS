@@ -160,7 +160,12 @@ struct RestRow: View {
         if large {
             // 文字は数字の上に置く(横に並べると 40/41mm で「インターバル」が2行に折れ、10分を超えると数字が切れる。reviewer 指摘)
             VStack(alignment: .leading, spacing: 2) {
-                Text(label).font(.system(size: 13, weight: .bold)).foregroundStyle(Palette.muted).lineLimit(1)
+                HStack {
+                    Text(label).font(.system(size: 13, weight: .bold)).foregroundStyle(Palette.muted).lineLimit(1)
+                    Spacer()
+                    HeartRateLabel()
+                }
+                .frame(height: 22) // 心拍の有無で高さが変わらないように
                 TimelineView(.periodic(from: startAt, by: 1)) { ctx in
                     let sec = ctx.date.timeIntervalSince(startAt)
                     let color = sec < 60 ? Palette.green : sec < 120 ? Palette.yellow : Palette.red
@@ -192,13 +197,40 @@ struct RestRow: View {
     }
 }
 
+// 今の心拍(Watch のワークアウトが心拍を取っているときだけ)。一覧の一番上、休憩タイマーの文字の行の右端に出す
+// 15秒以上新しい値が来なければ隠す(iPhone の WATCH_HR_FRESH_MS と同じ)。心拍の有無で行の高さが変わらないよう、
+// 置き場所(呼び出し側の HStack)は高さを固定している
+struct HeartRateLabel: View {
+    @ObservedObject private var wm = WorkoutManager.shared
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 5)) { ctx in
+            // スクリーンショット用: -KurabellSample と一緒に -KurabellHR <値> で心拍を出す(シミュレータではワークアウトが動かないため)
+            let sample = SampleData.launchValue("-KurabellHR").flatMap { Int($0) }
+            let fresh = ctx.date.timeIntervalSince(wm.heartRateAt) <= 15
+            if let hr = sample ?? (fresh ? wm.heartRate : nil) {
+                HStack(spacing: 3) {
+                    Image(systemName: "heart.fill").font(.system(size: 11, weight: .bold)).foregroundStyle(Palette.red)
+                    Text("\(hr)").numeric(17).foregroundStyle(Palette.text)
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(Text("\(hr) bpm"))
+            }
+        }
+    }
+}
+
 // 休憩していないときの一覧の一番上。休憩の開始・終了で下の行が跳ねないよう、休憩中と同じ形
 // (文字・大きな数字の場所・空のゲージ)で「–:––」を灰色で出す。読み上げは文字だけ(記号を読ませない)
 struct RestIdleRow: View {
     let label: String
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(label).font(.system(size: 13, weight: .bold)).foregroundStyle(Palette.muted).lineLimit(1)
+            HStack {
+                Text(label).font(.system(size: 13, weight: .bold)).foregroundStyle(Palette.muted).lineLimit(1)
+                Spacer()
+                HeartRateLabel()
+            }
+            .frame(height: 22) // 心拍の有無で高さが変わらないように
             Text("–:––").numeric(isSmallWatch ? 40 : 46).foregroundStyle(Palette.muted.opacity(0.5)).lineLimit(1)
             HStack(spacing: 4) {
                 ForEach(0..<3, id: \.self) { _ in Capsule().fill(Palette.surface2).frame(height: 6) }

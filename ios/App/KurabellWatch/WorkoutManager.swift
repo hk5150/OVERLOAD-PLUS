@@ -28,6 +28,10 @@ final class WorkoutManager: NSObject, ObservableObject {
     private var endedWaiter: CheckedContinuation<Void, Never>?
 
     @Published private(set) var isRunning = false
+    // 今の心拍(Watch の画面に出す。1.4.1 (31)、北村さん「Apple Watch にも心拍数表示」)。ワークアウトが動いていないときは nil
+    @Published private(set) var heartRate: Int?
+    // 最後に心拍を受け取った時刻。センサーが途切れたら(バンドが緩んだ等)古い値を隠すため(iPhone と同じ15秒。reviewer 指摘)
+    private(set) var heartRateAt: Date = .distantPast
     // start / finish / discard の途中(await の間)に、別のスナップショットで二重に呼ばれないように
     private(set) var isBusy = false
     // このワークアウトが対応する iPhone の記録の startAt(ms)。スナップショットで知る
@@ -185,6 +189,7 @@ final class WorkoutManager: NSObject, ObservableObject {
         builder = nil
         recordStartAt = nil
         isRunning = false
+        heartRate = nil
         SessionStore.shared.releaseForeignRestNotifications()
     }
 }
@@ -218,6 +223,11 @@ extension WorkoutManager: HKLiveWorkoutBuilderDelegate {
     }
 
     fileprivate func reportHeartRate(_ bpm: Double) {
+        if isRunning {
+            heartRateAt = Date()
+            let v = Int(bpm.rounded())
+            if heartRate != v { heartRate = v }
+        }
         // iPhone のアプリが裏にいるときは送らない(届けると裏で起こすだけで、表示されない)
         guard let r = recordStartAt, SessionStore.shared.snapshot?.phoneActive == true,
               Date().timeIntervalSince(lastHeartRateSentAt) >= 5 else { return }
