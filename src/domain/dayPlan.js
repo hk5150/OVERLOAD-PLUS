@@ -96,22 +96,36 @@ function uniqueDayName(name, taken, isDayN) {
 // Day を飛ばしたり「今日はこれ」で選んだりした後も順番どおりに進み、放っておかれた Day が後回しになった。
 // 最後にやってから一番時間がたっている Day を返す。一度もやっていない Day は最優先。
 // 同じなら fromIdx の次から並び順に見て先に来るもの(全部未実施の新しい分割では、今までのローテーションと同じ動き)。
+// opts.includeFrom: 画面を開いた時点で「今日」を合わせるとき(index.html の useEffect)は、今日の Day も候補に入れ、
+// 同じなら今日の Day を優先する(合っていれば動かさない)。保存のときは既定で外す:
 // 今日の Day(fromIdx)は、Day が2つ以上あれば候補から外す。時刻が未来の記録(時計の進んだ端末のバックアップ・端末の時刻を戻した等)が
 // ほかの Day にあると、今保存した Day の方が「古い」と判定されて同じ Day が居座るため(reviewer 指摘)。
 // 記録の Day 名(保存時の Day の name)で引くので、Day 名を変えると前の記録とはつながらない
-function stalestDayIndex(days, workouts, fromIdx) {
+function stalestDayIndex(days, workouts, fromIdx, opts) {
   const n = (days || []).length;
   if (n === 0) return 0;
-  const last = new Map();
+  // 時刻が未来の記録(時計の進んだ端末のバックアップ・端末の時刻を戻した等)は、未来でない記録のうち一番新しい時刻として扱う。
+  // そのままだと、今保存した Day の方が「古い」と判定され、開いた時点の判定(includeFrom)で同じ Day に戻り続ける(reviewer 指摘)
+  const now = opts && opts.now != null ? opts.now : Date.now();
+  const times = [];
   for (const w of workouts || []) {
     if (!w || w.session == null) continue;
     const t = Date.parse(w.date);
-    if (Number.isNaN(t)) continue;
-    if (!last.has(w.session) || t > last.get(w.session)) last.set(w.session, t);
+    if (!Number.isNaN(t)) times.push([w.session, t]);
+  }
+  let cap = -Infinity;
+  for (const [, t] of times) if (t <= now && t > cap) cap = t;
+  if (cap === -Infinity) cap = now;
+  const last = new Map();
+  for (const [name, raw] of times) {
+    const t = Math.min(raw, cap);
+    if (!last.has(name) || t > last.get(name)) last.set(name, t);
   }
   const start = ((Number(fromIdx) || 0) % n + n) % n;
   let best = -1, bestT = Infinity;
-  for (let k = 1; k <= (n > 1 ? n - 1 : n); k++) {
+  // k = 0 が今日の Day。外すときは 1 から(Day が1つだけなら外しようがないので 0 から)
+  const first = (opts && opts.includeFrom) || n === 1 ? 0 : 1;
+  for (let k = first; k < n; k++) {
     const i = (start + k) % n;
     const t = last.has(days[i].name) ? last.get(days[i].name) : -Infinity;
     if (t < bestT) { best = i; bestT = t; }

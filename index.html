@@ -1883,6 +1883,19 @@ function App() {
   }, [workouts, profile.bodyweight, exerciseOverrides]);
 
   const todayDay = split ? split.days[split.cursor % split.days.length] : null;
+  // 「今日」は、手で選んでいない限り一番日数が空いている Day にする(北村さん、2026-10-11)。保存のときだけ選ぶ作りだと、
+  // 前の版で保存したときの順番や、記録を消した・Day を足した・バックアップを戻した後の cursor が残り、画面を開いても合っていなかった。
+  // 「今日はこれ」で選んだ Day(split.manual)は次に保存するまで動かさない。記録中(開始済み、または種目あり)もメニューと記録の Day が
+  // ずれないよう動かさない。下書きは loaded より前に戻すので、記録中の起動でここが先に走ることはない。
+  // Day の編集中(名前を1文字変えるだけで「未実施」扱いになり、打っている最中に移る)と、書き込み中(履歴の削除・復元の
+  // persist と書き込みが重なる)も動かさない。終われば依存が変わってもう一度走る(reviewer 指摘)
+  useEffect(() => {
+    if (!loaded || !split || !split.days.length || split.manual || startAt != null || today.length > 0) return;
+    if (editDay != null || saveStatus === "saving") return;
+    const cur = split.cursor % split.days.length;
+    const i = stalestDayIndex(split.days, workouts, cur, { includeFrom: true });
+    if (i !== cur) persist({ split: { ...split, cursor: i } });
+  }, [loaded, split, workouts, startAt, today.length, editDay, saveStatus]);
   const muscleMatchesDay = (muscle, day) => !!day && (day.muscles.includes("全身") || muscle === "全身" || day.muscles.includes(muscle));
 
   // 今日の暫定ボリューム(記録中・ウォームアップ除外・可動域係数あり)
@@ -2652,7 +2665,7 @@ function App() {
     })();
     // 次の「今日」は、今保存した記録を含めて一番日数が空いている Day(src/domain/dayPlan.js の stalestDayIndex)。
     // 今日やった Day は「0日」で最後尾になる。順番どおりに回していれば、今までの cursor + 1 と同じ Day になる
-    const nextSplit = split ? { ...split, days: reorderedDays, cursor: stalestDayIndex(reorderedDays, [...workouts, entry], split.cursor % split.days.length) } : split;
+    const nextSplit = split ? { ...split, days: reorderedDays, cursor: stalestDayIndex(reorderedDays, [...workouts, entry], split.cursor % split.days.length), manual: false } : split;
     // 分割が無い状態での初めての記録だけ、終了後に「メニューとして保存しますか?」と尋ねる
     // (2回目以降は出さない。workouts.length===0の時点=これが最初の記録、で判定する)
     if (!split && workouts.length === 0) {
@@ -2806,7 +2819,8 @@ function App() {
     const days = split.days.filter((_, j) => j !== i);
     if (!days.length) { persist({ split: null }); setEditDay(null); return; }
     const cur = split.cursor % split.days.length;
-    updSplit({ days, cursor: cur > i ? cur - 1 : Math.min(cur, days.length - 1) });
+    // 手で選んだ Day を消したら、隣にずれた Day を固定し続けないよう、手で選んだ印も外す
+    updSplit({ days, cursor: cur > i ? cur - 1 : Math.min(cur, days.length - 1), ...(cur === i ? { manual: false } : {}) });
     setEditDay(null);
   };
   // Dayの並べ替え(dir: -1=上へ, +1=下へ)。「今日」の位置がずれないようcursorも追従させる。
@@ -4901,7 +4915,7 @@ function App() {
                           style={{ ...btn(C.surface2, i === 0 ? C.border : C.muted), padding: "4px 8px", fontSize: 13, cursor: i === 0 ? "default" : "pointer" }}>▲</button>
                         <button onClick={() => moveDay(i, 1)} disabled={i === split.days.length - 1} aria-label={t("log.moveDown")}
                           style={{ ...btn(C.surface2, i === split.days.length - 1 ? C.border : C.muted), padding: "4px 8px", fontSize: 13, cursor: i === split.days.length - 1 ? "default" : "pointer" }}>▼</button>
-                        {!isNext && <button onClick={() => updSplit({ cursor: i })} style={{ ...btn(C.surface2, C.muted), padding: "4px 10px", fontSize: 13 }}>{t("split.isToday")}</button>}
+                        {!isNext && <button onClick={() => updSplit({ cursor: i, manual: true })} style={{ ...btn(C.surface2, C.muted), padding: "4px 10px", fontSize: 13 }}>{t("split.isToday")}</button>}
                         <button onClick={() => setEditDay(editing ? null : i)} style={{ ...btn(C.surface2, C.muted), padding: "4px 10px", fontSize: 13 }}>{editing ? t("common.done") : t("common.edit")}</button>
                       </div>
                     </div>

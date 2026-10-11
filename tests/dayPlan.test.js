@@ -111,7 +111,8 @@ describe("uniqueDayName", () => {
  * 「今日はこれ」で別の Day を選んだりすると、放っておかれた Day がさらに後回しになった。
  * ここでは「最後にやってから一番時間がたっている Day」を返すこと、
  * 全部未実施の新しい分割では従来のローテーションと同じ動きになること、を縛る。
- * 日付は固定の ISO 文字列で書き、Date.now には依存させない(関数自体も現在時刻を見ない)。
+ * 日付は固定の ISO 文字列で書く。関数は未来の記録を丸めるために現在時刻を見る(opts.now が無ければ Date.now())ので、
+ * 未来の記録を扱うテストでは opts.now を必ず渡す。
  * Day 名を変えたときに前の記録とつながらない点は仕様なので対象外。
  */
 const ppl = () => [{ name: "Push" }, { name: "Pull" }, { name: "Legs" }];
@@ -206,5 +207,66 @@ describe("stalestDayIndex(ここが崩れると放っておかれた Day が後�
 
   it("Day が1つだけなら、その Day(fromIdx)を返す", () => {
     expect(stalestDayIndex([{ name: "Full" }], [sampleWorkout({ session: "Full" })], 0)).toBe(0);
+  });
+
+  // opts.includeFrom は、画面を開いた時点で「今日」を合わせる経路(index.html の useEffect)用。
+  // 今日の Day も候補に入れ、同じ時刻・同じく未実施なら今日の Day を優先する(合っていれば動かさない)。
+  // 北村さんの実例: 肩が「今日」のまま、もっと前にやった胸が後回しになっていた
+  const bro = () => [{ name: "肩" }, { name: "胸" }, { name: "背中" }, { name: "脚" }];
+  const broWorkouts = () => [
+    sampleWorkout({ date: "2026-10-09T09:00:00.000Z", session: "肩" }),
+    sampleWorkout({ date: "2026-10-07T09:00:00.000Z", session: "胸" }),
+    sampleWorkout({ date: "2026-10-08T09:00:00.000Z", session: "背中" }),
+    sampleWorkout({ date: "2026-10-10T09:00:00.000Z", session: "脚" }),
+  ];
+
+  it("includeFrom で今日の Day(肩)より前にやった Day があれば、一番前の胸を返す", () => {
+    expect(stalestDayIndex(bro(), broWorkouts(), 0, { includeFrom: true })).toBe(1);
+  });
+
+  it("includeFrom で今日の Day(胸)が一番前にやった Day なら、動かさずに胸を返す(既定なら外して背中)", () => {
+    expect(stalestDayIndex(bro(), broWorkouts(), 1, { includeFrom: true })).toBe(1);
+    expect(stalestDayIndex(bro(), broWorkouts(), 1)).toBe(2);
+  });
+
+  it("includeFrom で全部未実施なら、今日の Day を動かさない(既定なら次の Day に折り返す)", () => {
+    expect(stalestDayIndex(ppl(), [], 2, { includeFrom: true })).toBe(2);
+    expect(stalestDayIndex(ppl(), [], 2)).toBe(0);
+  });
+
+  it("Day が1つだけなら、includeFrom でも既定でも 0 を返す", () => {
+    const days = [{ name: "Full" }];
+    const workouts = [sampleWorkout({ session: "Full" })];
+    expect(stalestDayIndex(days, workouts, 0, { includeFrom: true })).toBe(0);
+    expect(stalestDayIndex(days, workouts, 0)).toBe(0);
+  });
+
+  // 時刻が未来(opts.now より後)の記録は、未来でない記録のうち一番新しい時刻として扱う。
+  // そのままだと今保存した Day の方が「古い」と判定され、開いた時点の判定(includeFrom)で同じ Day に戻り続ける
+  const futureWorkouts = () => [
+    sampleWorkout({ date: "2099-01-01T09:00:00.000Z", session: "B" }),
+    sampleWorkout({ date: "2026-10-11T10:00:00.000Z", session: "A" }),
+  ];
+  const justAfterSave = Date.parse("2026-10-11T10:00:05.000Z");
+
+  it("includeFrom で、ほかの Day に未来の記録があっても、保存直後に今日の Day(B)から A へ戻らない", () => {
+    const days = [{ name: "A" }, { name: "B" }];
+    expect(stalestDayIndex(days, futureWorkouts(), 1, { includeFrom: true, now: justAfterSave })).toBe(1);
+  });
+
+  it("既定でも、未来の記録を丸めたうえで今日の Day(A)を外して B を返す", () => {
+    const days = [{ name: "A" }, { name: "B" }];
+    expect(stalestDayIndex(days, futureWorkouts(), 0, { now: justAfterSave })).toBe(1);
+  });
+
+  it("全部の記録が未来なら、どれも now と同じ扱いの同点になり、並び順で決まる", () => {
+    const workouts = [
+      sampleWorkout({ date: "2099-01-01T09:00:00.000Z", session: "Push" }),
+      sampleWorkout({ date: "2099-06-01T09:00:00.000Z", session: "Pull" }),
+      sampleWorkout({ date: "2098-01-01T09:00:00.000Z", session: "Legs" }),
+    ];
+    expect(stalestDayIndex(ppl(), workouts, 1, { includeFrom: true, now: justAfterSave })).toBe(1);
+    expect(stalestDayIndex(ppl(), workouts, 1, { now: justAfterSave })).toBe(2);
+    expect(stalestDayIndex(ppl(), workouts, 2, { now: justAfterSave })).toBe(0);
   });
 });
