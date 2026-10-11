@@ -36,9 +36,22 @@ final class WorkoutManager: NSObject, ObservableObject {
     // 心拍を iPhone に送った最後の時刻(5秒に1回までに絞る。sendMessage は iPhone のアプリを裏で起こすため)
     private var lastHeartRateSentAt: Date = .distantPast
 
-    func start(_ config: HKWorkoutConfiguration) async {
-        guard !isBusy, HKHealthStore.isHealthDataAvailable() else { return }
+    // forRecord: Watch で開いたときに Watch 自身が始めた場合の、iPhone の記録の startAt(SessionStore.startWorkoutIfNeeded)。
+    // 途中から始めるので開始時刻の近さ(attachWindow)は見ずに、その記録に対応付けて iPhone に "started" を送る
+    // 始めた(または動いているセッションをそのまま使う)なら true
+    @discardableResult
+    func start(_ config: HKWorkoutConfiguration, forRecord: Double? = nil) async -> Bool {
+        guard !isBusy, HKHealthStore.isHealthDataAvailable() else { return false }
         if isRunning {
+            // まだ続いている記録に付いているセッション、または対応付けを待っている始めたばかりのセッションは捨てない。
+            // iPhone の起こし直し(1.4.1 (29))や Watch 自身の開始が重なったときに、動いているワークアウトを捨てて
+            // 始め直すと、それまでの心拍が消え、10分を超えると対応付けに失敗してワークアウトごと無くなった(reviewer 指摘)
+            let ongoing = SessionStore.shared.recordInProgress
+            if let r = recordStartAt, r == ongoing { return true }
+            if recordStartAt == nil, Date().timeIntervalSince1970 * 1000 - sessionStartMs < Self.attachWindow * 1000 {
+                if let r = forRecord, r == ongoing, attach(recordStartAt: r) { SessionStore.shared.sendWorkoutEvent("started", recordStartAt: r) }
+                return true
+            }
             // 前のセッションが残っている(対応付く前に記録が終わった・終わりの知らせが届かなかった)。
             // 保存されていれば保存し、そうでなければ破棄してから始め直す
             if let r = recordStartAt, let saved = SessionStore.shared.lastSaved, saved.startAt == r {
@@ -76,10 +89,17 @@ final class WorkoutManager: NSObject, ObservableObject {
             }
         } catch {
             cleanUp()
-            return
+            return false
         }
-        // 記録中のスナップショットが先に届いていれば、その場で対応付ける
+        if let r = forRecord {
+            recordStartAt = r
+            // 始めるのを待っている間(初回の許可シートなど)に記録が終わっていたら、"started" は送らない。
+            // 後の workoutDidStart → syncWorkout が、今の状態で保存か破棄かを決める(reviewer 指摘)
+            if SessionStore.shared.recordInProgress == r { SessionStore.shared.sendWorkoutEvent("started", recordStartAt: r) }
+        }
+        // 記録中のスナップショットが先に届いていれば、その場で対応付ける(forRecord のときは、記録が続いているかを確かめる)
         SessionStore.shared.workoutDidStart()
+        return true
     }
 
     // スナップショットで分かった、この記録の startAt。開始時刻が離れすぎていれば対応付けない

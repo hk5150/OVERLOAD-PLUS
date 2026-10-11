@@ -32,6 +32,7 @@ func formatWeight(_ v: Double) -> String {
 
 struct RootView: View {
     @ObservedObject var store: SessionStore
+    @Environment(\.scenePhase) private var scenePhase
     // スクリーンショット用: -KurabellSample と一緒に -KurabellOpen <種目id> で種目画面から始める
     @State private var path: [String] = SampleData.launchValue("-KurabellOpen").map { [$0] } ?? []
 
@@ -45,6 +46,9 @@ struct RootView: View {
             }
         } else {
             main
+                // 前面に来たら、iPhone の記録に Watch のワークアウトが付いていなければ始める(SessionStore.startWorkoutIfNeeded)
+                .onChange(of: scenePhase) { _, phase in if phase == .active { store.startWorkoutIfNeeded() } }
+                .onAppear { store.startWorkoutIfNeeded() }
         }
     }
 

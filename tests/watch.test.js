@@ -528,3 +528,138 @@ describe("watchHeartRateToShow", () => {
     expect(watchHeartRateToShow(null, { watchLive: true, startAt: 1000, now: 60000 })).toBe(null);
   });
 });
+
+// iPhone で記録を始めても Watch のワークアウトが始まらず、心拍が出ない・手首を下ろすと文字盤に戻る
+// (1.4.1 (29)、北村さんの実機)。始める手段が iPhone からの startWatchApp の1回だけで、Watch がロック中・圏外・
+// アプリの入れ替え中だとその記録の間ずっと失敗したままだった。対策は2つ:
+//   - Watch で KURABELL を前面に出したら、Watch 自身が始める(SessionStore.startWorkoutIfNeeded)
+//   - iPhone は20秒後に一度だけ起こし直す(index.html の ensureStarted)
+// Swift と #appsrc はテストで実行できないので、条件の有無と順序を文字列で縛る。
+// reviewer の指摘で、起こし直しが重なったときに「動いているワークアウトを捨てて始め直す」(心拍が消え、
+// 10分を超えると対応付けに失敗してワークアウトごと無くなる)、起動直後の古い状態で保存済みの記録に始める、
+// iPhone のロック明けに遅れて走った再試行が起こす、の3つを塞いだ。それぞれここで縛る。
+// HKWorkoutSession が実機で本当に始まるか(前面判定・許可)は対象外。実機で確かめるしかない。
+describe("Watch のワークアウトの起こし直し(ここが崩れると記録の間ずっと心拍が出ない)", () => {
+  const read = (rel) => fs.readFileSync(path.join(process.cwd(), rel), "utf-8");
+  // Swift の関数本体(4字下げの閉じ括弧まで)
+  const swiftFunc = (src, sig) => {
+    const start = src.indexOf(sig);
+    expect(start).toBeGreaterThanOrEqual(0);
+    return src.slice(start, src.indexOf("\n    }\n", start));
+  };
+  const selfStart = () => swiftFunc(read("ios/App/KurabellWatch/SessionStore.swift"), "func startWorkoutIfNeeded()");
+
+  it("記録中とみなすのは、iPhone が記録中でまだ保存していない記録だけ(recordInProgress)", () => {
+    const rip = swiftFunc(read("ios/App/KurabellWatch/SessionStore.swift"), "var recordInProgress: Double? {");
+    expect(rip).toContain("guard let snap = base, let r = snap.recordStartAt else { return nil }");
+    expect(rip).toMatch(/if let saved = snap\.lastSaved, saved\.startAt == r \{ return nil \}/);
+    expect(rip).toMatch(/return r\s*$/);
+  });
+
+  it("Watch 自身が始めるのは、iPhone との通信が有効で・前面にいて・保存前の記録で・ワークアウトが動いていないときだけ", () => {
+    const body = selfStart();
+    expect(body).toContain("guard WCSession.default.activationState == .activated else { return }");
+    expect(body).toContain("guard let r = recordInProgress, !selfStarting, !selfStartTried.contains(r) else { return }");
+    expect(body).toContain("guard !wm.isRunning, !wm.isBusy else { return }");
+    expect(body).toContain("guard WKApplication.shared().applicationState == .active else { return }");
+    expect(body).toContain("let ok = await wm.start(config, forRecord: r)");
+  });
+
+  it("起動直後で通信が有効になる前は、前回の古い状態しか知らないので記録を見る前に打ち切る", () => {
+    const body = selfStart();
+    expect(body.indexOf("WCSession.default.activationState == .activated")).toBeLessThan(body.indexOf("recordInProgress"));
+  });
+
+  it("始めるのに失敗した記録だけ二度と試さない(始めた後にシステムに止められた記録は、開き直せばまた始まる)", () => {
+    const body = selfStart();
+    expect(body.match(/selfStartTried\.insert\(r\)/g)).toHaveLength(1);
+    expect(body).toContain("if !ok { selfStartTried.insert(r) }");
+    expect(body.indexOf("let ok = await wm.start(config, forRecord: r)")).toBeLessThan(body.indexOf("if !ok { selfStartTried.insert(r) }"));
+  });
+
+  it("始めている最中は重ねて始めず、終われば成否によらず次を受け付ける", () => {
+    const body = selfStart();
+    const on = body.indexOf("selfStarting = true");
+    expect(on).toBeGreaterThan(body.indexOf("WorkoutManager.maxDuration"));
+    expect(on).toBeLessThan(body.indexOf("wm.start(config, forRecord: r)"));
+    expect(body).toMatch(/let ok = await wm\.start\(config, forRecord: r\)\s*selfStarting = false\s*if !ok/);
+  });
+
+  it("記録の開始から WorkoutManager.maxDuration を過ぎた記録には始めない", () => {
+    expect(selfStart()).toMatch(/guard Date\(\)\.timeIntervalSince1970 \* 1000 - r < WorkoutManager\.maxDuration \* 1000 else \{ return \}/);
+  });
+
+  it("スナップショットを受けたら、対応付け(syncWorkout)の後で Watch 自身が始めるかを見る", () => {
+    const store = read("ios/App/KurabellWatch/SessionStore.swift");
+    const receive = swiftFunc(store, "fileprivate func receive(_ snap: WatchSnapshot)");
+    const sync = receive.indexOf("syncWorkout(with: snap)");
+    const self = receive.indexOf("startWorkoutIfNeeded()");
+    expect(sync).toBeGreaterThanOrEqual(0);
+    expect(self).toBeGreaterThan(sync);
+  });
+
+  it("RootView は前面に来たときと表示したときに、Watch 自身が始めるかを見る", () => {
+    const views = read("ios/App/KurabellWatch/Views.swift");
+    const root = views.slice(views.indexOf("struct RootView"), views.indexOf("\nstruct ", views.indexOf("struct RootView") + 1));
+    expect(root).toMatch(/\.onChange\(of: scenePhase\) \{ _, phase in if phase == \.active \{ store\.startWorkoutIfNeeded\(\) \} \}/);
+    expect(root).toContain(".onAppear { store.startWorkoutIfNeeded() }");
+  });
+
+  const wmStart = () => swiftFunc(read("ios/App/KurabellWatch/WorkoutManager.swift"), "func start(_ config: HKWorkoutConfiguration, forRecord: Double? = nil) async -> Bool {");
+
+  it("WorkoutManager.start は始められたかを返し、呼び出し側が結果を使わなくても警告にならない", () => {
+    expect(read("ios/App/KurabellWatch/WorkoutManager.swift")).toMatch(/@discardableResult\s*func start\(_ config: HKWorkoutConfiguration, forRecord: Double\? = nil\) async -> Bool \{/);
+    const start = wmStart();
+    expect(start).toMatch(/\} catch \{\s*cleanUp\(\)\s*return false\s*\}/);
+    expect(start).toMatch(/SessionStore\.shared\.workoutDidStart\(\)\s*return true\s*$/);
+  });
+
+  it("続いている記録に付いたセッションと、対応付けを待っている始めたばかりのセッションは捨てずに true を返す", () => {
+    const start = wmStart();
+    const running = start.slice(start.indexOf("if isRunning {"), start.indexOf("isBusy = true"));
+    expect(running).toContain("let ongoing = SessionStore.shared.recordInProgress");
+    expect(running).toContain("if let r = recordStartAt, r == ongoing { return true }");
+    expect(running).toMatch(/if recordStartAt == nil, Date\(\)\.timeIntervalSince1970 \* 1000 - sessionStartMs < Self\.attachWindow \* 1000 \{[\s\S]*?return true\s*\}/);
+    // 対応付け待ちのセッションは、記録が続いているときだけその記録に付けて started を送る
+    expect(running).toContain('if let r = forRecord, r == ongoing, attach(recordStartAt: r) { SessionStore.shared.sendWorkoutEvent("started", recordStartAt: r) }');
+    // 捨てない分岐は、前のセッションを保存・破棄する処理より前にある
+    const keep = running.indexOf("r == ongoing { return true }");
+    expect(keep).toBeLessThan(running.indexOf("await finish("));
+    expect(keep).toBeLessThan(running.indexOf("await discard("));
+    expect(running.indexOf("attachWindow")).toBeLessThan(running.indexOf("await discard("));
+  });
+
+  it("Watch 自身が始めたワークアウトはその記録に対応付け、記録がまだ続いているときだけ iPhone に started を送る", () => {
+    const start = wmStart();
+    expect(start).toMatch(/if let r = forRecord \{\s*recordStartAt = r\s*(?:\/\/.*\n\s*)*if SessionStore\.shared\.recordInProgress == r \{ SessionStore\.shared\.sendWorkoutEvent\("started", recordStartAt: r\) \}\s*\}/);
+    // forRecord の分岐は、セッションを始めた後(recordStartAt = nil で初期化した後)に置く
+    expect(start.indexOf("recordStartAt = nil")).toBeLessThan(start.indexOf("if let r = forRecord {"));
+    // その後で workoutDidStart を通し、待っている間に記録が終わっていれば保存か破棄かを今の状態で決める
+    expect(start.indexOf("if let r = forRecord {")).toBeLessThan(start.lastIndexOf("SessionStore.shared.workoutDidStart()"));
+  });
+
+  it("iPhone は記録の開始時に Watch を起こし、20秒後に一度だけ、記録が続いていて Watch が受け持っておらず開始から1分以内なら起こし直す(ロック明けに遅れて走った再試行は起こさない)", () => {
+    const html = read("index.html");
+    const start = html.indexOf("const ensureStarted = () => {");
+    expect(start).toBeGreaterThanOrEqual(0);
+    const body = html.slice(start, html.indexOf("\n  };\n", start));
+    expect(body.match(/healthStartWatchWorkout\(\)/g)).toHaveLength(2);
+    expect(body.match(/setTimeout\(/g)).toHaveLength(1);
+    expect(body).not.toContain("setInterval");
+    expect(body).toMatch(/setTimeout\(\(\) => \{\s*if \(startAtRef\.current === s0 && watchWorkoutForRef\.current !== s0 && Date\.now\(\) - s0 < 60000\) healthStartWatchWorkout\(\);\s*\}, 20000\)/);
+    // 起こすのはヘルスケア連携がオンのときだけ
+    expect(body.indexOf("if (healthOn)")).toBeLessThan(body.indexOf("healthStartWatchWorkout()"));
+  });
+
+  it("Watch 自身が始めるときのワークアウトの設定は、iPhone から起こすとき(HealthManager.startWatchApp)と同じ", () => {
+    const configOf = (body) => {
+      const m = body.match(/let config = HKWorkoutConfiguration\(\)\s*config\.activityType = (\.\w+)\s*config\.locationType = (\.\w+)/);
+      expect(m).not.toBeNull();
+      return { activityType: m[1], locationType: m[2] };
+    };
+    const phone = configOf(swiftFunc(read("ios/App/App/Health/HealthManager.swift"), "func startWatchApp()"));
+    const watch = configOf(selfStart());
+    expect(phone).toEqual({ activityType: ".traditionalStrengthTraining", locationType: ".indoor" });
+    expect(watch).toEqual(phone);
+  });
+});

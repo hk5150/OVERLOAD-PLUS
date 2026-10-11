@@ -1725,8 +1725,18 @@ function App() {
   // (下書きからの復元は「開始」ではないので起動しない。docs/Watchアプリ.md)
   const ensureStarted = () => {
     if (startAt) return;
-    setStartAt(Date.now()); setElapsed(0);
-    if (healthOn) healthStartWatchWorkout();
+    const s0 = Date.now();
+    setStartAt(s0); setElapsed(0);
+    if (healthOn) {
+      healthStartWatchWorkout();
+      // 起こすのは1回だけだと、Watch がロック中・圏外・アプリの入れ替え中で失敗したとき、その記録の間ずっと心拍が出なかった
+      // (1.4.1 (29)、北村さん)。20秒たっても Watch から "started" が来ず、記録が続いていれば、もう一度だけ起こす
+      // iPhone をロックしている間は止まっていて、前面に戻った瞬間に遅れて走ることがある。そのときはもう Watch が
+      // 動いているかもしれないので、記録の開始から1分を過ぎていたら起こさない(Watch で開けば Watch 自身が始める。reviewer 指摘)
+      setTimeout(() => {
+        if (startAtRef.current === s0 && watchWorkoutForRef.current !== s0 && Date.now() - s0 < 60000) healthStartWatchWorkout();
+      }, 20000);
+    }
   };
 
   // ---- 集計 ----

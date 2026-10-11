@@ -1,4 +1,5 @@
 import Foundation
+import HealthKit
 import SwiftUI
 import UserNotifications
 import WatchConnectivity
@@ -167,6 +168,7 @@ final class SessionStore: NSObject, ObservableObject {
         if snap.state != .active { pending.removeAll { $0.kind != "workout" } }
         save()
         syncWorkout(with: snap)
+        startWorkoutIfNeeded()
         // 次の記録が始まったら、前回の完了画面は下げる
         if snap.recordStartAt != nil { showingFinished = nil }
         presentFinishedIfNeeded()
@@ -211,6 +213,41 @@ final class SessionStore: NSObject, ObservableObject {
     // WorkoutManager がセッションを始めたとき。記録中のスナップショットが先に届いていれば、ここで対応付ける
     func workoutDidStart() {
         if let snap = base { syncWorkout(with: snap) }
+    }
+
+    // Watch のワークアウトが始まっていないまま iPhone で記録が続いていたら、Watch 自身が始める(1.4.1 (29)、北村さん)。
+    // 始める手段が「iPhone で記録を始めた瞬間の startWatchApp の1回」だけで、それが失敗する(Watch がロック中・圏外・
+    // TestFlight の更新後に Watch 側のアプリの入れ替えが遅れている等)と、その記録の間ずっと心拍が出ず、手首を下ろすと
+    // 文字盤に戻っていた。Watch で KURABELL を開けば、ここで始まる。
+    // HKWorkoutSession は前面からなら始められるので、アプリが前面のときだけ。許可が無い等で失敗したら、同じ記録では二度と試さない
+    // 失敗した記録(許可が無い等)は二度と試さない。始めた後にシステムに止められた場合は印を付けないので、開き直せばまた始まる
+    private var selfStartTried: Set<Double> = []
+    private var selfStarting = false
+    // iPhone が記録中で、まだ保存していない記録の startAt
+    var recordInProgress: Double? {
+        guard let snap = base, let r = snap.recordStartAt else { return nil }
+        if let saved = snap.lastSaved, saved.startAt == r { return nil }
+        return r
+    }
+    func startWorkoutIfNeeded() {
+        // 起動直後で iPhone との通信がまだ有効でない間は、前回の古い状態しか知らない(保存済みの記録に始めてしまう。reviewer 指摘)。
+        // 有効になれば activationDidCompleteWith → receive からここが呼ばれる
+        guard WCSession.default.activationState == .activated else { return }
+        guard let r = recordInProgress, !selfStarting, !selfStartTried.contains(r) else { return }
+        let wm = WorkoutManager.shared
+        guard !wm.isRunning, !wm.isBusy else { return }
+        guard WKApplication.shared().applicationState == .active else { return }
+        guard Date().timeIntervalSince1970 * 1000 - r < WorkoutManager.maxDuration * 1000 else { return }
+        selfStarting = true
+        // 設定は iPhone から起こすとき(HealthManager.startWatchApp)と同じ
+        let config = HKWorkoutConfiguration()
+        config.activityType = .traditionalStrengthTraining
+        config.locationType = .indoor
+        Task {
+            let ok = await wm.start(config, forRecord: r)
+            selfStarting = false
+            if !ok { selfStartTried.insert(r) }
+        }
     }
 
     // スナップショットの状態に合わせて、ワークアウトを記録に対応付ける・保存する・破棄する。
