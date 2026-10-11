@@ -4194,19 +4194,24 @@ function App() {
                   style={{ ...btn("transparent", C.muted), width: 30, height: 30, padding: 0, display: "grid", placeItems: "center", flexShrink: 0, fontSize: 15 }}>✕</button>
               </div>
 
-              {/* 判断材料: 重量の停滞と推移。前回の各セットはセット行に並べて出すのでここでは繰り返さない */}
+              {/* 判断材料: 重量の停滞。前回の各セットはセット行に並べて出すのでここでは繰り返さない。
+                  直近4回の代表セットを並べた「推移」は外した(北村さん、2026-10-11)。最後の値はセット行の「前回」と重なり、
+                  重量を変えた日が混ざると伸びたのか落ちたのか読めず、伸びは下の「過去のベスト」の欄と履歴のグラフで見える。
+                  前回の日付はその欄に移したので、ここに出すのは欄が出ないときだけ。助言も無ければ行ごと出さない */}
               {(() => {
                 if (!ins) return null;
-                // topWeightがnullの日(全セットが補助あり等)は重量の判断材料を出せない。
-                // 日付・ゴースト表示・推移は出せるので、この行ごと消さずに畳むだけにする。
+                // topWeightがnullの日(全セットが補助あり等)は重量の判断材料を出せない
                 const hasStreak = ins.topWeight != null && ins.streak >= 2;
-                const hasTrend = ins.trend.length >= 2;
+                const hasAdvice = hasStreak && ins.canAddWeight;
+                const pr = prMap[ex.name];
+                const bestShown = (!!pr && (pr.best1RM > 0 || pr.bestWeight > 0)) || liveBest1RM(ex) > 0; // 下の欄と同じ条件
+                if (!hasAdvice && bestShown) return null;
                 const unit = ins.isDb ? t("share.perHand", { unit: uLabel() }) : uLabel();
                 return (
                   <div style={{ background: C.bg, borderRadius: 10, padding: "6px 10px", marginBottom: 10, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-                    <span style={{ fontSize: 12, color: C.muted }}>{t("log.lastDate", { date: fmtDate(ins.date) })}</span>
+                    {!bestShown && <span style={{ fontSize: 12, color: C.muted }}>{t("log.lastDate", { date: fmtDate(ins.date) })}</span>}
                     {/* 加重できない種目(腕立てなど)では重量の連続に意味がない。「0kgで5セッション連続」
-                        としか言えず、取れる行動もない。推移の回数だけを見せる。 */}
+                        としか言えず、取れる行動もない。回数の伸びはセット行の「前回」で見える。 */}
                     {hasStreak && ins.canAddWeight && (
                       <span style={{ fontSize: 12, fontWeight: 700, color: ins.streak >= 4 ? C.yellow : C.muted }}>
                         {t("log.streak", { w: wU(ins.topWeight), unit, n: ins.streak })}
@@ -4233,15 +4238,6 @@ function App() {
                           {t("log.repsDown", { best: ins.bestRecentReps, prev: ins.topReps })}
                         </span>
                       )
-                    )}
-                    {/* 加重できない種目では重量を書かず回数だけ並べる(「0×20 → 0×22」は読みづらい)。
-                        weightフィールドを持たない旧データは0扱いになるため、ここでも0kgと同じ扱いになる。 */}
-                    {hasTrend && (
-                      <span style={{ fontSize: 12, color: C.muted }}>
-                        {t("log.trend", {
-                          list: ins.trend.map(v => ins.canAddWeight ? `${wU(v.weight)}×${v.reps}` : `${v.reps}`).join(" → "),
-                        })}
-                      </span>
                     )}
                   </div>
                 );
@@ -4282,6 +4278,8 @@ function App() {
                     {main && <span style={{ fontSize: 13, fontWeight: isPR1RM ? 800 : 600, color: isPR1RM ? C.green : C.text }}>{main}</span>}
                     {isPR1RM && best1RM > 0 && <span style={{ fontSize: 12, color: C.green }}>{t("compare.win")}</span>}
                     <span style={{ marginLeft: "auto", display: "inline-flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                      {/* 前回の日付。続く「最大重量」は通算の値なので、「前回の最大重量」と読まれないよう点で区切る(reviewer 指摘) */}
+                      {ins && <span style={{ fontSize: 12, color: C.muted }}>{t("log.lastDate", { date: fmtDate(ins.date) })}{(isPRw || bestW > 0) && <span style={{ color: C.grey, marginLeft: 8 }}>·</span>}</span>}
                       {isPRw ? (
                         <span style={{ background: C.green, color: "#fff", borderRadius: 999, padding: "2px 9px", fontSize: 12, fontWeight: 800, display: "inline-flex", alignItems: "center", gap: 4 }}>
                           <Icon name="trophy" size={13} />{t("compare.prTop", { v: f1(liveW), unit })}

@@ -106,7 +106,6 @@ const STRINGS = {
   // 元は「回連続」だけ<strong>で囲っていたが、英語だと語順が変わって太字の範囲を保てない。
   // 1文にまとめ、強調は span 側の fontWeight でかける。
   "log.streak":        { ja: "{w}{unit} で {n}セッション連続", en: "{n} sessions in a row at {w}{unit}" },
-  "log.trend":         { ja: "推移 {list}",           en: "Trend {list}" },
   "log.plateauAlert":  { ja: "重量が{n}セッション連続で頭打ち。そろそろ上げどき", en: "Stuck at this weight for {n} sessions — time to add more" },
   // 同じ重量が続いていても回数が落ちている場合。「上げどき」とは言わず事実だけ渡す。
   // {best}は直近数回での最高であって「前々回」ではないので、矢印で繋がない。
