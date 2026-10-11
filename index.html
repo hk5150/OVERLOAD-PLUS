@@ -1805,12 +1805,12 @@ function App() {
   // ---- お疲れ様の画面(iPhone、1.4)と、Instagram 用の画像 ----
   const [finishScreen, setFinishScreen] = useState(null); // { summary: finishedSummary, entry }
   const [imageBusy, setImageBusy] = useState(false);
-  const [imageError, setImageError] = useState(false);
+  const [imageError, setImageError] = useState(null); // 失敗した所("finish" か "hist:<記録の位置>")
   // 閉じた後に、自己ベストを超えた日だけ App Store のレビューを頼む(出すかどうかは iOS が決める。
   // 依頼した日時だけ残して、次は120日あける。src/domain/review.js)。お疲れ様の画面の上に重ねると、最初に見るのが評価の依頼になる
   const closeFinish = async () => {
     const f = finishScreen;
-    setFinishScreen(null); setImageError(false);
+    setFinishScreen(null); setImageError(null);
     if (!f?.beatPrevious) return;
     try {
       const lastRequestedAt = (await store.get(REVIEW_REQUESTED_KEY))?.value;
@@ -2026,23 +2026,35 @@ function App() {
     return cv;
   };
 
-  const shareWorkoutImage = async () => {
-    if (!finishScreen || imageBusy) return;
-    setImageBusy(true); setImageError(false);
+  // 画像を作って共有する。お疲れ様の画面(where = "finish")と、履歴の各日(where = "hist:<位置>")から呼ぶ
+  const shareImageOf = async (entry, summary, where) => {
+    if (imageBusy) return;
+    setImageBusy(true); setImageError(null);
     try {
-      const cv = await drawWorkoutImage(finishScreen.entry, finishScreen.summary);
+      const cv = await drawWorkoutImage(entry, summary);
       const dataUrl = cv.toDataURL("image/png");
       if (fileExportAvailable()) {
         const r = await shareImageFile(dataUrl.split(",")[1]);
-        if (r == null) setImageError(true);
+        if (r == null) setImageError(where);
       } else {
         // Web 版はダウンロード
         const a = document.createElement("a");
-        a.href = dataUrl; a.download = `kurabell-${new Date(finishScreen.entry.date).toLocaleDateString("sv-SE")}.png`;
+        a.href = dataUrl; a.download = `kurabell-${new Date(entry.date).toLocaleDateString("sv-SE")}.png`;
         document.body.appendChild(a); a.click(); a.remove();
       }
-    } catch { setImageError(true); }
+    } catch { setImageError(where); }
     setImageBusy(false);
+  };
+  const shareWorkoutImage = () => finishScreen && shareImageOf(finishScreen.entry, finishScreen.summary, "finish");
+  // 履歴の各日から作る(お疲れ様の画面を閉じた後や、過去の日でも作り直せるように。北村さん、2026-10-11)。
+  // 自己ベストの印は、その日より前の記録の最高と比べて付ける(prMap は今日までの全部が入っているので使わない)
+  const shareHistoryImage = (w, idx) => {
+    const t0 = Date.parse(w.date);
+    const bestOf = (ex) => workingSets(ex).reduce((m, s) => (s.assisted || !s.reps || s.reps < 1) ? m : Math.max(m, est1RM(setEff(ex, s), s.reps)), 0);
+    const pastBest = {};
+    workouts.forEach(x => { if (x === w || !(Date.parse(x.date) < t0)) return; x.exercises.forEach(ex => { pastBest[ex.name] = Math.max(pastBest[ex.name] || 0, bestOf(ex)); }); });
+    const prKeys = w.exercises.filter(ex => (pastBest[ex.name] || 0) > 0 && bestOf(ex) > pastBest[ex.name] + 0.01).map(ex => ex.name);
+    shareImageOf(w, { title: t("watch.finishedTitle"), prKeys }, `hist:${idx}`);
   };
 
   // 記録中の種目の最大重量(実際に挙げた重量。回数1以上のセットのみ)
@@ -3842,7 +3854,7 @@ function App() {
               <button onClick={shareWorkoutImage} disabled={imageBusy}
                 style={{ ...btn(C.surface2, C.text), padding: 13, fontSize: 14, border: `1px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "center", gap: 7, opacity: imageBusy ? 0.6 : 1 }}>
                 <Icon name="share" size={16} />{t("finish.image")}</button>
-              {imageError && <div role="alert" style={{ fontSize: 12, color: C.red, textAlign: "center" }}>{t("finish.imageFailed")}</div>}
+              {imageError === "finish" && <div role="alert" style={{ fontSize: 12, color: C.red, textAlign: "center" }}>{t("finish.imageFailed")}</div>}
               <button onClick={closeFinish} style={{ ...btn(C.red), padding: 15, fontSize: 15, marginTop: 4 }}>{t("common.close")}</button>
             </div>
           </div>
@@ -5587,6 +5599,9 @@ function App() {
                         style={{ ...btn("transparent", copiedIdx === `hist:${idx}` ? C.green : C.muted), padding: "5px 6px", fontSize: 13 }}>
                         {copiedIdx === `hist:${idx}` ? t("history.consultAiDone") : t("history.consultAi")}
                       </button>
+                      {/* Instagram 用の画像(お疲れ様の画面と同じもの)。アイコンだけにして、見出しの行が折り返さないようにする */}
+                      <button onClick={() => shareHistoryImage(w, idx)} disabled={imageBusy} aria-label={t("finish.image")} title={t("finish.image")} className="tapArea"
+                        style={{ ...btn("transparent", C.muted), padding: "5px 6px", display: "grid", placeItems: "center", opacity: imageBusy ? 0.5 : 1 }}><Icon name="share" size={17} /></button>
                       <button onClick={() => startEditWorkout(idx)} style={{ ...btn(C.surface2, C.text), padding: "5px 14px", fontSize: 13, border: `1px solid ${C.border}` }}>{t("common.edit")}</button>
                       <button onClick={() => deleteWorkout(idx)} aria-label={t("history.deleteDay")} className="tapArea" style={{ ...btn("transparent", C.muted), padding: "5px 6px", display: "grid", placeItems: "center" }}><Icon name="trash" size={17} /></button>
                     </>
@@ -5594,6 +5609,7 @@ function App() {
                 </div>
               </div>
 
+              {imageError === `hist:${idx}` && <div role="alert" style={{ fontSize: 12, color: C.red, marginBottom: 4 }}>{t("finish.imageFailed")}</div>}
               {/* 種目カード側と同じ理由(コピーの次に何をするかが伝わらない)。文言・高さの扱いも共通。 */}
               <div role="status" style={{ fontSize: 12, color: C.green, marginBottom: 8, height: 17 }}>
                 {copiedIdx === `hist:${idx}` ? t("log.pasteHint") : ""}
