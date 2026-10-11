@@ -1,4 +1,4 @@
-What to check in 1.4.1 (23):
+What to check in 1.4.1 (24):
 1. Split tab: each day shows "Last: Xd ago" ("Done today" for a day you trained today). Days are counted by date, so a day trained last night shows "Last: 1d ago" the next morning
 2. Today's day: when you open the app, the day you've gone longest without should already be "Today" (in (20) it kept the old order until you saved). A day you pick with "Today" stays until your next save. Days never trained come first
 3. Exercise cards in the Log tab: the "Last ... Trend ..." line is gone, and the last date now sits in the "Your best" row (left of the max weight). Hints for repeating the same weight still appear
@@ -6,3 +6,4 @@ What to check in 1.4.1 (23):
 5. YOU WIN! should appear only when a set beats your best so far, today's sets included. A second set equal to or below your first one no longer triggers it (the row still turns green)
 6. With the Watch rest screen open and your wrist down, rest alerts (1 min etc.) should arrive on time (sound and haptic only, no banner, while the rest screen is open)
 7. Exercise list review: new Adductors muscle group and exercises (added once to leg days), search by common nicknames, bodyweight coefficients
+8. "Image for Instagram" on the finish screen: shows vs-last volume, each exercise vs last time, and today's score (out of 100). No score on the first time you do a day. Check it can be shared to Instagram
