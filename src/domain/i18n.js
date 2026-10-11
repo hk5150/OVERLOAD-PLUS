@@ -119,6 +119,9 @@ const STRINGS = {
   "finish.report":     { ja: "AIコーチに報告",         en: "Report to AI Coach" },
   "finish.reportDone": { ja: "コピーしました。AIに貼り付けて送信してください", en: "Copied. Paste it into the AI chat and send it" },
   "finish.image":      { ja: "Instagram 用の画像",     en: "Image for Instagram" },
+  // 人体図(どこを鍛えたか)の読み上げ
+  "body.aria":         { ja: "鍛えた部位: {list}",     en: "Trained: {list}" },
+  "common.listSep":    { ja: "・",                     en: ", " },
   // Instagram 用の画像(1.4.1 で作り直し。前回比較と今日のスコア)
   "img.score":         { ja: "今日のスコア",           en: "TODAY'S SCORE" },
   "img.breakdown":     { ja: "前回超え {b}/{n}・自己ベスト {p}", en: "Beat last {b}/{n} · New best {p}" },

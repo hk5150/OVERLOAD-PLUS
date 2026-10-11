@@ -201,6 +201,8 @@
       globals:['workingSets','setVolume','exVolume','nextSetType','volumeGoalKey'] },
     { key:'dayPlan',    urls:['src/domain/dayPlan.js'],
       globals:['STARTER_PICKS','STARTER_FULL_BODY','STARTER_MAX','starterPicks','DAY_GROUP_OF','autoDayName','nextDayName','uniqueDayName','stalestDayIndex','addAdductorDays'] },
+    { key:'bodyMap',    urls:['src/domain/bodyMap.js'],
+      globals:['mirrorBodyPath','BODY_SILHOUETTE','BODY_HEAD','BODY_REGIONS','BODY_DETAILS','bodyHitMuscles'] },
     { key:'coefficients', urls:['src/domain/coefficients.js'],
       globals:['resolveCoefficients','absorbBuiltinNameClash'] },
     { key:'insight',    urls:['src/domain/insight.js'],
@@ -779,6 +781,34 @@ const compactTick = (v) => Math.abs(v) >= 1000 ? `${Math.round(v / 100) / 10}k` 
 const lastDot = (len, color) => (p) => p.index === len - 1 && p.value != null
   ? <circle key={p.key} cx={p.cx} cy={p.cy} r={4.5} fill={color} stroke={C.surface} strokeWidth={2} />
   : <g key={p.key} />;
+
+// どこを鍛えたかの人体図(前と後ろ。src/domain/bodyMap.js)。hit は塗る部位の Set。
+// 灰色の輪郭の上に部位を重ね、境目は背景色の線で見せる。塗りは「やったかどうか」だけ(北村さん、2026-10-11)。
+// 折り返した形は最初に一度だけ作る(履歴に何十日も並び、記録中は毎秒描き直すので、毎回正規表現を回さない。reviewer 指摘)
+let bodyPathsCache = null;
+const bodyPaths = () => bodyPathsCache || (bodyPathsCache = [0, 1].map(side => {
+  const both = (d) => [d, mirrorBodyPath(d)];
+  return {
+    base: [...both(BODY_SILHOUETTE), BODY_HEAD],
+    regions: Object.entries(BODY_REGIONS).filter(([, pair]) => pair[side]).map(([m, pair]) => ({ m, ds: both(pair[side]) })),
+    details: BODY_DETAILS.filter(pair => pair[side]).flatMap(pair => both(pair[side])),
+  };
+}));
+const BodyMap = React.memo(function BodyMap({ hit, height = 150, line = C.surface, label }) {
+  const parts = [];
+  bodyPaths().forEach((p, side) => {
+    const tf = `translate(${side * 110},0)`, key = (k) => `${side}-${k}`;
+    p.base.forEach((d, i) => parts.push(<path key={key(`b${i}`)} d={d} transform={tf} fill={C.grey} />));
+    p.regions.forEach(({ m, ds }) => ds.forEach((d, i) => parts.push(<path key={key(`${m}${i}`)} d={d} transform={tf}
+      fill={hit && hit.has(m) ? C.red : C.grey} stroke={line} strokeWidth={0.9} strokeLinejoin="round" />)));
+    p.details.forEach((d, i) => parts.push(<path key={key(`d${i}`)} d={d} transform={tf} fill="none" stroke={line} strokeWidth={0.8} strokeLinecap="round" />));
+  });
+  return (
+    <svg viewBox="0 0 210 220" role="img" aria-label={label} style={{ height, width: height * 210 / 220, display: "block" }}>{parts}</svg>
+  );
+// 塗る部位(Set は毎回作り直されるので中身で比べる)・大きさ・線の色・読み上げが同じなら描き直さない
+}, (a, b) => a.height === b.height && a.line === b.line && a.label === b.label
+  && [...(a.hit || [])].sort().join() === [...(b.hit || [])].sort().join());
 
 function JudgeBadge({ type }) {
   const j = JUDGE[type] || { label: "―", color: C.grey };
@@ -1899,25 +1929,46 @@ function App() {
       g.fillStyle = up ? C.green : C.muted; g.textBaseline = "middle"; g.fillText(pill, P + 28, 541); g.textBaseline = "alphabetic";
     }
 
+    // 今日鍛えた部位(人体図を右に描く日は、時間・種目・セットの行を人体図の高さの真ん中に下げる)
+    const hit = bodyHitMuscles(entry.exercises, normMuscle);
+    const SY = hit.size > 0 ? 60 : 0;
     // 時間・種目・セットは1行に並べる(箱に入れない)
     const nSets = entry.exercises.reduce((a, ex) => a + ex.sets.filter(x => !x.warmup).length, 0);
     const nEx = entry.exercises.length;
     const stats = [[String(entry.durationMin ?? "-"), t("img.min")], [String(nEx), t(nEx === 1 ? "img.exercise" : "img.exercises")], [String(nSets), t(nSets === 1 ? "img.set" : "img.sets")]];
     let sx = P;
     stats.forEach(([v, l], i) => {
-      if (i > 0) { g.fillStyle = C.border; g.fillRect(sx, 618, 2, 46); sx += 34; }
-      g.fillStyle = C.text; g.font = `800 60px ${BAR}`; g.fillText(v, sx, 662);
+      if (i > 0) { g.fillStyle = C.border; g.fillRect(sx, 618 + SY, 2, 46); sx += 34; }
+      g.fillStyle = C.text; g.font = `800 60px ${BAR}`; g.fillText(v, sx, 662 + SY);
       sx += g.measureText(v).width + 10;
-      g.fillStyle = C.muted; g.font = ja ? `700 30px ${FONT_UI}` : `600 30px ${BAR}`; g.fillText(l, sx, 660);
+      g.fillStyle = C.muted; g.font = ja ? `700 30px ${FONT_UI}` : `600 30px ${BAR}`; g.fillText(l, sx, 660 + SY);
       sx += g.measureText(l).width + 32;
     });
-    g.fillStyle = C.border; g.fillRect(P, 712, W - P * 2, 2);
+    // 右に今日鍛えた部位の人体図(前と後ろ。src/domain/bodyMap.js を Path2D で描く)。一覧はその下から
+    const LIST_TOP = hit.size > 0 ? 822 : 712;
+    if (hit.size > 0) {
+      const bh = 222, sc2 = bh / 220, bx = W - P - 210 * sc2, by = 590;
+      bodyPaths().forEach((bp, side) => {
+        g.save(); g.translate(bx + side * 110 * sc2, by); g.scale(sc2, sc2);
+        g.fillStyle = C.grey;
+        bp.base.forEach(d => g.fill(new Path2D(d)));
+        g.strokeStyle = C.bg; g.lineWidth = 0.9; g.lineJoin = "round";
+        bp.regions.forEach(({ m, ds }) => ds.forEach(x => { const p2 = new Path2D(x); g.fillStyle = hit.has(m) ? C.red : C.grey; g.fill(p2); g.stroke(p2); }));
+        g.lineWidth = 0.8; g.lineCap = "round";
+        bp.details.forEach(x => g.stroke(new Path2D(x)));
+        g.restore();
+      });
+    }
+    g.fillStyle = C.border; g.fillRect(P, LIST_TOP, W - P * 2, 2);
 
     // 種目は5つまで。6つ以上の日は4つ載せて残りを「ほか N 種目」にする(5つ+1行だと行が詰まって読みにくかった)。
     // 行の高さは、区切り線から足もとの線までに収まるよう決める
     const MAX = items.length > 5 ? 4 : 5, shown = items.slice(0, MAX), more = items.length - shown.length;
-    const top0 = 714, bottom0 = H - 124 - (more > 0 ? 72 : 0);
+    const top0 = LIST_TOP + 2, bottom0 = H - 124 - (more > 0 ? 72 : 0);
     const rowH = Math.min(112, Math.floor((bottom0 - top0) / Math.max(1, shown.length)));
+    // 人体図を入れて行が低くなった日は、文字を一段小さくする
+    const tight = rowH < 96;
+    const F = tight ? { name: 34, sub: 25, w: 52, nameY: -4, subY: 30, wY: 18 } : { name: 38, sub: 28, w: 60, nameY: -6, subY: 36, wY: 20 };
     // 種目が少ない日に真ん中ががら空きにならないよう、一覧は使える高さの上下中央に置く
     const listPad = Math.max(0, Math.floor((bottom0 - top0 - rowH * shown.length) / 2));
     // 自重種目は加重分なので「BW+10kg」と書く(「10kg」だけだと合計10kgに読める)
@@ -1925,10 +1976,10 @@ function App() {
     let y = top0 + listPad + Math.round(rowH / 2) + 4;
     shown.forEach((it, i) => {
       if (i > 0) { g.fillStyle = C.border; g.fillRect(P, y - Math.round(rowH / 2) - 4, W - P * 2, 1); }
-      g.textAlign = "left"; g.fillStyle = C.text; g.font = `700 38px ${FONT_UI}`;
+      g.textAlign = "left"; g.fillStyle = C.text; g.font = `700 ${F.name}px ${FONT_UI}`;
       let name = exName(it.ex.name);
       while (g.measureText(name).width > 540 && name.length > 2) name = name.slice(0, -2) + "…";
-      g.fillText(name, P, y - 6);
+      g.fillText(name, P, y + F.nameY);
       // 前回との差(重量が上がった・同じ重量で回数が伸びた・同じ・それ以外は前回の数字だけ)
       let sub = null, col = C.muted;
       if (it.now) {
@@ -1946,17 +1997,19 @@ function App() {
         }
       }
       let subW = 0;
-      if (sub) { g.fillStyle = col; g.font = `600 28px ${FONT_UI}`; g.fillText(sub, P, y + 36); subW = g.measureText(sub).width + 16; }
+      if (sub) { g.fillStyle = col; g.font = `600 ${F.sub}px ${FONT_UI}`; g.fillText(sub, P, y + F.subY); subW = g.measureText(sub).width + 16; }
       if (it.pr) {
         const bt = t("img.newBest");
         g.font = `800 26px ${ja ? FONT_UI : BAR}`;
         const bw = g.measureText(bt).width + 28;
-        g.fillStyle = C.yellow; rr(P + subW, y + 9, bw, 38, 19); g.fill();
-        g.fillStyle = C.bg; g.textBaseline = "middle"; g.fillText(bt, P + subW + 14, y + 28); g.textBaseline = "alphabetic";
+        // 文字を小さくした日は印も低くする(高さ 38 のままだと次の行の区切り線に食い込んだ。reviewer 指摘)
+        const bhh = tight ? 32 : 38, by2 = y + F.subY - (tight ? 23 : 27);
+        g.fillStyle = C.yellow; rr(P + subW, by2, bw, bhh, bhh / 2); g.fill();
+        g.fillStyle = C.bg; g.textBaseline = "middle"; g.fillText(bt, P + subW + 14, by2 + bhh / 2); g.textBaseline = "alphabetic";
       }
       if (it.now) {
-        g.textAlign = "right"; g.fillStyle = C.text; g.font = `800 60px ${BAR}`;
-        g.fillText(`${wTxt(it.ex, it.now.weight)} × ${it.now.reps}`, W - P, y + 20);
+        g.textAlign = "right"; g.fillStyle = C.text; g.font = `800 ${F.w}px ${BAR}`;
+        g.fillText(`${wTxt(it.ex, it.now.weight)} × ${it.now.reps}`, W - P, y + F.wY);
       }
       y += rowH;
     });
@@ -3766,6 +3819,15 @@ function App() {
               {s.lines.length > 0 && (
                 <div style={{ fontSize: 13, color: s.over ? C.green : C.muted, marginTop: 6, lineHeight: 1.6 }}>{s.lines.join(" ")}</div>
               )}
+              {/* 今日鍛えた部位の人体図(北村さん、2026-10-11) */}
+              {(() => {
+                const hit = bodyHitMuscles(finishScreen.entry.exercises, normMuscle);
+                return hit.size > 0 ? (
+                  <div style={{ display: "flex", justifyContent: "center", marginTop: 18 }}>
+                    <BodyMap hit={hit} height={150} line="rgb(10,11,12)" label={t("body.aria", { list: [...hit].map(muscleName).join(t("common.listSep")) })} />
+                  </div>
+                ) : null;
+              })()}
               {s.prs.length > 0 && (
                 <div style={{ marginTop: 18, padding: "10px 12px", borderRadius: 10, background: "rgba(232,179,60,0.12)" }}>
                   <div style={{ fontSize: 12, fontWeight: 800, color: C.yellow, marginBottom: 2 }}><Icon name="bolt" size={12} style={{ marginRight: 4 }} />{s.prTitle}</div>
@@ -5241,6 +5303,16 @@ function App() {
                     </div>
                   )}
                 </div>
+                {/* この7日間にやった部位の人体図。やっていない部位(灰色)が一目で分かるように(北村さん、2026-10-11) */}
+                {(() => {
+                  // 本番セットがある部位だけ(ウォームアップだけの種目は塗らない。bodyHitMuscles と揃える)
+                  const hit = new Set(Object.entries(weekly.byMuscle).filter(([, v]) => v.sets > 0).map(([m]) => normMuscle(m)).filter(m => m !== "全身" && BODY_REGIONS[m]));
+                  return hit.size > 0 ? (
+                    <div style={{ display: "flex", justifyContent: "center", margin: "2px 0 12px" }}>
+                      <BodyMap hit={hit} height={140} label={t("body.aria", { list: [...hit].map(muscleName).join(t("common.listSep")) })} />
+                    </div>
+                  ) : null;
+                })()}
                 {Object.keys(weekly.byMuscle).length === 0 ? <div style={{ color: C.muted, fontSize: 13 }}>{t("split.weeklyEmpty")}</div>
                   : Object.entries(weekly.byMuscle).sort((a, b) => b[1].vol - a[1].vol).map(([m, v]) => {
                     const d = lastTrained(m);
@@ -5529,11 +5601,16 @@ function App() {
 
               {!editing && (() => {
                 const parts = [...new Set(w.exercises.map(ex => ex.muscle).filter(Boolean))];
+                // その日に鍛えた部位の人体図(左)と部位のチップ(右)
+                const hit = bodyHitMuscles(w.exercises, normMuscle);
                 return parts.length > 0 ? (
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
-                    {parts.map(m => (
-                      <span key={m} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 999, padding: "3px 10px", fontSize: 12, color: C.text }}>{muscleName(m)}</span>
-                    ))}
+                  <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}>
+                    {hit.size > 0 && <div style={{ flexShrink: 0 }}><BodyMap hit={hit} height={88} label={t("body.aria", { list: [...hit].map(muscleName).join(t("common.listSep")) })} /></div>}
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, minWidth: 0 }}>
+                      {parts.map(m => (
+                        <span key={m} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 999, padding: "3px 10px", fontSize: 12, color: C.text }}>{muscleName(m)}</span>
+                      ))}
+                    </div>
                   </div>
                 ) : null;
               })()}
