@@ -1647,10 +1647,18 @@ function App() {
   };
 
   // ---- 集計 ----
-  const daysSince = (iso) => Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
+  // 時刻が未来の記録(時計の進んだ端末のバックアップ・端末の時刻を戻した等)で「-1日前」と出ないよう0で止める(reviewer 指摘)
+  const daysSince = (iso) => Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 86400000));
   const lastTrained = (muscle) => {
     for (let i = workouts.length - 1; i >= 0; i--)
       if (workouts[i].exercises.some(e => e.muscle === muscle || e.muscle === "全身")) return daysSince(workouts[i].date);
+    return null;
+  };
+  // 分割の Day を最後にやってから何日か(分割の画面の「最終 ○日前」)。記録の Day 名(保存時の todayDay.name)で引くので、
+  // Day 名を変えると前の記録とはつながらない(dayHasRecords・Day の履歴と同じ)
+  const dayLastDaysAgo = (name) => {
+    for (let i = workouts.length - 1; i >= 0; i--)
+      if (workouts[i].session === name) return daysSince(workouts[i].date);
     return null;
   };
   // 計算本体は src/domain/volume.js へ移設(テストのため)。ここではprofile.bodyweightを
@@ -4892,6 +4900,15 @@ function App() {
                       {editing ? MUSCLES.map(m => <button key={m} onClick={() => toggleDayMuscle(i, m)} style={chip(d.muscles.includes(m))}>{muscleName(m)}</button>)
                         : d.muscles.length ? d.muscles.map(m => <span key={m} style={{ ...chip(false), cursor: "default" }}>{muscleName(m)}</span>)
                           : <span style={{ color: C.muted, fontSize: 13 }}>{t("split.muscleUnset")}</span>}
+                      {/* 最後にやってから何日か(2026-10-11、北村さん)。見出しの行は ▲▼・今日はこれ・編集で 320px 幅だと余白が無いので、チップの並びの末尾に置く */}
+                      {!editing && (() => {
+                        const ago = dayLastDaysAgo(d.name);
+                        return ago != null && (
+                          <span style={{ alignSelf: "center", fontSize: 12, fontWeight: 700, color: C.yellow }}>
+                            {t("split.lastTrained", { when: ago === 0 ? t("common.today") : t("common.daysAgo", { n: ago }) })}
+                          </span>
+                        );
+                      })()}
                     </div>
 
                     {(d.exercises || []).length === 0 && d.muscles.length > 0 && !dayHasRecords(d.name) ? (
