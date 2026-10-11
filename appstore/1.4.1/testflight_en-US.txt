@@ -1,0 +1,5 @@
+What to check in 1.4.1 (20):
+1. Split tab: each day shows "Last: Xd ago" ("Done today" for a day you trained today). Days are counted by date, so a day trained last night shows "Last: 1d ago" the next morning
+2. Today's day after saving: if you follow the order, nothing changes. If you pick another day with "Today" and save, the next day should be the one you've gone longest without. Days never trained come first
+3. Exercise cards in the Log tab: the "Last ... Trend ..." line is gone, and the last date now sits in the "Your best" row (left of the max weight). Hints for repeating the same weight still appear
+4. On small screens, split day names are no longer hidden behind the buttons
