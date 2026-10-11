@@ -1843,6 +1843,11 @@ function App() {
     if (icon) { g.save(); rr(P, 64, 72, 72, 18); g.clip(); g.drawImage(icon, P, 64, 72, 72); g.restore(); }
     g.textBaseline = "middle"; g.textAlign = "left";
     g.fillStyle = C.text; g.font = `800 48px ${BAR}`; g.fillText("KURABELL", P + (icon ? 92 : 0), 101);
+    // ロゴの右に「Workout Log」(App Store の英語名と同じ。北村さん、2026-10-11)。KURABELL と下端を揃えて小さく
+    const kw = g.measureText("KURABELL").width;
+    g.textBaseline = "alphabetic"; g.fillStyle = C.muted; g.font = `600 34px ${BAR}`;
+    g.fillText("Workout Log", P + (icon ? 92 : 0) + kw + 12, 118);
+    g.textBaseline = "middle";
     const d = new Date(entry.date), wd = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"][d.getDay()];
     g.textAlign = "right"; g.fillStyle = C.muted; g.font = `600 38px ${BAR}`;
     g.fillText(`${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")}  ${wd}`, W - P, 101);
