@@ -121,5 +121,33 @@ function exerciseInsight(workouts, name, isDbOf) {
   };
 }
 
+// その日の「今日のスコア」(100点満点。Instagram 用の画像に出す。北村さん、2026-10-11)。配点は見て分かるものだけにする:
+//   前回超え 60点: 前回がある種目のうち、トップセットの重量が上がった・同じ重量で回数が増えた = 1、
+//                  同じ重量・同じ回数 = 0.5、それ以外 = 0 の平均 × 60
+//   ボリューム 25点: 同じ Day の前回以上 25 / 前回の 90% 以上 15 / それ未満 5
+//   自己ベスト 15点: 1種目 5点、3つで満点
+// items: [{ now: {weight, reps}, prev: {weight, reps} | null, pr: boolean }]。重量は保存値(kg)のまま比べる
+// prevVolume が無い(その Day を初めてやった日)か、前回と比べられる種目が1つも無い日(種目を全部入れ替えた等)なら null
+// (比べる相手が無いのに点を付けない。後者は「前回超え 0/0」で最高40点になっていた。reviewer 指摘)
+function workoutScore({ items, volume, prevVolume }) {
+  if (!(Number(prevVolume) > 0)) return null;
+  const list = items || [];
+  const withPrev = list.filter(it => it && it.now && it.prev);
+  if (withPrev.length === 0) return null;
+  let credit = 0, beaten = 0;
+  for (const it of withPrev) {
+    const nw = insightNum(it.now.weight), nr = insightNum(it.now.reps);
+    const pw = insightNum(it.prev.weight), pr = insightNum(it.prev.reps);
+    if (nw > pw + 0.001 || (Math.abs(nw - pw) <= 0.001 && nr > pr)) { credit += 1; beaten += 1; }
+    else if (Math.abs(nw - pw) <= 0.001 && nr === pr) credit += 0.5;
+  }
+  const v = Number(volume) || 0, pv = Number(prevVolume);
+  const volPts = v >= pv ? 25 : v >= pv * 0.9 ? 15 : 5;
+  const prCount = list.filter(it => it && it.pr).length;
+  const score = Math.round((withPrev.length ? 60 * credit / withPrev.length : 0) + volPts + Math.min(15, prCount * 5));
+  return { score, beaten, withPrev: withPrev.length, prCount };
+}
+
 globalThis.exerciseInsight = exerciseInsight;
 globalThis.topSetOf = topSetOf;
+globalThis.workoutScore = workoutScore;

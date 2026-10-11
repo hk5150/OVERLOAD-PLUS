@@ -23,7 +23,7 @@ import { loadDomainModule } from "./helpers/loadDomain.js";
 // 対象外: 画面表示(#appsrc側)と、isDbOf の中身(種目マスターの解決は coefficients.js の責務)。
 // workouts は保存順(古い順)に並んでいる前提。この前提自体は #appsrc の saveWorkout の責務。
 
-const { exerciseInsight, topSetOf } = loadDomainModule("src/domain/insight.js");
+const { exerciseInsight, topSetOf, workoutScore } = loadDomainModule("src/domain/insight.js");
 
 const NAME = "ラットプルダウン";
 
@@ -424,5 +424,102 @@ describe("stalledAtFailure(限界で止まっている)", () => {
 
   it("3回より前の回は見ない(4回前に余力があっても、直近3回が限界なら真)", () => {
     expect(exerciseInsight(withRir([[24, 8, 2], [24, 8, 0], [24, 8, 0], [24, 8, 0]]), NAME).stalledAtFailure).toBe(true);
+  });
+});
+
+// ---- workoutScore(今日のスコア、100点満点。Instagram 用の画像に出す) ----
+// 配点は北村さんと合意したもの(2026-10-11、src/domain/insight.js の関数上のコメント):
+//   前回超え 60 + ボリューム 25 + 自己ベスト 15、Math.round。
+// なぜテストが要るか: 画像に出て人に見せる数字なので、試作で見せた「84点」が実装で
+// 再現しないと合意が崩れる。また「重量を落として回数を稼いだ日」を前回超えに数えると
+// 漸進性過負荷の考え方と逆の点が付く。文字列の重量・回数(旧データ・復元経由)で
+// 辞書順比較すると "9" > "15" になる事故も、topSetOf と同じく縛る。
+// 比べる相手が無い日(prevVolume が無い・0、または now と prev の両方がある種目が0)は null。
+// 後者は reviewer 指摘で足した仕様(「前回超え 0/0」で最高40点が出ていた)。
+// 対象外: items の組み立て(どのセットを now/prev にするか、pr の判定)と volume の計算。
+// それらは呼び出し側(#appsrc)の責務。
+
+// 1種目分。now/prev は {weight, reps}。prev: null で「前回が無い種目」。
+const sampleScoreItem = (overrides = {}) => ({
+  now: { weight: 20, reps: 10 },
+  prev: { weight: 20, reps: 10 },
+  pr: false,
+  ...overrides,
+});
+
+const item = (nw, nr, pw, pr_, pr = false) =>
+  sampleScoreItem({ now: { weight: nw, reps: nr }, prev: pw == null ? null : { weight: pw, reps: pr_ }, pr });
+
+describe("workoutScore (今日のスコア。人に見せる数字なので試作の点数と一致させる)", () => {
+  it("試作で見せた5種目の例は84点になる(前回超え4・同点1・自己ベスト1・ボリューム増)", () => {
+    const items = [
+      item(72, 8, 70, 8, true),
+      item(26, 12, 26, 11),
+      item(22, 12, 22, 12),
+      item(11, 15, 10, 15),
+      item(33, 12, 32.5, 12),
+    ];
+    expect(workoutScore({ items, volume: 6730, prevVolume: 6412 })).toEqual({ score: 84, beaten: 4, withPrev: 5, prCount: 1 });
+  });
+
+  it("prevVolume が無い日(その Day を初めてやった日)は null を返す", () => {
+    expect(workoutScore({ items: [item(72, 8, 70, 8)], volume: 1000, prevVolume: undefined })).toBeNull();
+  });
+
+  it("prevVolume が0の日も null を返す(比べる相手が無いのに点を付けない)", () => {
+    expect(workoutScore({ items: [item(72, 8, 70, 8)], volume: 1000, prevVolume: 0 })).toBeNull();
+  });
+});
+
+describe("workoutScore の前回超え(60点。重量を落として回数を稼いだ日を超えた扱いにしない)", () => {
+  it("同じ重量・同じ回数は0.5として数え、1種目だけなら30点になる", () => {
+    expect(workoutScore({ items: [item(22, 12, 22, 12)], volume: 1000, prevVolume: 1000 })).toEqual({ score: 55, beaten: 0, withPrev: 1, prCount: 0 });
+  });
+
+  it("重量が下がって回数が増えた(70×8 → 65×12)は0点で、beaten に数えない", () => {
+    expect(workoutScore({ items: [item(65, 12, 70, 8)], volume: 1000, prevVolume: 1000 })).toEqual({ score: 25, beaten: 0, withPrev: 1, prCount: 0 });
+  });
+
+  // 「前回超え 0/0」で点を付けると、種目を全部入れ替えた日に最高40点が出る(reviewer 指摘で仕様変更)。
+  it("前回と比べられる種目が1つも無い日は null(スコアを出さない)", () => {
+    const items = [item(72, 8, null, null, true), item(26, 12, null, null)];
+    expect(workoutScore({ items, volume: 1000, prevVolume: 1000 })).toBeNull();
+  });
+
+  it("重量が文字列でも数として比べる(\"15\" は \"9\" より重い)", () => {
+    expect(workoutScore({ items: [item("15", "8", "9", "8")], volume: 1000, prevVolume: 1000 })).toMatchObject({ score: 85, beaten: 1 });
+  });
+
+  it("回数が文字列でも数として比べる(同じ重量で \"12\" 回は \"9\" 回より多い)", () => {
+    expect(workoutScore({ items: [item("20", "12", "20", "9")], volume: 1000, prevVolume: 1000 })).toMatchObject({ score: 85, beaten: 1 });
+  });
+
+  it("文字列と数値が混ざっていても、同じ重量・同じ回数なら0.5として数える", () => {
+    expect(workoutScore({ items: [item("22", "12", 22, 12)], volume: 1000, prevVolume: 1000 })).toMatchObject({ score: 55, beaten: 0 });
+  });
+});
+
+describe("workoutScore のボリューム(25点。境界ちょうどの扱い)", () => {
+  // 前回超えは同点1種目(30点)、自己ベストなしに固定して、ボリューム分だけを見る。
+  const scoreAt = (volume) => workoutScore({ items: [item(22, 12, 22, 12)], volume, prevVolume: 1000 }).score;
+
+  it("前回とちょうど同じボリュームは25点", () => {
+    expect(scoreAt(1000)).toBe(55);
+  });
+
+  it("前回の90%ちょうどは15点", () => {
+    expect(scoreAt(900)).toBe(45);
+  });
+
+  it("前回の89%は5点", () => {
+    expect(scoreAt(890)).toBe(35);
+  });
+});
+
+describe("workoutScore の自己ベスト(15点。1つ5点で3つで頭打ち)", () => {
+  it("自己ベストが5つあっても15点で頭打ちになり、prCount は5のまま返す", () => {
+    // 前回超えは全種目同点(30点)、ボリューム25点に固定して、自己ベスト分だけを見る。
+    const items = Array.from({ length: 5 }, () => item(20, 10, 20, 10, true));
+    expect(workoutScore({ items, volume: 1000, prevVolume: 1000 })).toEqual({ score: 70, beaten: 0, withPrev: 5, prCount: 5 });
   });
 });
