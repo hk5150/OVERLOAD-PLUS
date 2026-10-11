@@ -5599,9 +5599,6 @@ function App() {
                         style={{ ...btn("transparent", copiedIdx === `hist:${idx}` ? C.green : C.muted), padding: "5px 6px", fontSize: 13 }}>
                         {copiedIdx === `hist:${idx}` ? t("history.consultAiDone") : t("history.consultAi")}
                       </button>
-                      {/* Instagram 用の画像(お疲れ様の画面と同じもの)。アイコンだけにして、見出しの行が折り返さないようにする */}
-                      <button onClick={() => shareHistoryImage(w, idx)} disabled={imageBusy} aria-label={t("finish.image")} title={t("finish.image")} className="tapArea"
-                        style={{ ...btn("transparent", C.muted), padding: "5px 6px", display: "grid", placeItems: "center", opacity: imageBusy ? 0.5 : 1 }}><Icon name="share" size={17} /></button>
                       <button onClick={() => startEditWorkout(idx)} style={{ ...btn(C.surface2, C.text), padding: "5px 14px", fontSize: 13, border: `1px solid ${C.border}` }}>{t("common.edit")}</button>
                       <button onClick={() => deleteWorkout(idx)} aria-label={t("history.deleteDay")} className="tapArea" style={{ ...btn("transparent", C.muted), padding: "5px 6px", display: "grid", placeItems: "center" }}><Icon name="trash" size={17} /></button>
                     </>
@@ -5638,6 +5635,14 @@ function App() {
                   <span style={{ color: C.yellow }}>{Math.round(toU(w.exercises.reduce((a, ex) => a + exVolume(ex), 0))).toLocaleString()}{uLabel()}</span>
                   {w.kcal != null && <span>{t("history.kcal", { n: w.kcal })}</span>}
                 </div>
+              )}
+
+              {/* Instagram 用の画像(お疲れ様の画面と同じもの)。最初は見出しの行の共有アイコンだけにしたが、
+                  北村さんが見つけられなかった(1.4.1 (27))ので、文字の付いたボタンにした */}
+              {!editing && (
+                <button onClick={() => shareHistoryImage(w, idx)} disabled={imageBusy}
+                  style={{ ...btn(C.surface2, C.text), width: "100%", padding: 9, fontSize: 13, marginBottom: 10, border: `1px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, opacity: imageBusy ? 0.6 : 1 }}>
+                  <Icon name="share" size={15} />{t("finish.image")}</button>
               )}
 
               {/* 表示モード */}
