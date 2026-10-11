@@ -1647,8 +1647,15 @@ function App() {
   };
 
   // ---- 集計 ----
-  // 時刻が未来の記録(時計の進んだ端末のバックアップ・端末の時刻を戻した等)で「-1日前」と出ないよう0で止める(reviewer 指摘)
-  const daysSince = (iso) => Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 86400000));
+  // 暦日の差(端末の日付で、0時同士の差)。以前は経過時間(24時間単位)で数えていて、夜23時に保存した Day を
+  // 翌朝8時に見ると「今日やった」と出ていた(reviewer 指摘)。夏時間で1日が23・25時間になっても丸めでずれない。
+  // 時刻が未来の記録(時計の進んだ端末のバックアップ・端末の時刻を戻した等)で「-1日前」と出ないよう0で止める
+  const daysSince = (iso) => {
+    const d = new Date(iso), now = new Date();
+    const a = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+    const b = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    return Math.max(0, Math.round((b - a) / 86400000));
+  };
   const lastTrained = (muscle) => {
     for (let i = workouts.length - 1; i >= 0; i--)
       if (workouts[i].exercises.some(e => e.muscle === muscle || e.muscle === "全身")) return daysSince(workouts[i].date);
@@ -4094,7 +4101,7 @@ function App() {
                           if (type === "new_start") return <JudgeBadge type={type} />;
                           const last = exerciseInsight(p.name)?.date;
                           if (!last) return <JudgeBadge type={type} />;
-                          const d = Math.max(0, Math.floor((Date.now() - new Date(last).getTime()) / 86400000));
+                          const d = daysSince(last); // 部位チップの「・○日前」と同じ暦日の数え方
                           return <span style={{ fontSize: 12, color: C.yellow, fontWeight: 700 }}>{d === 0 ? t("common.today") : t("common.daysAgo", { n: d })}</span>;
                         })()}
                       </span>
@@ -4881,13 +4888,15 @@ function App() {
                 return (
                   <div key={i} id={`split-day-${i}`} onClick={goToLog ? () => setView("log") : undefined}
                     style={{ background: C.surface, borderRadius: 14, padding: 14, marginBottom: 8, border: `1px solid ${isNext ? C.red : C.border}`, cursor: goToLog ? "pointer" : "default" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, minWidth: 0 }}>
+                    {/* 320px 幅では ▲▼・今日はこれ・編集で名前の場所が無くなり、「Pull」が「Pu」で切れてボタンの下に隠れていた。
+                        名前の側に最低幅(120px)を持たせ、足りなければボタンを次の行へ回す。それでも長い名前は省略記号で切る */}
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, flex: "1 1 120px", minWidth: 0 }}>
                         <span style={{ color: C.muted, fontSize: 13, flexShrink: 0 }}>Day {i + 1}</span>
-                        {!editing && <strong style={{ fontSize: 15 }}>{dayName(d.name)}</strong>}
+                        {!editing && <strong style={{ fontSize: 15, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{dayName(d.name)}</strong>}
                         {isNext && <span style={{ background: C.red, color: "#fff", borderRadius: 999, padding: "2px 8px", fontSize: 11, fontWeight: 800, flexShrink: 0 }}>{t("common.today")}</span>}
                       </div>
-                      <div style={{ display: "flex", gap: 4, flexShrink: 0, alignItems: "center" }} onClick={e => e.stopPropagation()}>
+                      <div style={{ display: "flex", gap: 4, flexShrink: 0, alignItems: "center", marginLeft: "auto" }} onClick={e => e.stopPropagation()}>
                         <button onClick={() => moveDay(i, -1)} disabled={i === 0} aria-label={t("log.moveUp")}
                           style={{ ...btn(C.surface2, i === 0 ? C.border : C.muted), padding: "4px 8px", fontSize: 13, cursor: i === 0 ? "default" : "pointer" }}>▲</button>
                         <button onClick={() => moveDay(i, 1)} disabled={i === split.days.length - 1} aria-label={t("log.moveDown")}
@@ -4908,7 +4917,7 @@ function App() {
                         const ago = dayLastDaysAgo(d.name);
                         return ago != null && (
                           <span style={{ alignSelf: "center", fontSize: 12, fontWeight: 700, color: C.yellow }}>
-                            {t("split.lastTrained", { when: ago === 0 ? t("common.today") : t("common.daysAgo", { n: ago }) })}
+                            {ago === 0 ? t("split.trainedToday") : t("split.lastTrained", { when: t("common.daysAgo", { n: ago }) })}
                           </span>
                         );
                       })()}
@@ -5064,7 +5073,7 @@ function App() {
                               {pct >= 0 ? "+" : ""}{pct}%
                             </span>
                           )}
-                          {d != null && <span style={{ marginLeft: 8 }}>{t("split.lastTrained", { when: d === 0 ? t("common.today") : t("common.daysAgo", { n: d }) })}</span>}
+                          {d != null && <span style={{ marginLeft: 8 }}>{d === 0 ? t("split.trainedToday") : t("split.lastTrained", { when: t("common.daysAgo", { n: d }) })}</span>}
                         </span>
                       </div>
                     );

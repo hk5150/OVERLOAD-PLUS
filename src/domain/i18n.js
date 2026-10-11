@@ -404,6 +404,7 @@ const STRINGS = {
   "split.weeklyEmpty": { ja: "種目に部位を設定して記録すると集計されます。", en: "Assign muscles to your exercises and totals will appear here." },
   "split.vsLastWeek":  { ja: "先週比{sign}{pct}%",     en: "{sign}{pct}% vs last week" },
   "split.lastTrained": { ja: "最終{when}",             en: "Last: {when}" },
+  "split.trainedToday": { ja: "今日やった",            en: "Done today" },
   "history.calMonth":  { ja: "{y}年{m}月",             en: "{m}/{y}" },
   "history.kcal":      { ja: "約{n}kcal",              en: "~{n} kcal" },
   "split.confirmReplace": { ja: "現在の分割「{cur}」を「{next}」に置き換えます。よろしいですか?(登録した種目・進行状況はリセットされます。記録履歴は残ります)", en: "Replace your current split \"{cur}\" with \"{next}\"? Registered exercises and progress reset. Your workout history is kept." },
