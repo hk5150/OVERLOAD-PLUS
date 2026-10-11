@@ -154,8 +154,29 @@ struct RestRow: View {
     let label: String
     let startAt: Date
     var compact = false   // 種目画面ではセット行が主役なので小さく
+    var large = false     // 一覧の一番上では大きく、ゲージ付き(常時表示)
 
     var body: some View {
+        if large {
+            // 文字は数字の上に置く(横に並べると 40/41mm で「インターバル」が2行に折れ、10分を超えると数字が切れる。reviewer 指摘)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(label).font(.system(size: 13, weight: .bold)).foregroundStyle(Palette.muted).lineLimit(1)
+                TimelineView(.periodic(from: startAt, by: 1)) { ctx in
+                    let sec = ctx.date.timeIntervalSince(startAt)
+                    let color = sec < 60 ? Palette.green : sec < 120 ? Palette.yellow : Palette.red
+                    Text(timerInterval: startAt...startAt.addingTimeInterval(8 * 3600), countsDown: false)
+                        .numeric(isSmallWatch ? 40 : 46)
+                        .foregroundStyle(color)
+                        .lineLimit(1)
+                }
+                MinuteGauge(startAt: startAt).padding(.top, 2)
+            }
+        } else {
+            row
+        }
+    }
+
+    private var row: some View {
         TimelineView(.periodic(from: startAt, by: 1)) { ctx in
             let sec = ctx.date.timeIntervalSince(startAt)
             let color = sec < 60 ? Palette.green : sec < 120 ? Palette.yellow : Palette.red
@@ -171,26 +192,46 @@ struct RestRow: View {
     }
 }
 
+// 休憩していないときの一覧の一番上。休憩の開始・終了で下の行が跳ねないよう、休憩中と同じ形
+// (文字・大きな数字の場所・空のゲージ)で「–:––」を灰色で出す。読み上げは文字だけ(記号を読ませない)
+struct RestIdleRow: View {
+    let label: String
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label).font(.system(size: 13, weight: .bold)).foregroundStyle(Palette.muted).lineLimit(1)
+            Text("–:––").numeric(isSmallWatch ? 40 : 46).foregroundStyle(Palette.muted.opacity(0.5)).lineLimit(1)
+            HStack(spacing: 4) {
+                ForEach(0..<3, id: \.self) { _ in Capsule().fill(Palette.surface2).frame(height: 6) }
+            }
+            .padding(.top, 2)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text(label))
+    }
+}
+
 // 一覧の上の休憩表示。タップすると大きいタイマー画面を開く
 struct RestRowButton: View {
     @ObservedObject var store: SessionStore
     let label: String
     let startAt: Date
     var compact = false
+    var large = false
     // スクリーンショット用: -KurabellSample と一緒に -KurabellRest 1 で、一覧からタイマー画面を開いた状態にする
     @State private var open = false
 
-    init(store: SessionStore, label: String, startAt: Date, compact: Bool = false) {
+    init(store: SessionStore, label: String, startAt: Date, compact: Bool = false, large: Bool = false) {
         self.store = store
         self.label = label
         self.startAt = startAt
         self.compact = compact
+        self.large = large
         _open = State(initialValue: !compact && SampleData.launchValue("-KurabellRest") != nil)
     }
 
     var body: some View {
         Button { open = true } label: {
-            RestRow(label: label, startAt: startAt, compact: compact)
+            RestRow(label: label, startAt: startAt, compact: compact, large: large)
                 .contentShape(Rectangle()) // 文字の間(Spacer)を押しても開くように
         }
         .buttonStyle(.plain)
@@ -369,9 +410,14 @@ struct ExerciseListView: View {
 
     var body: some View {
         List {
-            // 休憩の経過は急ぐ情報なので先に、リングはその下に
+            // 休憩の経過は急ぐ情報なので先に、リングはその下に。
+            // 休憩していないときも同じ場所に出し続ける(北村さん「インターバルタイマーを常時表示」、2026-10-12)。
+            // 休憩中は大きく、1分ごとのゲージ付き。押すと休憩の全画面
             if let r = snap.restStartAt {
-                RestRowButton(store: store, label: snap.labels.rest, startAt: Date(timeIntervalSince1970: r / 1000))
+                RestRowButton(store: store, label: snap.labels.rest, startAt: Date(timeIntervalSince1970: r / 1000), large: true)
+                    .listRowBackground(Color.clear)
+            } else {
+                RestIdleRow(label: snap.labels.rest)
                     .listRowBackground(Color.clear)
             }
             if let v = snap.volume {
