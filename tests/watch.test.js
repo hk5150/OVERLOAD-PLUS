@@ -416,9 +416,20 @@ describe("Watch アプリのネイティブ設定", () => {
     // 記録が終わった・Watch のワークアウトが終わったら、iPhone の休憩のために予約した分を消す
     expect(store).toMatch(/else if scheduledRestKey != nil \{[\s\S]*?releaseForeignRestNotifications\(\)/);
     expect(read("ios/App/KurabellWatch/WorkoutManager.swift")).toMatch(/func cleanUp\(\)[\s\S]*?releaseForeignRestNotifications\(\)/);
-    // 休憩画面を開いている間は、設定した経過時間に振動する(4a)
+    // 休憩画面を開いている間も、設定した経過時間の知らせは通知1本に任せる(4a)。
+    // 画面側で Task.sleep して振動させると、手首を下ろして常時表示になったときにアプリの動きが間引かれ、
+    // 1分の知らせが1分16秒ごろに届いた(1.4.1、北村さんの実機)。範囲は RestTimerView だけ(ほかの画面の Task.sleep は別のテストが縛る)。
+    // コメントで経緯として「Task.sleep」と書くのは可なので、行コメントを除いてから見る
     const views = read("ios/App/KurabellWatch/Views.swift");
-    expect(views).toMatch(/store\.restNoticeMinutes[\s\S]*?play\(\.notification\)/);
+    const restStart = views.indexOf("struct RestTimerView");
+    const restView = views.slice(restStart, views.indexOf("\nstruct ", restStart + 1)).replace(/\/\/.*$/gm, "");
+    expect(restView).toContain("store.restViewVisible = true");
+    expect(restView).not.toContain("Task.sleep");
+    expect(restView).not.toContain("play(.notification)");
+    // 開いている間はバナーで経過時間を覆わず、音と振動だけにする(以前の return [] は通知そのものを止めていた)
+    const willPresent = store.slice(store.indexOf("willPresent notification"));
+    expect(willPresent).toMatch(/self\.restViewVisible[\s\S]*?return \[\.sound\]/);
+    expect(willPresent).not.toMatch(/return \[\]/);
   });
 
   it("保存したら完了画面を一度だけ出し、タップか15秒で閉じる(改善要望 12)", () => {

@@ -336,13 +336,10 @@ final class SessionStore: NSObject, ObservableObject {
         }
     }
 
-    // 休憩画面の振動(改善要望 4a)も同じ時間にする
-    var restNoticeMinutes: [Double] { restNotices().map(\.min) }
-
     // 休憩の通知の予約の世代。予約や取り消しのたびに進め、古い予約の続きは捨てる。
     // 権限の確認と add は非同期で、続けて予約し直すと古い時刻の add が後から入り、ずれた時刻に鳴っていた(1.4 (18)、北村さん「インターバル通知がズレて来る」)
     private var restNotifyGeneration = 0
-    // 休憩画面を開いているか。開いている間は画面側の振動(Views.swift)で知らせるので、通知は前面に出さない(二重に鳴っていた)
+    // 休憩画面を開いているか。開いている間は、休憩の通知のバナーで画面を覆わず、音と振動だけにする(willPresent)
     var restViewVisible = false
 
     private func scheduleRestNotifications(from start: Date) {
@@ -429,11 +426,11 @@ extension SessionStore: WCSessionDelegate {
 extension SessionStore: UNUserNotificationCenterDelegate {
     // Watch アプリを開いているときも、バナーと触覚で知らせる
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
-        // 休憩画面を開いている間は、画面側の振動だけで知らせる(通知も出すと同じ時刻に二重に鳴る)
-        // 手首を下ろしてアプリが止まっている(active でない)ときは、画面側の振動が鳴らないので通知を出す(reviewer 指摘)
+        // 休憩画面を開いている間は、バナーで経過時間を覆わず、音と振動だけで知らせる。
+        // 画面側で振動させるのはやめた(手首を下ろすと遅れて鳴った。Views.swift の RestTimerView)。知らせは常にこの通知1本なので二重にはならない
         if notification.request.identifier.hasPrefix("kurabell-watch-rest-"),
-           await MainActor.run(body: { self.restViewVisible && WKApplication.shared().applicationState == .active }) {
-            return []
+           await MainActor.run(body: { self.restViewVisible }) {
+            return [.sound]
         }
         return [.banner, .sound]
     }

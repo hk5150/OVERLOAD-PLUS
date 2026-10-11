@@ -263,19 +263,11 @@ struct RestTimerView: View {
             }
             // 後ろの画面(一覧の緑の数字など)が透けて見えないよう、背景は黒で塗る
             .background(Color.black.ignoresSafeArea())
-            // 休憩画面を開いている間は、設定した経過時間に強めに振動する(改善要望 4a。通知とは別に)。
-            // 休憩が替わったら(id が変わる)数え直す。過ぎた時間は鳴らさない
+            // 設定した経過時間の知らせは、休憩画面を開いていても通知(時刻どおりに鳴る)に任せる。開いている間はバナーを出さず、
+            // 音と振動だけにする(SessionStore の willPresent)。以前はここで Task.sleep して振動させ、通知を止めていたが、
+            // 手首を下ろして常時表示になるとアプリの動きが間引かれ、1分の知らせが1分16秒ごろに届いた(1.4.1、北村さん)
             .onAppear { store.restViewVisible = true }
             .onDisappear { store.restViewVisible = false }
-            .task(id: r) {
-                for m in store.restNoticeMinutes.sorted() {
-                    let wait = startAt.addingTimeInterval(m * 60).timeIntervalSinceNow
-                    guard wait > 0 else { continue }
-                    try? await Task.sleep(nanoseconds: UInt64(wait * 1_000_000_000))
-                    if Task.isCancelled { return }
-                    WKInterfaceDevice.current().play(.notification)
-                }
-            }
         } else {
             // iPhone 側で休憩が止まった
             Image(systemName: "checkmark")
