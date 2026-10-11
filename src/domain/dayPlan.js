@@ -13,6 +13,7 @@ const STARTER_PICKS = {
   "大腿四頭筋": ["バーベルスクワット", "レッグプレス", "レッグエクステンション"],
   "ハムストリングス": ["ルーマニアンデッドリフト"],
   "臀部": ["ヒップスラスト"],
+  "内転筋": ["ヒップアダクション"],
   "脊柱起立筋": ["デッドリフト"],
   "僧帽筋": ["ダンベルシュラッグ"],
   "三角筋前部": ["ダンベルショルダープレス"],
@@ -50,7 +51,7 @@ const DAY_GROUP_OF = {
   "広背筋": "背中", "僧帽筋": "背中", "脊柱起立筋": "背中",
   "三角筋前部": "肩", "三角筋中部": "肩", "三角筋後部": "肩",
   "上腕二頭筋": "腕", "上腕三頭筋": "腕", "前腕": "腕",
-  "大腿四頭筋": "脚", "ハムストリングス": "脚", "臀部": "脚", "ふくらはぎ": "脚",
+  "大腿四頭筋": "脚", "ハムストリングス": "脚", "臀部": "脚", "内転筋": "脚", "ふくらはぎ": "脚",
   "腹筋": "腹",
   "全身": "全身",
 };
@@ -133,6 +134,22 @@ function stalestDayIndex(days, workouts, fromIdx, opts) {
   return best;
 }
 
+// 内転筋(2026-10 に部位を追加)を、保存済みの分割の脚の Day に1回だけ足す。
+// 足さないと、脚の Day でアダクションを入れたときに「今日の部位外」のバッジが出る。
+// adductorV1 は「もう足した」の印。これが無いと、利用者が外した後も読み込みのたびに足し直してしまう。
+// 新しく作る分割(プリセット・カスタム)には最初から印を付けて、ここを通らないようにしている(index.html)。
+function addAdductorDays(sp) {
+  if (!sp || sp.adductorV1) return sp;
+  return {
+    ...sp, adductorV1: true,
+    days: (sp.days || []).map(d => {
+      const ms = d.muscles || [];
+      const legDay = !ms.includes("全身") && (ms.includes("大腿四頭筋") || ms.includes("臀部"));
+      return legDay && !ms.includes("内転筋") ? { ...d, muscles: [...ms, "内転筋"] } : d;
+    }),
+  };
+}
+
 globalThis.STARTER_PICKS = STARTER_PICKS;
 globalThis.STARTER_FULL_BODY = STARTER_FULL_BODY;
 globalThis.STARTER_MAX = STARTER_MAX;
@@ -142,3 +159,4 @@ globalThis.autoDayName = autoDayName;
 globalThis.nextDayName = nextDayName;
 globalThis.uniqueDayName = uniqueDayName;
 globalThis.stalestDayIndex = stalestDayIndex;
+globalThis.addAdductorDays = addAdductorDays;

@@ -200,9 +200,9 @@
     { key:'volume',     urls:['src/domain/volume.js'],
       globals:['workingSets','setVolume','exVolume','nextSetType','volumeGoalKey'] },
     { key:'dayPlan',    urls:['src/domain/dayPlan.js'],
-      globals:['STARTER_PICKS','STARTER_FULL_BODY','STARTER_MAX','starterPicks','DAY_GROUP_OF','autoDayName','nextDayName','uniqueDayName','stalestDayIndex'] },
+      globals:['STARTER_PICKS','STARTER_FULL_BODY','STARTER_MAX','starterPicks','DAY_GROUP_OF','autoDayName','nextDayName','uniqueDayName','stalestDayIndex','addAdductorDays'] },
     { key:'coefficients', urls:['src/domain/coefficients.js'],
-      globals:['resolveCoefficients'] },
+      globals:['resolveCoefficients','absorbBuiltinNameClash'] },
     { key:'insight',    urls:['src/domain/insight.js'],
       globals:['exerciseInsight','topSetOf'] },
     { key:'restNotifications', urls:['src/domain/restNotifications.js'],
@@ -348,7 +348,7 @@ const MUSCLES = [
   "広背筋", "僧帽筋", "脊柱起立筋",
   "三角筋前部", "三角筋中部", "三角筋後部",
   "上腕二頭筋", "上腕三頭筋", "前腕",
-  "大腿四頭筋", "ハムストリングス", "臀部", "ふくらはぎ",
+  "大腿四頭筋", "ハムストリングス", "臀部", "内転筋", "ふくらはぎ",
   "腹筋", "全身",
 ];
 const EQUIPMENT = ["バーベル", "ダンベル", "マシン", "ケーブル", "スミス", "自重"];
@@ -393,7 +393,11 @@ const aiServiceOf = (id) => AI_SERVICES.find(s => s.id === id) || AI_SERVICES[0]
 const migrateWorkouts = (ws) => (ws || []).map(w => ({
   ...w, exercises: (w.exercises || []).map(ex => ({ ...ex, muscle: normMuscle(ex.muscle) })),
 }));
-const migrateSplit = (sp) => sp ? { ...sp, days: sp.days.map(d => ({ ...d, muscles: [...new Set((d.muscles || []).map(normMuscle))] })) } : null;
+// 内転筋(2026-10 追加)を脚の Day に1回だけ足す(addAdductorDays、src/domain/dayPlan.js)
+// 内蔵種目と同じ名前のカスタム種目を上書きに移す(absorbBuiltinNameClash、src/domain/coefficients.js)。
+// 戻り値は { customExercises, exerciseOverrides }
+const migrateCustoms = (p) => absorbBuiltinNameClash(p.customExercises || [], p.exerciseOverrides || {}, n => DB_BY_NAME[n] || null);
+const migrateSplit = (sp) => sp ? addAdductorDays({ ...sp, days: sp.days.map(d => ({ ...d, muscles: [...new Set((d.muscles || []).map(normMuscle))] })) }) : null;
 const defaultProfile = (p) => ({
   bodyweight: p?.bodyweight ?? 70, soundOn: p?.soundOn ?? true,
   defTargetReps: p?.defTargetReps ?? p?.defRepHigh ?? 10, defIncrement: p?.defIncrement ?? 2.5,
@@ -420,8 +424,8 @@ const defaultProfile = (p) => ({
 // extractWorkoutsArray・validateWorkoutsShapeは src/domain/backupValidation.js へ移設(テストのため)。
 // LIBSで<script src>読み込み済みなのでグローバル関数としてそのまま参照できる。
 
-// ================= 種目マスター(約95種目) =================
-// m=部位, eq=器具, t=C/I, bw=自重(体重係数), db=ダンベル(片手重量), rom=可動域係数(集計ボリュームのみ・既定1.0)
+// ================= 種目マスター(113種目) =================
+// m=部位, eq=器具, t=C/I, bw=自重(体重係数), db=左右それぞれ行う種目(入力は片側の重量、集計で×2。器具がダンベルかどうかとは別。docs/係数の根拠.md), rom=可動域係数(集計ボリュームのみ・既定1.0)
 const EXERCISE_DB = [
   // 胸
   { n: "バーベルベンチプレス", m: "大胸筋", eq: "バーベル", t: "C" },
@@ -430,20 +434,25 @@ const EXERCISE_DB = [
   { n: "チェストプレス", m: "大胸筋", eq: "マシン", t: "C" },
   { n: "ペックデックフライ", m: "大胸筋", eq: "マシン", t: "I" },
   { n: "スミスマシンベンチプレス", m: "大胸筋", eq: "スミス", t: "C" },
+  { n: "デクラインベンチプレス", m: "大胸筋", eq: "バーベル", t: "C" },
   { n: "ケーブルフライ", m: "大胸筋", eq: "ケーブル", t: "I" },
-  { n: "ディップス", m: "大胸筋", eq: "自重", t: "C", bw: 0.95 },
-  { n: "プッシュアップ", m: "大胸筋", eq: "自重", t: "C", bw: 0.7, rom: 0.65 },
+  { n: "ディップス", m: "大胸筋", eq: "自重", t: "C", bw: 1.0 },
+  { n: "アシストディップス", m: "大胸筋", eq: "マシン", t: "C" },
+  { n: "プッシュアップ", m: "大胸筋", eq: "自重", t: "C", bw: 0.7 },
   // 胸(上部)
   { n: "インクラインバーベルベンチプレス", m: "大胸筋", eq: "バーベル", t: "C" },
   { n: "インクラインダンベルプレス", m: "大胸筋", eq: "ダンベル", t: "C", db: true },
+  { n: "インクラインダンベルフライ", m: "大胸筋", eq: "ダンベル", t: "I", db: true },
   { n: "インクラインチェストプレス", m: "大胸筋", eq: "マシン", t: "C" },
   { n: "スミスマシンインクラインプレス", m: "大胸筋", eq: "スミス", t: "C" },
   { n: "ロー・トゥ・ハイ・ケーブルフライ", m: "大胸筋", eq: "ケーブル", t: "I" },
   // 広背筋
   { n: "懸垂", m: "広背筋", eq: "自重", t: "C", bw: 1.0 },
+  { n: "チンアップ", m: "広背筋", eq: "自重", t: "C", bw: 1.0 },
   { n: "アシスト懸垂", m: "広背筋", eq: "マシン", t: "C" },
   { n: "ラットプルダウン", m: "広背筋", eq: "マシン", t: "C" },
-  { n: "片手ラットプルダウン", m: "広背筋", eq: "ケーブル", t: "C" },
+  { n: "クローズグリップラットプルダウン", m: "広背筋", eq: "マシン", t: "C" },
+  { n: "片手ラットプルダウン", m: "広背筋", eq: "ケーブル", t: "C", db: true },
   { n: "ストレートアームプルダウン", m: "広背筋", eq: "ケーブル", t: "I" },
   { n: "ダンベルプルオーバー", m: "広背筋", eq: "ダンベル", t: "I" },
   // 広背筋(ロウ系)
@@ -453,7 +462,9 @@ const EXERCISE_DB = [
   { n: "チェストサポートダンベルロウ", m: "広背筋", eq: "ダンベル", t: "C", db: true },
   { n: "ケーブルシーテッドロウ", m: "広背筋", eq: "ケーブル", t: "C" },
   { n: "マシンロウ", m: "広背筋", eq: "マシン", t: "C" },
-  { n: "インバーテッドロウ", m: "広背筋", eq: "自重", t: "C", bw: 0.65, rom: 0.75 },
+  { n: "片手ケーブルロウ", m: "広背筋", eq: "ケーブル", t: "C", db: true },
+  { n: "ハイロウ", m: "広背筋", eq: "マシン", t: "C" },
+  { n: "インバーテッドロウ", m: "広背筋", eq: "自重", t: "C", bw: 0.65 },
   // 僧帽筋
   { n: "バーベルシュラッグ", m: "僧帽筋", eq: "バーベル", t: "I", rom: 0.3 },
   { n: "ダンベルシュラッグ", m: "僧帽筋", eq: "ダンベル", t: "I", db: true, rom: 0.3 },
@@ -461,7 +472,7 @@ const EXERCISE_DB = [
   // 脊柱起立筋
   { n: "デッドリフト", m: "脊柱起立筋", eq: "バーベル", t: "C" },
   { n: "ラックプル", m: "脊柱起立筋", eq: "バーベル", t: "C", rom: 0.65 },
-  { n: "バックエクステンション", m: "脊柱起立筋", eq: "マシン", t: "I", bw: 0.4 },
+  { n: "バックエクステンション", m: "脊柱起立筋", eq: "自重", t: "I", bw: 0.4 },
   // 三角筋前部
   { n: "バーベルオーバーヘッドプレス", m: "三角筋前部", eq: "バーベル", t: "C" },
   { n: "ダンベルショルダープレス", m: "三角筋前部", eq: "ダンベル", t: "C", db: true },
@@ -511,22 +522,35 @@ const EXERCISE_DB = [
   { n: "ランジ", m: "大腿四頭筋", eq: "ダンベル", t: "C", db: true },
   { n: "ゴブレットスクワット", m: "大腿四頭筋", eq: "ダンベル", t: "C" },
   { n: "スミスマシンスクワット", m: "大腿四頭筋", eq: "スミス", t: "C" },
+  { n: "スミスマシンスプリットスクワット", m: "大腿四頭筋", eq: "スミス", t: "C" },
+  { n: "ダンベルスクワット", m: "大腿四頭筋", eq: "ダンベル", t: "C", db: true },
+  { n: "ペンデュラムスクワット", m: "大腿四頭筋", eq: "マシン", t: "C" },
+  { n: "ベルトスクワット", m: "大腿四頭筋", eq: "マシン", t: "C" },
+  // ステップアップは2026-10に臀部から移した(ランジ・ブルガリアンと同じ片脚系に揃えた)
+  { n: "ステップアップ", m: "大腿四頭筋", eq: "ダンベル", t: "C", db: true },
   // ハムストリングス
   { n: "ルーマニアンデッドリフト", m: "ハムストリングス", eq: "バーベル", t: "C" },
   { n: "ダンベルルーマニアンデッドリフト", m: "ハムストリングス", eq: "ダンベル", t: "C", db: true },
+  { n: "スミスマシンルーマニアンデッドリフト", m: "ハムストリングス", eq: "スミス", t: "C" },
   { n: "ライイングレッグカール", m: "ハムストリングス", eq: "マシン", t: "I" },
   { n: "シーテッドレッグカール", m: "ハムストリングス", eq: "マシン", t: "I" },
   { n: "グッドモーニング", m: "ハムストリングス", eq: "バーベル", t: "C" },
   { n: "ノルディックハムカール", m: "ハムストリングス", eq: "自重", t: "I", bw: 0.85 },
   // 臀部
   { n: "ヒップスラスト", m: "臀部", eq: "バーベル", t: "C", rom: 0.7 },
+  { n: "ヒップスラストマシン", m: "臀部", eq: "マシン", t: "C", rom: 0.7 },
+  { n: "スミスマシンヒップスラスト", m: "臀部", eq: "スミス", t: "C", rom: 0.7 },
+  { n: "スモウデッドリフト", m: "臀部", eq: "バーベル", t: "C" },
+  { n: "ケーブルプルスルー", m: "臀部", eq: "ケーブル", t: "C" },
   { n: "ケーブルキックバック", m: "臀部", eq: "ケーブル", t: "I" },
   { n: "ヒップアブダクション", m: "臀部", eq: "マシン", t: "I" },
-  { n: "ステップアップ", m: "臀部", eq: "ダンベル", t: "C", db: true },
+  // 内転筋(2026-10 追加)
+  { n: "ヒップアダクション", m: "内転筋", eq: "マシン", t: "I" },
   // ふくらはぎ
   { n: "スタンディングカーフレイズ", m: "ふくらはぎ", eq: "マシン", t: "I", rom: 0.3 },
   { n: "シーテッドカーフレイズ", m: "ふくらはぎ", eq: "マシン", t: "I", rom: 0.3 },
   { n: "レッグプレスカーフレイズ", m: "ふくらはぎ", eq: "マシン", t: "I", rom: 0.3 },
+  { n: "スミスマシンカーフレイズ", m: "ふくらはぎ", eq: "スミス", t: "I", rom: 0.3 },
   // 腹筋
   { n: "クランチ", m: "腹筋", eq: "自重", t: "I", bw: 0.35, rom: 0.5 },
   { n: "ケーブルクランチ", m: "腹筋", eq: "ケーブル", t: "I", rom: 0.75 },
@@ -534,6 +558,7 @@ const EXERCISE_DB = [
   { n: "ハンギングレッグレイズ", m: "腹筋", eq: "自重", t: "I", bw: 0.3 },
   { n: "アブローラー", m: "腹筋", eq: "自重", t: "C", bw: 0.45 },
   { n: "アブドミナルマシン", m: "腹筋", eq: "マシン", t: "I", rom: 0.75 },
+  { n: "ロータリートルソー", m: "腹筋", eq: "マシン", t: "I" },
 ];
 const DB_BY_NAME = Object.fromEntries(EXERCISE_DB.map(e => [e.n, e]));
 const ALIASES = {
@@ -541,6 +566,33 @@ const ALIASES = {
   "スクワット": "バーベルスクワット", "ショルダープレス": "ダンベルショルダープレス",
   "バーベルロウ": "バーベルベントオーバーロウ", "アームカール": "ダンベルカール",
 };
+// 通称 → 正式名。種目検索(exSearchText の e.al)と AIコーチの名前解決だけに使う。
+// ALIASES に入れないのは意図的: ALIASES は baseLookup(係数・db の解決)も通るので、
+// 同じ名前のカスタム種目(例: ケーブルで作った「リアレイズ」)が正式名の db を拾って×2になる。
+// 「フレンチプレス」(オーバーヘッドとライイングの両方を指す)・「レッグカール」(ライイング/シーテッド)は曖昧なので入れない。
+const SEARCH_ALIASES = {
+  "ブルガリアンスプリットスクワット": "ブルガリアンスクワット",
+  "リアレイズ": "リアデルトフライ", "ベントオーバーリアレイズ": "リアデルトフライ",
+  "バタフライ": "ペックデックフライ", "バタフライマシン": "ペックデックフライ", "ペクトラルフライ": "ペックデックフライ",
+  "シーテッドローイング": "ケーブルシーテッドロウ", "ケーブルロウ": "ケーブルシーテッドロウ",
+  "ケーブルクロスオーバー": "ケーブルフライ",
+  "ラテラルレイズ": "サイドレイズ",
+  "ミリタリープレス": "バーベルオーバーヘッドプレス", "オーバーヘッドプレス": "バーベルオーバーヘッドプレス", "OHP": "バーベルオーバーヘッドプレス",
+  "RDL": "ルーマニアンデッドリフト",
+  "ベントオーバーロウ": "バーベルベントオーバーロウ",
+  "ワンハンドロウ": "ワンハンドダンベルロウ", "ダンベルロウ": "ワンハンドダンベルロウ",
+  "ライイングトライセプスエクステンション": "スカルクラッシャー",
+  "プレスダウン": "トライセッププレスダウン",
+  "クローズグリップベンチプレス": "ナローグリップベンチプレス",
+  "チンニング": "懸垂", "プルアップ": "懸垂",
+  "腕立て伏せ": "プッシュアップ",
+  "カーフレイズ": "スタンディングカーフレイズ",
+  "腹筋ローラー": "アブローラー",
+  "アブダクション": "ヒップアブダクション",
+  "アダクション": "ヒップアダクション",
+};
+const SEARCH_ALIASES_OF = {};
+Object.entries(SEARCH_ALIASES).forEach(([a, n]) => { (SEARCH_ALIASES_OF[n] = SEARCH_ALIASES_OF[n] || []).push(a); });
 // 種目設定の上書き(ユーザーが変更した内蔵種目の設定を保持する)
 // 元データは書き換えず、この上書きを重ねて解決するので「元に戻す」も可能。
 let EXERCISE_OVERRIDES = {};
@@ -586,17 +638,17 @@ const SPLIT_PRESETS = [
   { name: "全身法", days: [{ name: "全身", muscles: ["全身"] }] },
   { name: "上半身 / 下半身", days: [
     { name: "上半身", muscles: ["大胸筋", "広背筋", "三角筋中部", "上腕二頭筋", "上腕三頭筋"] },
-    { name: "下半身", muscles: ["大腿四頭筋", "ハムストリングス", "臀部", "ふくらはぎ"] },
+    { name: "下半身", muscles: ["大腿四頭筋", "ハムストリングス", "臀部", "内転筋", "ふくらはぎ"] },
   ]},
   { name: "Push / Pull / Legs", days: [
     { name: "Push", muscles: ["大胸筋", "三角筋前部", "三角筋中部", "上腕三頭筋"] },
     { name: "Pull", muscles: ["広背筋", "三角筋後部", "上腕二頭筋"] },
-    { name: "Legs", muscles: ["大腿四頭筋", "ハムストリングス", "臀部", "ふくらはぎ"] },
+    { name: "Legs", muscles: ["大腿四頭筋", "ハムストリングス", "臀部", "内転筋", "ふくらはぎ"] },
   ]},
   { name: "5分割(胸/背中/脚/肩/腕)", days: [
     { name: "胸", muscles: ["大胸筋"] },
     { name: "背中", muscles: ["広背筋", "僧帽筋"] },
-    { name: "脚", muscles: ["大腿四頭筋", "ハムストリングス", "臀部", "ふくらはぎ"] },
+    { name: "脚", muscles: ["大腿四頭筋", "ハムストリングス", "臀部", "内転筋", "ふくらはぎ"] },
     { name: "肩", muscles: ["三角筋前部", "三角筋中部", "三角筋後部"] },
     { name: "腕", muscles: ["上腕二頭筋", "上腕三頭筋", "前腕"] },
   ]},
@@ -1091,10 +1143,11 @@ function App() {
             setSplit(migrateSplit(p.split));
             setProfile(defaultProfile(p.profile));
             setRecentNames(p.recentNames || []);
-            setCustomExercises(p.customExercises || []);
+            const mc = migrateCustoms(p);
+            setCustomExercises(mc.customExercises);
             setExerciseNotes(p.exerciseNotes || {});
-            setExerciseOverrides(p.exerciseOverrides || {});
-            setExerciseOverrides_module(p.exerciseOverrides || {});
+            setExerciseOverrides(mc.exerciseOverrides);
+            setExerciseOverrides_module(mc.exerciseOverrides);
             setLastBackupAt(p.lastBackupAt || null);
             if (p.guideSeen) setGuideSeen(true);
           }
@@ -1943,7 +1996,7 @@ function App() {
 
   // ---- 種目リスト(内蔵 + 保存済みカスタム) ----
   const allExercises = useMemo(
-    () => [...EXERCISE_DB, ...customExercises].map(e => ({ ...e, ...(exerciseOverrides[e.n] || {}) })),
+    () => [...EXERCISE_DB, ...customExercises].map(e => ({ ...e, ...(exerciseOverrides[e.n] || {}), al: SEARCH_ALIASES_OF[e.n] })),
     [customExercises, exerciseOverrides]);
   const findExercise = (name) => allExercises.find(e => e.n === name) || dbLookup(name);
 
@@ -2163,7 +2216,11 @@ function App() {
   const openCoach = (mode) => { setCoachMode(mode); setCoachAnswer(""); setCoachResult(null); setCoachCopied(false); };
   // AI が書いた種目名 → 保存用の名前。表示名に加えて英語名でも引く(日本語で頼んでも英語名で返すAIがある)
   const coachResolveName = useMemo(
-    () => makeCoachNameResolver(allExercises.map(e => ({ name: e.n, labels: [exName(e.n), EX_NAMES_EN[e.n]] }))),
+    // 通称は後ろに回す(先に登録した名前が勝つ)。同じ名前のカスタム種目があれば、そちらを優先させるため
+    () => makeCoachNameResolver([
+      ...allExercises.map(e => ({ name: e.n, labels: [exName(e.n), EX_NAMES_EN[e.n]] })),
+      ...allExercises.flatMap(e => (e.al || []).map(a => ({ name: e.n, labels: [a] }))),
+    ]),
     [allExercises, lang]);
   // 案で新しく入る種目のカード。設定(目標回数・刻み・係数)は今日のメニューと同じ経路で引く
   const coachNewExercise = (name) => exerciseFromPrescription(buildMenuItem(name).prescription, []);
@@ -2748,19 +2805,20 @@ function App() {
       persist({ split: { ...split, days: split.days.map((x, i) => i === o.dayIdx ? { ...x, exercises: o.exercises } : x) } });
       return;
     }
-    persist({ split: { name: "マイメニュー", days: [{ name: "Day 1", muscles: o.muscles, exercises: o.exercises }], cursor: 0 } });
+    persist({ split: { name: "マイメニュー", days: [{ name: "Day 1", muscles: o.muscles, exercises: o.exercises }], cursor: 0, adductorV1: true } });
   };
   const dismissOfferedMenu = () => setOfferSaveAsMenu(null);
 
   // ---- 分割操作 ----
   const applyPreset = (preset) => {
     if (split && !window.confirm(t("split.confirmReplace", { cur: splitName(split.name), next: splitName(preset.name) }))) return;
-    persist({ split: { name: preset.name, days: preset.days.map(d => ({ name: d.name, muscles: [...d.muscles] })), cursor: 0 } });
+    // adductorV1: 内転筋はもう部位の選択肢にあるので、読み込み時の移行(migrateSplit)を通さない
+    persist({ split: { name: preset.name, days: preset.days.map(d => ({ name: d.name, muscles: [...d.muscles] })), cursor: 0, adductorV1: true } });
     setEditDay(null); setPickingSplit(false);
   };
   const newCustomSplit = () => {
     if (split && !window.confirm(t("split.confirmRebuild", { cur: splitName(split.name) }))) return;
-    persist({ split: { name: "カスタム分割", days: [{ name: "Day 1", muscles: [] }], cursor: 0 } });
+    persist({ split: { name: "カスタム分割", days: [{ name: "Day 1", muscles: [] }], cursor: 0, adductorV1: true } });
     setEditDay(0); setPickingSplit(false);
   };
   const updSplit = (patch) => persist({ split: { ...split, ...patch } });
@@ -3327,9 +3385,8 @@ function App() {
         split: migrateSplit(p.split),
         profile: keepDeviceHealth(defaultProfile(p.profile)),
         recentNames: p.recentNames || [],
-        customExercises: p.customExercises || [],
+        ...migrateCustoms(p),
         exerciseNotes: p.exerciseNotes || {},
-        exerciseOverrides: p.exerciseOverrides || {},
         lastBackupAt: new Date().toISOString(),
         // 復元するのはこのアプリを使ってきた人なので、初回ガイドは出さない
         // (読み込みに失敗していた場合、メモリのguideSeenはfalseのままで、復元の直後にガイドが出てしまう)
@@ -3368,9 +3425,8 @@ function App() {
         split: migrateSplit(p.split),
         profile: keepDeviceHealth(defaultProfile(p.profile)),
         recentNames: p.recentNames || [],
-        customExercises: p.customExercises || [],
+        ...migrateCustoms(p),
         exerciseNotes: p.exerciseNotes || {},
-        exerciseOverrides: p.exerciseOverrides || {},
         lastBackupAt: p.lastBackupAt || null,
       };
       setError(""); // persistより前に(書き込み失敗時のエラーを消さないため)

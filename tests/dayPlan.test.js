@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { loadDomainModule } from "./helpers/loadDomain.js";
 
-const { STARTER_PICKS, STARTER_FULL_BODY, starterPicks, DAY_GROUP_OF, autoDayName, nextDayName, uniqueDayName, stalestDayIndex } = loadDomainModule("src/domain/dayPlan.js");
+const { STARTER_PICKS, STARTER_FULL_BODY, starterPicks, DAY_GROUP_OF, autoDayName, nextDayName, uniqueDayName, stalestDayIndex, addAdductorDays } = loadDomainModule("src/domain/dayPlan.js");
 
 // EXERCISE_DB は index.html の #appsrc の中にあるので、文字列から名前と部位を拾う
 const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
@@ -268,5 +268,124 @@ describe("stalestDayIndex(ここが崩れると放っておかれた Day が後�
     expect(stalestDayIndex(ppl(), workouts, 1, { includeFrom: true, now: justAfterSave })).toBe(1);
     expect(stalestDayIndex(ppl(), workouts, 1, { now: justAfterSave })).toBe(2);
     expect(stalestDayIndex(ppl(), workouts, 2, { now: justAfterSave })).toBe(0);
+  });
+});
+
+// 内転筋(2026-10 に部位を追加)を、保存済みの分割の脚の Day に1回だけ足す移行。
+// 足さないと、脚の Day でアダクションを入れたときに「今日の部位外」のバッジが出る。
+// 逆に印(adductorV1)を見ずに足すと、利用者が内転筋を外しても読み込みのたびに戻ってくる。
+// 新しく作る分割には最初から印を付けて、この移行を通さない(下の「#appsrc の配線」で縛る)。
+// 「脚の Day」の判定は 大腿四頭筋 か 臀部 を含むこと。ハムストリングス・ふくらはぎだけの Day は対象外とする
+// (実装の判定式どおり。ここを変えるなら、このテストも仕様として見直すこと)。
+const sampleSplit = (overrides = {}) => ({
+  name: "PPL",
+  cursor: 0,
+  days: [
+    { name: "Push", muscles: ["大胸筋", "三角筋前部", "上腕三頭筋"] },
+    { name: "Pull", muscles: ["広背筋", "上腕二頭筋"] },
+    { name: "Legs", muscles: ["大腿四頭筋", "ハムストリングス", "ふくらはぎ"] },
+  ],
+  ...overrides,
+});
+
+describe("addAdductorDays(内転筋を脚の Day に足す移行)", () => {
+  it("大腿四頭筋を含む Day に内転筋を1回だけ足す", () => {
+    const out = addAdductorDays(sampleSplit());
+    expect(out.days[2].muscles).toEqual(["大腿四頭筋", "ハムストリングス", "ふくらはぎ", "内転筋"]);
+  });
+
+  it("臀部を含む Day にも足す", () => {
+    const out = addAdductorDays(sampleSplit({ days: [{ name: "尻", muscles: ["臀部", "ハムストリングス"] }] }));
+    expect(out.days[0].muscles).toEqual(["臀部", "ハムストリングス", "内転筋"]);
+  });
+
+  it("上半身の Day には足さない", () => {
+    const out = addAdductorDays(sampleSplit());
+    expect(out.days[0].muscles).toEqual(["大胸筋", "三角筋前部", "上腕三頭筋"]);
+    expect(out.days[1].muscles).toEqual(["広背筋", "上腕二頭筋"]);
+  });
+
+  it("全身の Day には、大腿四頭筋や臀部を含んでいても足さない", () => {
+    const out = addAdductorDays(sampleSplit({ days: [
+      { name: "全身", muscles: ["全身"] },
+      { name: "全身+脚", muscles: ["全身", "大腿四頭筋", "臀部"] },
+    ] }));
+    expect(out.days[0].muscles).toEqual(["全身"]);
+    expect(out.days[1].muscles).toEqual(["全身", "大腿四頭筋", "臀部"]);
+  });
+
+  it("ハムストリングスやふくらはぎだけの Day には足さない", () => {
+    const out = addAdductorDays(sampleSplit({ days: [{ name: "ハム", muscles: ["ハムストリングス", "ふくらはぎ"] }] }));
+    expect(out.days[0].muscles).toEqual(["ハムストリングス", "ふくらはぎ"]);
+  });
+
+  it("足した後は adductorV1 を立てる", () => {
+    expect(addAdductorDays(sampleSplit()).adductorV1).toBe(true);
+  });
+
+  it("adductorV1 が立っていたら何もしない(利用者が外した後に足し直さない)", () => {
+    const removed = sampleSplit({ adductorV1: true });
+    expect(addAdductorDays(removed)).toBe(removed);
+    expect(addAdductorDays(removed).days[2].muscles).not.toContain("内転筋");
+  });
+
+  it("2回通しても内転筋は1つだけ", () => {
+    const twice = addAdductorDays(addAdductorDays(sampleSplit()));
+    expect(twice.days[2].muscles.filter(m => m === "内転筋")).toHaveLength(1);
+  });
+
+  it("印が無くても、すでに内転筋を含む Day には二重に足さない", () => {
+    const out = addAdductorDays(sampleSplit({ days: [{ name: "脚", muscles: ["大腿四頭筋", "内転筋"] }] }));
+    expect(out.days[0].muscles).toEqual(["大腿四頭筋", "内転筋"]);
+  });
+
+  it("名前・cursor・部位以外の Day の中身(登録した種目)はそのまま残す", () => {
+    const exercises = ["バーベルスクワット", "レッグプレス"];
+    const out = addAdductorDays(sampleSplit({ name: "自作", cursor: 2, days: [{ name: "脚", muscles: ["大腿四頭筋"], exercises }] }));
+    expect(out.name).toBe("自作");
+    expect(out.cursor).toBe(2);
+    expect(out.days[0].name).toBe("脚");
+    expect(out.days[0].exercises).toEqual(exercises);
+  });
+
+  it("受け取った分割を書き換えない", () => {
+    const sp = sampleSplit();
+    const before = JSON.parse(JSON.stringify(sp));
+    addAdductorDays(sp);
+    expect(sp).toEqual(before);
+  });
+
+  it("muscles の無い Day や days の無い分割でも落ちない", () => {
+    expect(addAdductorDays(sampleSplit({ days: [{ name: "Day 1" }] })).days[0]).toEqual({ name: "Day 1" });
+    expect(addAdductorDays({ name: "空" }).days).toEqual([]);
+  });
+
+  it("null を受けたら null を返す", () => {
+    expect(addAdductorDays(null)).toBe(null);
+  });
+});
+
+// npm test は index.html を実行しないので、新しく分割を作る経路が印を付け忘れても単体テストは緑のまま。
+// 付け忘れると、作った直後の分割が次の読み込みで migrateSplit を通り、利用者が外した内転筋が戻ってくる。
+// そこで #appsrc をテキストとして検査する(tests/exerciseCoefficients.test.js の「係数の配線」と同じ発想)。
+describe("#appsrc の配線(新しく作る分割は移行を通さない)", () => {
+  const appsrc = html.slice(html.indexOf('id="appsrc"'))
+    .split("\n").filter(l => !/^\s*(\/\/|\/\*|\*)/.test(l)).join("\n");
+  const splitLiteralOf = (name) => appsrc.match(new RegExp(`split: \\{ name: ${name},[^\\n]*`))?.[0];
+
+  it("マイメニューとして保存する分割に adductorV1: true を付けている", () => {
+    expect(splitLiteralOf('"マイメニュー"')).toMatch(/adductorV1: true/);
+  });
+
+  it("プリセットから作る分割に adductorV1: true を付けている", () => {
+    expect(splitLiteralOf("preset\\.name")).toMatch(/adductorV1: true/);
+  });
+
+  it("カスタム分割に adductorV1: true を付けている", () => {
+    expect(splitLiteralOf('"カスタム分割"')).toMatch(/adductorV1: true/);
+  });
+
+  it("読み込み時の migrateSplit が addAdductorDays を通している", () => {
+    expect(appsrc).toMatch(/const migrateSplit = [^\n]*addAdductorDays\(/);
   });
 });

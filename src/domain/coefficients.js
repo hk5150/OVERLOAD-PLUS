@@ -24,4 +24,32 @@ function resolveCoefficients(name, lookup) {
   return { bwFactor: meta?.bw ?? 0, rom: meta?.rom ?? 1.0 };
 }
 
+// 内蔵種目と同じ名前のカスタム種目を、内蔵種目への上書き(exerciseOverrides)に移す。
+// 内蔵に種目を足すと(2026-10 にヒップアダクション・チンアップなど19種目)、同じ名前で作っていた
+// カスタム種目が残って一覧に2行出る。しかも計算は内蔵側(dbLookup・resolveIsDb)を見るのに、
+// 設定画面での編集はカスタム側を書き換えるので、直しても効かない。
+// 利用者が決めていた部位・器具・db・係数は、内蔵の既定と違うものだけ上書きとして残す
+// (同じ値まで書くと、以後マスターの更新が届かなくなる。docs/係数の根拠.md の落とし穴3)。
+// 既に上書きがある項目は、そちらを優先する。何度通しても同じ結果になる。
+//   master(name): 内蔵種目の定義(無ければ null)
+function absorbBuiltinNameClash(customExercises, overrides, master) {
+  const customs = customExercises || [], ovs = { ...(overrides || {}) };
+  const kept = [];
+  let changed = false;
+  customs.forEach(c => {
+    const base = c && master(c.n);
+    if (!base) { kept.push(c); return; }
+    changed = true;
+    const own = {};
+    if (c.m && c.m !== base.m) own.m = c.m;
+    if (c.eq && c.eq !== base.eq) own.eq = c.eq;
+    if (!!c.db !== !!base.db) own.db = !!c.db;
+    if ((c.bw || 0) !== (base.bw || 0)) own.bw = c.bw || 0;
+    if (c.rom != null && c.rom !== (base.rom ?? 1.0)) own.rom = c.rom;
+    if (Object.keys(own).length) ovs[c.n] = { ...own, ...(ovs[c.n] || {}) };
+  });
+  return changed ? { customExercises: kept, exerciseOverrides: ovs } : { customExercises: customs, exerciseOverrides: overrides || {} };
+}
+
 globalThis.resolveCoefficients = resolveCoefficients;
+globalThis.absorbBuiltinNameClash = absorbBuiltinNameClash;

@@ -502,14 +502,14 @@ const STRINGS = {
   "settings.health.denied": { ja: "ヘルスケアへの書き込みが一部許可されていません。ヘルスケアアプリの右上のアイコン →「App」→ KURABELL で許可してください。", en: "Some Health write permissions are off. Allow it in the Health app: tap your profile picture → Apps → KURABELL." },
   "settings.health.failed": { ja: "ヘルスケアに接続できませんでした。", en: "Could not connect to Apple Health." },
   "settings.exercises": { ja: "種目の設定",            en: "Exercise settings" },
-  "settings.exercisesDesc": { ja: "内蔵種目も含めて設定を変更できます。部位はボリューム集計に、片手(ダンベル)・自重は重量の計算に使われます。", en: "Adjust any exercise, built-in ones included. Muscle drives volume totals; per-hand and bodyweight drive weight calculations." },
+  "settings.exercisesDesc": { ja: "内蔵種目も含めて設定を変更できます。部位はボリューム集計に、片側ずつ(×2)・自重は重量の計算に使われます。", en: "Adjust any exercise, built-in ones included. Muscle drives volume totals; one-side-at-a-time (×2) and bodyweight drive weight calculations." },
   "settings.exSearch": { ja: "種目を検索(空欄なら使用中の種目)", en: "Search exercises (empty shows the ones you use)" },
   "settings.inUse":    { ja: "使用中",                 en: "In use" },
   "settings.noMatch":  { ja: "該当する種目がありません。", en: "No matching exercises." },
   "settings.exEmptyHint": { ja: "記録するとここに表示されます。部位を選ぶか検索すれば全種目から探せます。", en: "Exercises you log show up here. Pick a muscle or search to browse them all." },
   "settings.modified": { ja: "変更済み",               en: "Modified" },
   "settings.revert":   { ja: "元に戻す",               en: "Reset" },
-  "settings.perHand":  { ja: "片手(ダンベル)",         en: "Per hand (dumbbell)" },
+  "settings.perHand":  { ja: "片側ずつ(×2で集計)",     en: "One side at a time (×2)" },
   "settings.exNote":   { ja: "※ 設定は今後の記録に反映されます。過去の記録は当時の設定のまま残ります。", en: "Changes apply to future workouts. Past records keep the settings they were logged with." },
   "settings.muscle":   { ja: "部位",                   en: "Muscle" },
   "settings.equipment": { ja: "器具",                  en: "Equipment" },
@@ -562,7 +562,7 @@ const STRINGS = {
   "share.totalVolume": { ja: "総ボリューム {v}{unit}", en: "Total volume {v}{unit}" },
   "share.perHand":     { ja: "{unit}(片手)",           en: "{unit}/hand" },
   "share.withBw":      { ja: "{unit}(体重込)",         en: "{unit} (incl. bodyweight)" },
-  "share.bothHands":   { ja: "{unit}(両手計)",         en: "{unit} (both hands)" },
+  "share.bothHands":   { ja: "{unit}(左右計)",         en: "{unit} (both sides)" },
   // 保存済みの1回分の相談文(履歴の「AIに相談」・お疲れ様の画面の「AIコーチに報告」)。フォームの助言は数字から判断できないので頼まない
   "share.workoutPrompt": { ja: "以下は私の筋トレ1回分の記録です。この日の内容を振り返り、漸進性過負荷の観点で、次回の各種目の重量と回数を提案してください(重量は{step}単位で)。", en: "Below is one of my workouts. Please review it and, using progressive overload, suggest the weight and reps for each exercise next time (weights in {step} steps)." },
   "share.workoutBw":   { ja: "体重 {bw}",              en: "Bodyweight {bw}" },
@@ -650,18 +650,23 @@ const EX_NAMES_EN = {
   "チェストプレス": "Chest Press",
   "ペックデックフライ": "Pec Deck Fly",
   "スミスマシンベンチプレス": "Smith Machine Bench Press",
+  "デクラインベンチプレス": "Decline Bench Press",
   "ケーブルフライ": "Cable Fly",
   "ディップス": "Dips",
+  "アシストディップス": "Assisted Dip",
   "プッシュアップ": "Push-Up",
   "インクラインバーベルベンチプレス": "Incline Barbell Bench Press",
   "インクラインダンベルプレス": "Incline Dumbbell Press",
+  "インクラインダンベルフライ": "Incline Dumbbell Fly",
   "インクラインチェストプレス": "Incline Chest Press",
   "スミスマシンインクラインプレス": "Smith Machine Incline Press",
   "ロー・トゥ・ハイ・ケーブルフライ": "Low-to-High Cable Fly",
   // 広背筋
   "懸垂": "Pull-Up",
+  "チンアップ": "Chin-Up",
   "アシスト懸垂": "Assisted Pull-Up",
   "ラットプルダウン": "Lat Pulldown",
+  "クローズグリップラットプルダウン": "Close-Grip Lat Pulldown",
   "片手ラットプルダウン": "Single-Arm Lat Pulldown",
   "ストレートアームプルダウン": "Straight-Arm Pulldown",
   "ダンベルプルオーバー": "Dumbbell Pullover",
@@ -671,6 +676,8 @@ const EX_NAMES_EN = {
   "チェストサポートダンベルロウ": "Chest-Supported Dumbbell Row",
   "ケーブルシーテッドロウ": "Seated Cable Row",
   "マシンロウ": "Machine Row",
+  "片手ケーブルロウ": "Single-Arm Cable Row",
+  "ハイロウ": "Machine High Row",
   "インバーテッドロウ": "Inverted Row",
   // 僧帽筋
   "バーベルシュラッグ": "Barbell Shrug",
@@ -729,22 +736,33 @@ const EX_NAMES_EN = {
   "ランジ": "Lunge",
   "ゴブレットスクワット": "Goblet Squat",
   "スミスマシンスクワット": "Smith Machine Squat",
+  "スミスマシンスプリットスクワット": "Smith Machine Split Squat",
+  "ダンベルスクワット": "Dumbbell Squat",
+  "ペンデュラムスクワット": "Pendulum Squat",
+  "ベルトスクワット": "Belt Squat",
   // ハムストリングス
   "ルーマニアンデッドリフト": "Romanian Deadlift",
   "ダンベルルーマニアンデッドリフト": "Dumbbell Romanian Deadlift",
+  "スミスマシンルーマニアンデッドリフト": "Smith Machine Romanian Deadlift",
   "ライイングレッグカール": "Lying Leg Curl",
   "シーテッドレッグカール": "Seated Leg Curl",
   "グッドモーニング": "Good Morning",
   "ノルディックハムカール": "Nordic Hamstring Curl",
   // 臀部
   "ヒップスラスト": "Hip Thrust",
+  "ヒップスラストマシン": "Hip Thrust Machine",
+  "スミスマシンヒップスラスト": "Smith Machine Hip Thrust",
+  "スモウデッドリフト": "Sumo Deadlift",
+  "ケーブルプルスルー": "Cable Pull-Through",
   "ケーブルキックバック": "Cable Kickback",
   "ヒップアブダクション": "Hip Abduction",
+  "ヒップアダクション": "Hip Adduction",
   "ステップアップ": "Step-Up",
   // ふくらはぎ
   "スタンディングカーフレイズ": "Standing Calf Raise",
   "シーテッドカーフレイズ": "Seated Calf Raise",
   "レッグプレスカーフレイズ": "Leg Press Calf Raise",
+  "スミスマシンカーフレイズ": "Smith Machine Calf Raise",
   // 腹筋
   "クランチ": "Crunch",
   "ケーブルクランチ": "Cable Crunch",
@@ -752,6 +770,7 @@ const EX_NAMES_EN = {
   "ハンギングレッグレイズ": "Hanging Leg Raise",
   "アブローラー": "Ab Wheel Rollout",
   "アブドミナルマシン": "Abdominal Machine",
+  "ロータリートルソー": "Rotary Torso",
 };
 
 // 部位名。解剖学名の直訳(Latissimus Dorsi等)ではなく、英語圏のトレーニングアプリで
@@ -770,6 +789,7 @@ const MUSCLE_NAMES_EN = {
   "大腿四頭筋": "Quads",
   "ハムストリングス": "Hamstrings",
   "臀部": "Glutes",
+  "内転筋": "Adductors",
   "ふくらはぎ": "Calves",
   "腹筋": "Abs",
   "全身": "Full Body",
@@ -841,7 +861,8 @@ const weekdayLabel = (dow) => (WEEKDAYS[LANG] || WEEKDAYS.ja)[dow];
 
 // 種目の検索対象テキスト。英語UIでも日本語名で引けるように、常に両方を含める
 // (ジムで「ベンチ」と打つ日本語話者が英語UIにしていても探せるようにするため)。
-const exSearchText = (e) => [e.n, EX_NAMES_EN[e.n], e.m, MUSCLE_NAMES_EN[e.m], e.eq, EQ_NAMES_EN[e.eq]]
+// e.al は通称(index.html の SEARCH_ALIASES から allExercises が付ける)。「リアレイズ」でリアデルトフライに当てる。
+const exSearchText = (e) => [e.n, EX_NAMES_EN[e.n], ...(e.al || []), e.m, MUSCLE_NAMES_EN[e.m], e.eq, EQ_NAMES_EN[e.eq]]
   .filter(Boolean).join(" ").toLowerCase();
 
 // 種目の絞り込み。英語名は大文字小文字を無視して当てる("bench"で"Bench Press"に当たるように)。
