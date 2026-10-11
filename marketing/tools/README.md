@@ -7,7 +7,8 @@
 
 | ファイル | 何を作るか | 使い方 |
 |---|---|---|
-| `build-silent-reel.sh` | ナレーションなしのリール(文字 + テーマソング、15〜20秒)。2026-10-10 から新しいリールはこの型 | `build-silent-reel.sh <リールのフォルダ> <出力.mp4>`(フォルダに `reel.html`・`durations.txt`) |
+| `add-theme.sh` | ナレーション入りのリール(制作フォルダの `build-reel.sh` の出力)にテーマソングを重ねる。**2026-10-11 から新しいリールはこの型**(エビデンス → アプリの機能、30〜45秒) | `add-theme.sh <ナレーションだけの mp4> <出力.mp4>` |
+| `build-silent-reel.sh` | ナレーションなしのリール(文字 + テーマソング、15〜20秒)。2026-10-10〜11 に使った型。北村さんの判断で使うのをやめた(機能説明だけに見えるため) | `build-silent-reel.sh <リールのフォルダ> <出力.mp4>`(フォルダに `reel.html`・`durations.txt`) |
 | `build-covers.py` | カバー画像(1080×1920)。一覧で 3:4 に切られても文字が残る位置 | `python3 build-covers.py [covers.json] [名前 ...]`(既定は `~/Desktop/KURABELL-reels/covers/covers.json`) |
 | `white-icon.py` | @kurabell_workout_log_en のプロフィール写真(白背景) | `python3 white-icon.py` |
 | `shoot-sns*.js` | SNS 用のアプリ画面(JP・EN、1320×2868) | Playwright MCP の `browser_run_code_unsafe` に渡す。一覧は `~/Desktop/KURABELL-reels/screens/README.md` |
