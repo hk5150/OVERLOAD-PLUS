@@ -200,7 +200,7 @@
     { key:'volume',     urls:['src/domain/volume.js'],
       globals:['workingSets','setVolume','exVolume','nextSetType','volumeGoalKey'] },
     { key:'dayPlan',    urls:['src/domain/dayPlan.js'],
-      globals:['STARTER_PICKS','STARTER_FULL_BODY','STARTER_MAX','starterPicks','DAY_GROUP_OF','autoDayName','nextDayName','uniqueDayName'] },
+      globals:['STARTER_PICKS','STARTER_FULL_BODY','STARTER_MAX','starterPicks','DAY_GROUP_OF','autoDayName','nextDayName','uniqueDayName','stalestDayIndex'] },
     { key:'coefficients', urls:['src/domain/coefficients.js'],
       globals:['resolveCoefficients'] },
     { key:'insight',    urls:['src/domain/insight.js'],
@@ -1656,10 +1656,11 @@ function App() {
   };
   // 分割の Day を最後にやってから何日か(分割の画面の「最終 ○日前」)。記録の Day 名(保存時の todayDay.name)で引くので、
   // Day 名を変えると前の記録とはつながらない(dayHasRecords・Day の履歴と同じ)
+  // 並びではなく一番新しい時刻で見る(保存後の「今日」を選ぶ stalestDayIndex と揃える。復元で並びが崩れても食い違わない)
   const dayLastDaysAgo = (name) => {
-    for (let i = workouts.length - 1; i >= 0; i--)
-      if (workouts[i].session === name) return daysSince(workouts[i].date);
-    return null;
+    let latest = -Infinity;
+    for (const w of workouts) if (w.session === name) { const t = Date.parse(w.date); if (t > latest) latest = t; }
+    return latest === -Infinity ? null : daysSince(new Date(latest).toISOString());
   };
   // 計算本体は src/domain/volume.js へ移設(テストのため)。ここではprofile.bodyweightを
   // 閉じ込めた薄いラッパーとして、元の呼び出し方(引数1つ)をそのまま保つ。
@@ -2642,7 +2643,9 @@ function App() {
       const dayIdx = split.cursor % split.days.length;
       return next.join("\u0000") === reg.join("\u0000") ? split.days : split.days.map((d, i) => i === dayIdx ? { ...d, exercises: next } : d);
     })();
-    const nextSplit = split ? { ...split, days: reorderedDays, cursor: (split.cursor + 1) % split.days.length } : split;
+    // 次の「今日」は、今保存した記録を含めて一番日数が空いている Day(src/domain/dayPlan.js の stalestDayIndex)。
+    // 今日やった Day は「0日」で最後尾になる。順番どおりに回していれば、今までの cursor + 1 と同じ Day になる
+    const nextSplit = split ? { ...split, days: reorderedDays, cursor: stalestDayIndex(reorderedDays, [...workouts, entry], split.cursor % split.days.length) } : split;
     // 分割が無い状態での初めての記録だけ、終了後に「メニューとして保存しますか?」と尋ねる
     // (2回目以降は出さない。workouts.length===0の時点=これが最初の記録、で判定する)
     if (!split && workouts.length === 0) {

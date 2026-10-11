@@ -351,7 +351,7 @@ const STRINGS = {
   "guide.welcomeBody": { ja: "同じ分割の前回の記録(重量・回数・セット数)がそのまま並ぶので、入力の手間なく「前回より上」を狙えます。推定1RMや自己ベストは自動で計算されます。", en: "Your last session on the same split day — weight, reps and set count — is laid out for you, so beating it takes no data entry. Estimated 1RM and personal bests are calculated automatically." },
   "guide.step1":       { ja: "① 分割を決める",         en: "① Choose a split" },
   "guide.step1Lead":   { ja: "「分割」タブで、あなたのトレーニング分割を作ります。", en: "Build your training split in the Split tab." },
-  "guide.step1Body":   { ja: "全身・上下・PPL・5分割のプリセットから選ぶか、ゼロから作成。各日にやる種目を登録しておくと、その日のメニューが自動で組まれます。保存するたびに次の日へ自動で進みます。", en: "Pick a preset — full body, upper/lower, PPL, 5-day — or start from scratch. Register the exercises for each day and that day's menu builds itself. Every save advances to the next day." },
+  "guide.step1Body":   { ja: "全身・上下・PPL・5分割のプリセットから選ぶか、ゼロから作成。各日にやる種目を登録しておくと、その日のメニューが自動で組まれます。保存するたびに、一番日数が空いている日が自動で「今日」になります。", en: "Pick a preset — full body, upper/lower, PPL, 5-day — or start from scratch. Register the exercises for each day and that day's menu builds itself. After each save, the day you've gone longest without becomes today." },
   "guide.step2":       { ja: "② 記録して、|前回と比べる", en: "② Log it, beat last time" },
   "guide.step2Lead":   { ja: "各セットの横に、|前回の同じセットが並びます。", en: "Every set sits next to |the same set from last time." },
   "guide.step2Body":   { ja: "「前回 24×11 RIR1」は、前回の同じ番手のセットです。今日はそれを超えにいきましょう。行の右の数字は推定1RM。自己ベストを超えると緑になり、そのセットに余力を入れると「YOU WIN!」が出ます。\n\n同じ重量が3回続くと「そろそろ上げどき」、3回とも余力0で止まっているとディロードを知らせます。数字を決めるのは、いつもあなたです。", en: "\"Last 24×11 RIR1\" is the matching set from last session — today, aim to beat it. The number on the right is the estimated 1RM; beat your best and it turns green, and entering your reps left on that set brings up a \"YOU WIN!\".\n\nAfter three sessions at the same weight you'll see \"time to add more\", or a deload hint if all three ended at RIR 0. The numbers are always yours to choose." },
@@ -372,7 +372,7 @@ const STRINGS = {
   "guide.skip":        { ja: "スキップ",               en: "Skip" },
 
   // ---- 分割タブ ----
-  "split.rotation":    { ja: "ローテーション方式:保存するたびに次のDayへ進みます。", en: "Rotation: every save advances to the next day." },
+  "split.rotation":    { ja: "保存するたびに、一番日数が空いているDayが「今日」になります。", en: "After each save, the day you've gone longest without becomes today." },
   "split.noSplitHint": { ja: "分割を作らなくても、種目を選んですぐ記録を始められます。分割は後からいつでも作れます。", en: "You can start logging right away without a split — you can always build one later." },
   "split.logNow":      { ja: "今すぐ記録する",         en: "Start logging" },
   "split.orConfigure": { ja: "または、分割メニューを設定する", en: "Or set up a split" },

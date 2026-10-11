@@ -92,6 +92,33 @@ function uniqueDayName(name, taken, isDayN) {
   return `${name} ${k}`;
 }
 
+// 保存した後の「今日」の Day(2026-10-11、北村さん)。以前は並び順の次(cursor + 1)に進むだけで、
+// Day を飛ばしたり「今日はこれ」で選んだりした後も順番どおりに進み、放っておかれた Day が後回しになった。
+// 最後にやってから一番時間がたっている Day を返す。一度もやっていない Day は最優先。
+// 同じなら fromIdx の次から並び順に見て先に来るもの(全部未実施の新しい分割では、今までのローテーションと同じ動き)。
+// 今日の Day(fromIdx)は、Day が2つ以上あれば候補から外す。時刻が未来の記録(時計の進んだ端末のバックアップ・端末の時刻を戻した等)が
+// ほかの Day にあると、今保存した Day の方が「古い」と判定されて同じ Day が居座るため(reviewer 指摘)。
+// 記録の Day 名(保存時の Day の name)で引くので、Day 名を変えると前の記録とはつながらない
+function stalestDayIndex(days, workouts, fromIdx) {
+  const n = (days || []).length;
+  if (n === 0) return 0;
+  const last = new Map();
+  for (const w of workouts || []) {
+    if (!w || w.session == null) continue;
+    const t = Date.parse(w.date);
+    if (Number.isNaN(t)) continue;
+    if (!last.has(w.session) || t > last.get(w.session)) last.set(w.session, t);
+  }
+  const start = ((Number(fromIdx) || 0) % n + n) % n;
+  let best = -1, bestT = Infinity;
+  for (let k = 1; k <= (n > 1 ? n - 1 : n); k++) {
+    const i = (start + k) % n;
+    const t = last.has(days[i].name) ? last.get(days[i].name) : -Infinity;
+    if (t < bestT) { best = i; bestT = t; }
+  }
+  return best;
+}
+
 globalThis.STARTER_PICKS = STARTER_PICKS;
 globalThis.STARTER_FULL_BODY = STARTER_FULL_BODY;
 globalThis.STARTER_MAX = STARTER_MAX;
@@ -100,3 +127,4 @@ globalThis.DAY_GROUP_OF = DAY_GROUP_OF;
 globalThis.autoDayName = autoDayName;
 globalThis.nextDayName = nextDayName;
 globalThis.uniqueDayName = uniqueDayName;
+globalThis.stalestDayIndex = stalestDayIndex;
