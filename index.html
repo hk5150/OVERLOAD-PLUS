@@ -4602,13 +4602,21 @@ function App() {
                       <RirSelect value={s.rir === "" ? null : num(s.rir)} onChange={v => {
                         const wasEmpty = s.rir === "" || s.rir == null;
                         updateSet(ex.id, i, "rir", v === "" ? "" : v);
-                        // 自己ベストの更新を祝う(YOU WIN!、1.4)。RIR を空から入れたセットが、過去の自己ベストを超えたら毎回
+                        // 自己ベストの更新を祝う(YOU WIN!、1.4)。RIR を空から入れたセットが、その時点の最高を超えたときだけ出す。
+                        // 最高は「保存済みの記録の自己ベスト」と「今日すでに終えたこの種目のほかのセット」の高いほう(北村さん、2026-10-11)。
+                        // 以前は保存済みの自己ベストだけと比べていて、1セット目で更新した後の、それより低い2セット目にも出ていた
                         if (v !== "" && wasEmpty && show1RM) {
+                          const todayBest = ex.sets.reduce((m, x, xi) => {
+                            if (xi === i || x.rir === "" || x.rir == null) return m;
+                            const w = effWeight(fromU(x.weight), resolveIsDb(ex.name, ex.isDb), ex.bwFactor || 0, profile.bodyweight), r = Math.round(num(x.reps));
+                            return showsSet1RM(x, w, r) ? Math.max(m, est1RM(w, r)) : m;
+                          }, 0);
                           // 同じセットで余力を外して入れ直しても、2回目は出さない(入れ間違いを直すたびに全画面が出ないように)
                           const winKey = `${startAt}:${ex.id}:${i}`;
-                          if (isNew1RMBest({ set1RM: row1RM, pastBest: pastBest1RM }) && !celebratedRef.current.has(winKey)) {
+                          // 判定は src/domain/oneRm.js の isNew1RMBest(初めての種目は出さない・同じ値は「超えた」にしない)
+                          if (isNew1RMBest({ set1RM: row1RM, pastBest: pastBest1RM, todayBest }) && !celebratedRef.current.has(winKey)) {
                             celebratedRef.current.add(winKey);
-                            celebrateBest(ex.name, pastBest1RM, row1RM);
+                            celebrateBest(ex.name, Math.max(pastBest1RM, todayBest), row1RM);
                           }
                         }
                         if (v !== "" && isLastInGroup(exIdx)) { startRest(); setRestFull(true); }
