@@ -1838,10 +1838,14 @@ function App() {
   // 1.4.1 で作り直した(北村さん「ブラッシュアップ必要」「点数とか出せない?」)。アプリの売りの「前回と比べて伸びが見える」を
   // 画像でも見せる: 総ボリュームの前回比、種目ごとの前回との差、今日のスコア(src/domain/insight.js の workoutScore)。
   // 試作は .playwright-mcp/store-v6/insta-mock.html(gitignore)。種目は5つまで、各種目のトップセットを出す
-  const drawWorkoutImage = async (entry, summary) => {
+  // story = true でストーリー用(1080×1920)。見出しから人体図までは同じで、一覧に全種目・全セットを並べる
+  // (北村さん「トレーニングメニューをもっと詳しく」、2026-10-12。投稿用とどちらかを選べる)。
+  // ストーリーは上下に Instagram の表示(名前・返信欄)が重なるので、上を OY、下を FOOT_UP だけ空ける
+  const drawWorkoutImage = async (entry, summary, story = false) => {
     try { await Promise.all([document.fonts.load("800 80px 'Barlow Condensed'"), document.fonts.load("600 40px 'Barlow Condensed'")]); } catch { /* 無ければ代わりの字形で描く */ }
     const icon = await new Promise(res => { const im = new Image(); im.onload = () => res(im); im.onerror = () => res(null); im.src = "icon-192.png"; });
-    const W = 1080, H = 1350, P = 80;
+    const W = 1080, H = story ? 1920 : 1350, P = 80;
+    const OY = story ? 150 : 0, FOOT_UP = story ? 130 : 0;
     const cv = document.createElement("canvas");
     cv.width = W; cv.height = H;
     const g = cv.getContext("2d");
@@ -1881,6 +1885,8 @@ function App() {
     const todayVol = volOf(entry), prevVol = prevDay ? volOf(prevDay) : null;
     const sc = workoutScore({ items: items.filter(it => it.now), volume: todayVol, prevVolume: prevVol });
 
+    // 見出しから人体図までは、ストーリーでは OY だけ下げて描く
+    g.save(); g.translate(0, OY);
     // 見出し: アイコンと KURABELL / 日付と曜日
     if (icon) { g.save(); rr(P, 64, 72, 72, 18); g.clip(); g.drawImage(icon, P, 64, 72, 72); g.restore(); }
     g.textBaseline = "middle"; g.textAlign = "left";
@@ -1971,12 +1977,116 @@ function App() {
         g.restore();
       });
     }
-    g.fillStyle = C.border; g.fillRect(P, LIST_TOP, W - P * 2, 2);
+    g.restore();
+    const LT = LIST_TOP + OY, FB = H - FOOT_UP - 124; // 一覧の上端と、足もとの線
+    g.fillStyle = C.border; g.fillRect(P, LT, W - P * 2, 2);
 
+    // 前回との差(重量が上がった・同じ重量で回数が伸びた・同じ・それ以外は前回の数字だけ)
+    const subOf = (it) => {
+      if (!it.now) return { sub: null, col: C.muted };
+      const p = it.prev, n = it.now;
+      if (!p) return { sub: t("img.first"), col: C.muted };
+      // 自重種目は前回の数字にも BW+ を付ける(今日の数字と揃える)
+      const bwEx = (it.ex.bwFactor || 0) > 0;
+      const lastTxt = `${t("img.last")} ${p.weight > 0 ? `${bwEx ? "BW+" : ""}${p.weight}` : "BW"}×${p.reps}`;
+      const dw = Math.round((n.weight - p.weight) * 100) / 100;
+      if (n.weight > p.weight + 0.001) return { sub: `${lastTxt}  →  +${dw}${uLabel()}`, col: C.green };
+      if (Math.abs(n.weight - p.weight) <= 0.001 && n.reps > p.reps) return { sub: `${lastTxt}  →  ${t(n.reps - p.reps === 1 ? "img.plusRep" : "img.plusReps", { n: n.reps - p.reps })}`, col: C.green };
+      if (Math.abs(n.weight - p.weight) <= 0.001 && n.reps === p.reps) return { sub: `${lastTxt}  →  ${t("img.same")}`, col: C.muted };
+      return { sub: lastTxt, col: C.muted };
+    };
+    // 自己ベストの印(角丸の黄色)。x, 文字の中心 y に描いて、幅を返す。fs は文字の大きさ(幅を測るときも同じ値で)
+    const bestWidth = (fs) => { g.font = `800 ${fs}px ${ja ? FONT_UI : BAR}`; return g.measureText(t("img.newBest")).width + 28; };
+    const drawBest = (x, cy, h, fs = 26) => {
+      const bt = t("img.newBest");
+      const bw = bestWidth(fs);
+      g.fillStyle = C.yellow; rr(x, cy - h / 2, bw, h, h / 2); g.fill();
+      g.fillStyle = C.bg; g.textBaseline = "middle"; g.textAlign = "left"; g.fillText(bt, x + 14, cy); g.textBaseline = "alphabetic";
+      return bw;
+    };
+
+    if (story) {
+      // 全種目・全セット。種目ごとに「名前・自己ベストの印 … 前回との差」の行と、セットの札(重量×回数)を折り返して並べる。
+      // 札の黄色は、前回と比べたトップセット。収まらなければ一段小さくし、それでも溢れる種目は「ほか N 種目」にまとめる
+      const setsOf = (ex) => ex.sets.filter(x => !x.warmup && Math.round(num(x.reps)) > 0);
+      const chipTxt = (ex, x) => { const w = wU(num(x.weight)), bw = (ex.bwFactor || 0) > 0; return `${w > 0 ? `${bw ? "BW+" : ""}${w}` : "BW"}×${Math.round(num(x.reps))}`; };
+      const SIZES = [
+        { name: 40, sub: 28, chip: 42, chipH: 60, padX: 18, gap: 10, nameH: 58, pad: 30, best: 38 },
+        { name: 34, sub: 25, chip: 34, chipH: 50, padX: 14, gap: 8, nameH: 50, pad: 20, best: 32 },
+        { name: 30, sub: 23, chip: 30, chipH: 42, padX: 12, gap: 6, nameH: 42, pad: 14, best: 30 },
+        // 8種目の日でも全部載るように(レビューの指摘。ボタンは「全セット」の画像なので、なるべく切らない)
+        { name: 26, sub: 20, chip: 26, chipH: 36, padX: 10, gap: 5, nameH: 34, pad: 8, best: 28 },
+      ];
+      const bestFs = (S) => S.best >= 38 ? 26 : 22;
+      const maxRow = W - P * 2;
+      const blockOf = (it, S) => {
+        // 単位は最後の札の右に一度だけ書くので、その分を空けて折り返す(右端に来て単位が消えないように)
+        g.font = `600 ${Math.round(S.chip * 0.7)}px ${BAR}`;
+        const unitW = g.measureText(uLabel()).width + 10;
+        g.font = `800 ${S.chip}px ${BAR}`;
+        const chips = setsOf(it.ex).map(x => ({ x, txt: chipTxt(it.ex, x), w: g.measureText(chipTxt(it.ex, x)).width + S.padX * 2 }));
+        let rows = chips.length ? 1 : 0, cx = 0;
+        chips.forEach(c => { if (cx > 0 && cx + c.w > maxRow - unitW) { rows++; cx = 0; } c.row = rows - 1; c.left = cx; cx += c.w + S.gap; });
+        return { it, chips, h: S.nameH + rows * (S.chipH + S.gap) + S.pad };
+      };
+      const avail = FB - (LT + 2) - 8;
+      // 全部が入る一番大きい段を選ぶ。一番小さい段でも入らなければ、溢れる分を「ほか N 種目」にする
+      const sumH = (bs) => bs.reduce((a, b) => a + b.h, 0);
+      let S = SIZES[SIZES.length - 1], blocks = items.map(it => blockOf(it, S)), more = 0;
+      const fit = SIZES.find(z => sumH(items.map(it => blockOf(it, z))) <= avail);
+      if (fit) { S = fit; blocks = items.map(it => blockOf(it, fit)); }
+      else {
+        // 小さくしても溢れる分は、最後の行に「ほか N 種目」を出して切る
+        const MORE_H = 56;
+        while (blocks.length > 1 && sumH(blocks) > avail - MORE_H) { blocks.pop(); more++; }
+      }
+      // 種目が少ない日は、一覧を使える高さの上下中央に置く
+      const used = sumH(blocks) + (more > 0 ? 56 : 0);
+      let y = LT + 2 + Math.max(16, Math.floor((avail - used) / 2));
+      blocks.forEach((b, i) => {
+        const { it, chips } = b;
+        if (i > 0) { g.fillStyle = C.border; g.fillRect(P, y - Math.round(S.pad / 2), W - P * 2, 1); }
+        const base = y + S.name;
+        // 右: 前回との差
+        const { sub, col } = subOf(it);
+        let subW = 0;
+        if (sub) { g.textAlign = "right"; g.fillStyle = col; g.font = `600 ${S.sub}px ${FONT_UI}`; g.fillText(sub, W - P, base); subW = g.measureText(sub).width + 24; }
+        // 左: 種目名と自己ベストの印
+        const bestW = it.pr ? bestWidth(bestFs(S)) + 14 : 0;
+        g.textAlign = "left"; g.fillStyle = C.text; g.font = `700 ${S.name}px ${FONT_UI}`;
+        let name = exName(it.ex.name);
+        while (g.measureText(name).width > maxRow - subW - bestW && name.length > 2) name = name.slice(0, -2) + "…";
+        g.fillText(name, P, base);
+        if (it.pr) drawBest(P + g.measureText(name).width + 14, base - S.name * 0.35, S.best, bestFs(S));
+        // セットの札
+        const top = topSetOf(it.ex);
+        const cy0 = y + S.nameH;
+        chips.forEach(c => {
+          const cx = P + c.left, cy = cy0 + c.row * (S.chipH + S.gap);
+          // 補助ありのセットは灰色の文字(トップセットから外しているのと同じく、実力の数字と見分ける)
+          const hot = c.x === top;
+          g.fillStyle = hot ? "rgba(232,179,60,0.16)" : C.surface2; rr(cx, cy, c.w, S.chipH, 12); g.fill();
+          g.fillStyle = hot ? C.yellow : c.x.assisted ? C.muted : C.text; g.font = `800 ${S.chip}px ${BAR}`; g.textAlign = "center"; g.textBaseline = "middle";
+          g.fillText(c.txt, cx + c.w / 2, cy + S.chipH / 2 + 2); g.textBaseline = "alphabetic";
+        });
+        // 単位は最後の札の右に一度だけ。自重だけ(BW)の種目には付けない
+        const last = chips[chips.length - 1];
+        if (last && chips.some(c => wU(num(c.x.weight)) > 0)) {
+          g.font = `600 ${Math.round(S.chip * 0.7)}px ${BAR}`; g.textAlign = "left"; g.fillStyle = C.muted;
+          const ux = P + last.left + last.w + 10;
+          if (ux + g.measureText(uLabel()).width <= W - P) { g.textBaseline = "middle"; g.fillText(uLabel(), ux, cy0 + last.row * (S.chipH + S.gap) + S.chipH / 2 + 2); g.textBaseline = "alphabetic"; }
+        }
+        y += b.h;
+      });
+      if (more > 0) {
+        g.textAlign = "left"; g.fillStyle = C.muted; g.font = `600 30px ${ja ? FONT_UI : BAR}`;
+        g.fillText(t("img.more", { n: more }), P, y + 30);
+      }
+    } else {
     // 種目は5つまで。6つ以上の日は4つ載せて残りを「ほか N 種目」にする(5つ+1行だと行が詰まって読みにくかった)。
     // 行の高さは、区切り線から足もとの線までに収まるよう決める
     const MAX = items.length > 5 ? 4 : 5, shown = items.slice(0, MAX), more = items.length - shown.length;
-    const top0 = LIST_TOP + 2, bottom0 = H - 124 - (more > 0 ? 72 : 0);
+    const top0 = LT + 2, bottom0 = FB - (more > 0 ? 72 : 0);
     const rowH = Math.min(112, Math.floor((bottom0 - top0) / Math.max(1, shown.length)));
     // 人体図を入れて行が低くなった日は、文字を一段小さくする
     const tight = rowH < 96;
@@ -1992,32 +2102,13 @@ function App() {
       let name = exName(it.ex.name);
       while (g.measureText(name).width > 540 && name.length > 2) name = name.slice(0, -2) + "…";
       g.fillText(name, P, y + F.nameY);
-      // 前回との差(重量が上がった・同じ重量で回数が伸びた・同じ・それ以外は前回の数字だけ)
-      let sub = null, col = C.muted;
-      if (it.now) {
-        const p = it.prev, n = it.now;
-        if (!p) sub = t("img.first");
-        else {
-          // 自重種目は前回の数字にも BW+ を付ける(今日の数字と揃える)
-          const bwEx = (it.ex.bwFactor || 0) > 0;
-          const lastTxt = `${t("img.last")} ${p.weight > 0 ? `${bwEx ? "BW+" : ""}${p.weight}` : "BW"}×${p.reps}`;
-          const dw = Math.round((n.weight - p.weight) * 100) / 100;
-          if (n.weight > p.weight + 0.001) { sub = `${lastTxt}  →  +${dw}${uLabel()}`; col = C.green; }
-          else if (Math.abs(n.weight - p.weight) <= 0.001 && n.reps > p.reps) { sub = `${lastTxt}  →  ${t(n.reps - p.reps === 1 ? "img.plusRep" : "img.plusReps", { n: n.reps - p.reps })}`; col = C.green; }
-          else if (Math.abs(n.weight - p.weight) <= 0.001 && n.reps === p.reps) sub = `${lastTxt}  →  ${t("img.same")}`;
-          else sub = lastTxt;
-        }
-      }
+      const { sub, col } = subOf(it);
       let subW = 0;
       if (sub) { g.fillStyle = col; g.font = `600 ${F.sub}px ${FONT_UI}`; g.fillText(sub, P, y + F.subY); subW = g.measureText(sub).width + 16; }
       if (it.pr) {
-        const bt = t("img.newBest");
-        g.font = `800 26px ${ja ? FONT_UI : BAR}`;
-        const bw = g.measureText(bt).width + 28;
         // 文字を小さくした日は印も低くする(高さ 38 のままだと次の行の区切り線に食い込んだ。reviewer 指摘)
         const bhh = tight ? 32 : 38, by2 = y + F.subY - (tight ? 23 : 27);
-        g.fillStyle = C.yellow; rr(P + subW, by2, bw, bhh, bhh / 2); g.fill();
-        g.fillStyle = C.bg; g.textBaseline = "middle"; g.fillText(bt, P + subW + 14, by2 + bhh / 2); g.textBaseline = "alphabetic";
+        drawBest(P + subW, by2 + bhh / 2, bhh, 26);
       }
       if (it.now) {
         g.textAlign = "right"; g.fillStyle = C.text; g.font = `800 ${F.w}px ${BAR}`;
@@ -2029,21 +2120,22 @@ function App() {
       g.textAlign = "left"; g.fillStyle = C.muted; g.font = `600 30px ${ja ? FONT_UI : BAR}`;
       g.fillText(t("img.more", { n: more }), P, bottom0 + 44);
     }
+    }
 
     // 足もと: キャッチと Instagram のアカウント(KURABELL の文字は見出しだけにする)
-    g.fillStyle = C.border; g.fillRect(P, H - 124, W - P * 2, 2);
-    g.textAlign = "left"; g.fillStyle = C.muted; g.font = `700 32px ${FONT_UI}`; g.fillText(t("img.tagline"), P, H - 64);
+    g.fillStyle = C.border; g.fillRect(P, FB, W - P * 2, 2);
+    g.textAlign = "left"; g.fillStyle = C.muted; g.font = `700 32px ${FONT_UI}`; g.fillText(t("img.tagline"), P, FB + 60);
     g.textAlign = "right"; g.font = `600 34px ${BAR}`;
-    g.fillText(lang === "en" ? "@kurabell_workout_log_en" : "@kurabell_workout_log_jp", W - P, H - 64);
+    g.fillText(lang === "en" ? "@kurabell_workout_log_en" : "@kurabell_workout_log_jp", W - P, FB + 60);
     return cv;
   };
 
   // 画像を作って共有する。お疲れ様の画面(where = "finish")と、履歴の各日(where = "hist:<位置>")から呼ぶ
-  const shareImageOf = async (entry, summary, where) => {
+  const shareImageOf = async (entry, summary, where, story = false) => {
     if (imageBusy) return;
     setImageBusy(true); setImageError(null);
     try {
-      const cv = await drawWorkoutImage(entry, summary);
+      const cv = await drawWorkoutImage(entry, summary, story);
       const dataUrl = cv.toDataURL("image/png");
       if (fileExportAvailable()) {
         const r = await shareImageFile(dataUrl.split(",")[1]);
@@ -2051,22 +2143,22 @@ function App() {
       } else {
         // Web 版はダウンロード
         const a = document.createElement("a");
-        a.href = dataUrl; a.download = `kurabell-${new Date(entry.date).toLocaleDateString("sv-SE")}.png`;
+        a.href = dataUrl; a.download = `kurabell-${new Date(entry.date).toLocaleDateString("sv-SE")}${story ? "-story" : ""}.png`;
         document.body.appendChild(a); a.click(); a.remove();
       }
     } catch { setImageError(where); }
     setImageBusy(false);
   };
-  const shareWorkoutImage = () => finishScreen && shareImageOf(finishScreen.entry, finishScreen.summary, "finish");
+  const shareWorkoutImage = (story) => finishScreen && shareImageOf(finishScreen.entry, finishScreen.summary, "finish", story);
   // 履歴の各日から作る(お疲れ様の画面を閉じた後や、過去の日でも作り直せるように。北村さん、2026-10-11)。
   // 自己ベストの印は、その日より前の記録の最高と比べて付ける(prMap は今日までの全部が入っているので使わない)
-  const shareHistoryImage = (w, idx) => {
+  const shareHistoryImage = (w, idx, story) => {
     const t0 = Date.parse(w.date);
     const bestOf = (ex) => workingSets(ex).reduce((m, s) => (s.assisted || !s.reps || s.reps < 1) ? m : Math.max(m, est1RM(setEff(ex, s), s.reps)), 0);
     const pastBest = {};
     workouts.forEach(x => { if (x === w || !(Date.parse(x.date) < t0)) return; x.exercises.forEach(ex => { pastBest[ex.name] = Math.max(pastBest[ex.name] || 0, bestOf(ex)); }); });
     const prKeys = w.exercises.filter(ex => (pastBest[ex.name] || 0) > 0 && bestOf(ex) > pastBest[ex.name] + 0.01).map(ex => ex.name);
-    shareImageOf(w, { title: t("watch.finishedTitle"), prKeys }, `hist:${idx}`);
+    shareImageOf(w, { title: t("watch.finishedTitle"), prKeys }, `hist:${idx}`, story);
   };
 
   // 記録中の種目の最大重量(実際に挙げた重量。回数1以上のセットのみ)
@@ -3879,9 +3971,14 @@ function App() {
               <button onClick={() => consultAi(workoutToText(finishScreen.entry), "finish")}
                 style={{ ...btn(C.surface2, copied ? C.green : C.text), padding: 13, fontSize: 14, border: `1px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "center", gap: 7 }}>
                 <Icon name={copied ? "check" : "chat"} size={16} />{copied ? t("finish.reportDone") : t("finish.report")}</button>
-              <button onClick={shareWorkoutImage} disabled={imageBusy}
-                style={{ ...btn(C.surface2, C.text), padding: 13, fontSize: 14, border: `1px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "center", gap: 7, opacity: imageBusy ? 0.6 : 1 }}>
-                <Icon name="share" size={16} />{t("finish.image")}</button>
+              {/* 投稿用(今日のまとめ)と、ストーリー用(全種目・全セット)。北村さん、2026-10-12 */}
+              <div style={{ display: "flex", gap: 8 }}>
+                {[false, true].map(story => (
+                  <button key={String(story)} onClick={() => shareWorkoutImage(story)} disabled={imageBusy}
+                    style={{ ...btn(C.surface2, C.text), flex: 1, padding: 13, fontSize: 14, border: `1px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "center", gap: 7, opacity: imageBusy ? 0.6 : 1 }}>
+                    <Icon name="share" size={16} />{t(story ? "finish.imageStory" : "finish.imagePost")}</button>
+                ))}
+              </div>
               {imageError === "finish" && <div role="alert" style={{ fontSize: 12, color: C.red, textAlign: "center" }}>{t("finish.imageFailed")}</div>}
               <button onClick={closeFinish} style={{ ...btn(C.red), padding: 15, fontSize: 15, marginTop: 4 }}>{t("common.close")}</button>
             </div>
@@ -5668,9 +5765,13 @@ function App() {
               {/* Instagram 用の画像(お疲れ様の画面と同じもの)。最初は見出しの行の共有アイコンだけにしたが、
                   北村さんが見つけられなかった(1.4.1 (27))ので、文字の付いたボタンにした */}
               {!editing && (
-                <button onClick={() => shareHistoryImage(w, idx)} disabled={imageBusy}
-                  style={{ ...btn(C.surface2, C.text), width: "100%", padding: 9, fontSize: 13, marginBottom: 10, border: `1px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, opacity: imageBusy ? 0.6 : 1 }}>
-                  <Icon name="share" size={15} />{t("finish.image")}</button>
+                <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+                  {[false, true].map(story => (
+                    <button key={String(story)} onClick={() => shareHistoryImage(w, idx, story)} disabled={imageBusy}
+                      style={{ ...btn(C.surface2, C.text), flex: 1, padding: 9, fontSize: 13, border: `1px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, opacity: imageBusy ? 0.6 : 1 }}>
+                      <Icon name="share" size={15} />{t(story ? "finish.imageStory" : "finish.imagePost")}</button>
+                  ))}
+                </div>
               )}
 
               {/* 表示モード */}

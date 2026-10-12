@@ -118,7 +118,9 @@ const STRINGS = {
   "finish.volume":     { ja: "総ボリューム",           en: "TOTAL VOLUME" },
   "finish.report":     { ja: "AIコーチに報告",         en: "Report to AI Coach" },
   "finish.reportDone": { ja: "コピーしました。AIの入力欄を長押しして「ペースト」→ 送信してください", en: "Copied. In the AI chat, long-press the message box, tap Paste, then send" },
-  "finish.image":      { ja: "Instagram 用の画像",     en: "Image for Instagram" },
+  // Instagram 用の画像。投稿用(今日のまとめ)と、ストーリー用(全種目・全セット)。320px 幅で2つ並べて1行に収まる長さにする
+  "finish.imagePost":  { ja: "投稿用の画像",           en: "Post image" },
+  "finish.imageStory": { ja: "ストーリー用",           en: "Story image" },
   // 人体図(どこを鍛えたか)の読み上げ
   "body.aria":         { ja: "鍛えた部位: {list}",     en: "Trained: {list}" },
   "common.listSep":    { ja: "・",                     en: ", " },
