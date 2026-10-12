@@ -155,6 +155,15 @@ describe("Watch のワークアウトとの対応付け", () => {
       { opId: "v", kind: "workout", status: "saved", recordStartAt: 100, at: 2 },
       { opId: "a", kind: "set", exId: "e1", setIndex: 0, at: 3 },
     ], 100)).toBe(false);
+    // やめた後に始め直した(無操作で終えた後にセットを入れた等)。両方が一度に届いても、後の方で決める
+    expect(watchWorkoutStopped([
+      { opId: "d", kind: "workout", status: "discarded", recordStartAt: 100, at: 5 },
+      { opId: "s2", kind: "workout", status: "started", recordStartAt: 100, at: 9 },
+    ], 100)).toBe(false);
+    expect(watchWorkoutStopped([
+      { opId: "s2", kind: "workout", status: "started", recordStartAt: 100, at: 9 },
+      { opId: "d2", kind: "workout", status: "discarded", recordStartAt: 100, at: 12 },
+    ], 100)).toBe(true);
     // 記録していない(startAt が null)
     expect(watchWorkoutStopped([discarded(100)], null)).toBe(false);
     expect(watchWorkoutStopped(undefined, 100)).toBe(false);
@@ -547,7 +556,7 @@ describe("Watch のワークアウトの起こし直し(ここが崩れると記
     expect(start).toBeGreaterThanOrEqual(0);
     return src.slice(start, src.indexOf("\n    }\n", start));
   };
-  const selfStart = () => swiftFunc(read("ios/App/KurabellWatch/SessionStore.swift"), "func startWorkoutIfNeeded()");
+  const selfStart = () => swiftFunc(read("ios/App/KurabellWatch/SessionStore.swift"), "func startWorkoutIfNeeded(userOpened: Bool = false)");
 
   it("記録中とみなすのは、iPhone が記録中でまだ保存していない記録だけ(recordInProgress)", () => {
     const rip = swiftFunc(read("ios/App/KurabellWatch/SessionStore.swift"), "var recordInProgress: Double? {");
@@ -601,8 +610,9 @@ describe("Watch のワークアウトの起こし直し(ここが崩れると記
   it("RootView は前面に来たときと表示したときに、Watch 自身が始めるかを見る", () => {
     const views = read("ios/App/KurabellWatch/Views.swift");
     const root = views.slice(views.indexOf("struct RootView"), views.indexOf("\nstruct ", views.indexOf("struct RootView") + 1));
-    expect(root).toMatch(/\.onChange\(of: scenePhase\) \{ _, phase in if phase == \.active \{ store\.startWorkoutIfNeeded\(\) \} \}/);
-    expect(root).toContain(".onAppear { store.startWorkoutIfNeeded() }");
+    // 開き直したとき(裏から前面)は userOpened。手首を上げただけ(inactive → active)は数えない(無操作で終えた記録を始め直さないため)
+    expect(root).toMatch(/\.onChange\(of: scenePhase\) \{ _, phase in[\s\S]*?if phase == \.active \{[\s\S]*?store\.startWorkoutIfNeeded\(userOpened: opened\)/);
+    expect(root).toContain(".onAppear { store.startWorkoutIfNeeded(userOpened: true) }");
   });
 
   const wmStart = () => swiftFunc(read("ios/App/KurabellWatch/WorkoutManager.swift"), "func start(_ config: HKWorkoutConfiguration, forRecord: Double? = nil) async -> Bool {");
@@ -743,5 +753,38 @@ describe("Watch の休憩の通知は、届いたらすぐ鳴らす(1.4.2、北�
     expect(body).not.toMatch(/MainActor\.run|await MainActor/);
     expect(body).toContain("Self.restViewVisibleNow()");
     expect(src).toMatch(/nonisolated static func restViewVisibleNow\(\) -> Bool/);
+  });
+});
+
+describe("保存しないまま終わった記録の Watch のワークアウトは、無操作30分で終える(1.4.2、北村さん)", () => {
+  const read = (rel) => fs.readFileSync(path.join(process.cwd(), rel), "utf-8");
+  const wm = () => read("ios/App/KurabellWatch/WorkoutManager.swift");
+  const ss = () => read("ios/App/KurabellWatch/SessionStore.swift");
+  it("30分たっても記録が動かなければ、保存済みなら締め、そうでなければ破棄する", () => {
+    expect(wm()).toMatch(/static let idleLimit: TimeInterval = 30 \* 60/);
+    const i = wm().indexOf("idleWatch = Task");
+    const body = wm().slice(i, wm().indexOf("let wait = max(0, Self.attachWindow", i));
+    expect(body).toContain("Self.idleLimit");
+    expect(body).toContain("SessionStore.shared.markIdleEnded(r)");
+    expect(body).toContain("await self.finish(key: saved.key, endAt: saved.endAt)");
+    expect(body).toContain("await self.discard(report: true)");
+    expect(wm()).toMatch(/private func cleanUp\(\) \{[\s\S]*?idleWatch\?\.cancel\(\)/);
+  });
+  it("「記録が動いた」はセットと休憩の変化だけ(iPhone を開いた・閉じたでは数えない)", () => {
+    expect(ss()).toMatch(/if base\.map\(activityKey\) != activityKey\(snap\) \{/);
+    expect(ss()).not.toMatch(/activityKey[\s\S]{0,400}phoneActive/);
+  });
+  it("無操作で終えた記録は、セットが入るか Watch で開き直すまで始め直さない(手首を上げただけでは始めない)", () => {
+    expect(ss()).toMatch(/if let t = idleEnded\[r\] \{\s*guard userOpened \|\| lastActivityAt > t else \{ return \}/);
+    // 裏に回った印で「開き直した」を見る(background → inactive → active の2段でも効くように)
+    expect(read("ios/App/KurabellWatch/Views.swift")).toMatch(/if phase == \.background \{ store\.wentBackground = true \}/);
+    expect(read("ios/App/KurabellWatch/Views.swift")).toContain("store.startWorkoutIfNeeded(userOpened: opened)");
+  });
+  it("アプリが再起動して引き取り直したときは、そこを記録が動いた時刻にする(続いている記録を捨てない)", () => {
+    expect(wm()).toMatch(/private func adopt\(_ session: HKWorkoutSession\) -> Bool \{[\s\S]*?SessionStore\.shared\.noteActivity\(\)/);
+  });
+  it("Watch でセットを入れたら、その場で始め直しを見る", () => {
+    const commit = ss().slice(ss().indexOf("func commit(exId:"), ss().indexOf("func addSet(exId:"));
+    expect(commit).toContain("startWorkoutIfNeeded()");
   });
 });

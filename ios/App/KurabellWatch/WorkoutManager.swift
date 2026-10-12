@@ -7,7 +7,7 @@ import HealthKit
 //
 // 保存するかどうかは iPhone が決める(SessionStore.syncWorkout から呼ばれる):
 // - iPhone で記録を保存した → その終了時刻で締めて保存し、"saved" を返す
-// - iPhone で記録を破棄した・4時間を超えた・システムに止められた・保存に失敗した → 破棄し、"discarded" を返す
+// - iPhone で記録を破棄した・4時間を超えた・30分記録が動かなかった(保存しないまま閉じた)・システムに止められた・保存に失敗した → 破棄し、"discarded" を返す
 // iPhone は "saved" が返るまで自分の書き込みを保留し、"discarded" や無応答なら時刻だけ書く
 // (src/domain/watch.js の settleWatchHealth)。Watch 側で何が起きても、ヘルスケアから記録が消えないように。
 // 設計は docs/Watchアプリ.md の「ワークアウト」。
@@ -20,11 +20,15 @@ final class WorkoutManager: NSObject, ObservableObject {
     // iPhone の記録の開始と、このセッションの開始の差の許容範囲。起動の遅れ(初回の許可画面など)は吸収し、
     // 前の記録のスナップショットに誤って対応付けないため
     static let attachWindow: TimeInterval = 10 * 60
+    // 記録が動かないまま(SessionStore.lastActivityAt)これだけたったら、保存されないまま終わった記録と見なして終える
+    // (1.4.2、北村さん「アプリを終了したが Apple Watch が閉じない」。iOS はアプリを上にスワイプして閉じても知らせてこないので、時間で見る)
+    static let idleLimit: TimeInterval = 30 * 60
 
     private let store = HKHealthStore()
     private var session: HKWorkoutSession?
     private var builder: HKLiveWorkoutBuilder?
     private var watchdog: Task<Void, Never>?
+    private var idleWatch: Task<Void, Never>?
     private var endedWaiter: CheckedContinuation<Void, Never>?
 
     @Published private(set) var isRunning = false
@@ -150,6 +154,25 @@ final class WorkoutManager: NSObject, ObservableObject {
             guard !Task.isCancelled else { return }
             await self?.discard(report: true)
         }
+        // 無操作の見張り。1分ごとに見る(常時表示で間引かれても、30分に対して数十秒の遅れは問題にならない)
+        idleWatch?.cancel()
+        idleWatch = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 60 * 1_000_000_000)
+                guard let self, !Task.isCancelled, self.isRunning, self.sessionStartMs == started else { return }
+                guard let r = self.recordStartAt, !self.isBusy else { continue }
+                let last = max(SessionStore.shared.lastActivityAt, Date(timeIntervalSince1970: started / 1000))
+                guard Date().timeIntervalSince(last) >= Self.idleLimit else { continue }
+                SessionStore.shared.markIdleEnded(r)
+                // 保存の知らせが届いていなかっただけなら締めて保存し、そうでなければ破棄する(iPhone は保存時に時刻だけ書く)
+                if let saved = SessionStore.shared.lastSaved, saved.startAt == r {
+                    await self.finish(key: saved.key, endAt: saved.endAt)
+                } else {
+                    await self.discard(report: true)
+                }
+                return
+            }
+        }
         // 記録に対応付かないまま attachWindow を過ぎたら、待たずに破棄する(記録のスナップショットがそれより遅れて届く場合は諦める)。
         // 対応付いていないセッションは、iPhone から新しいスナップショットが届くまで終わらない(syncWorkout)。
         // 起こす要求が遅れて届く・iPhone のアプリが閉じられている等で届かないと、4時間の上限まで動き続けていた(2026-10-12、北村さんの実機)
@@ -232,6 +255,7 @@ final class WorkoutManager: NSObject, ObservableObject {
             recordStartAt = nil
         }
         isRunning = true
+        SessionStore.shared.noteActivity()
         // このアプリは一時停止を使わないが、システムや文字盤のボタンで止められていた場合の保険
         if session.state == .paused { session.resume() }
         armTimers()
@@ -358,6 +382,8 @@ final class WorkoutManager: NSObject, ObservableObject {
     private func cleanUp() {
         watchdog?.cancel()
         watchdog = nil
+        idleWatch?.cancel()
+        idleWatch = nil
         session = nil
         builder = nil
         recordStartAt = nil

@@ -153,11 +153,19 @@ function watchRestCapableFromOps(ops, recordStartAt) {
 }
 
 // Watch が記録 recordStartAt のワークアウトを途中でやめたか(純粋関数)。
-// "discarded" は、ほかのワークアウトアプリに替えた・システムに止められた・保存に失敗した、のどれか。
+// "discarded" は、ほかのワークアウトアプリに替えた・システムに止められた・30分記録が動かなかった・保存に失敗した、のどれか。
 // iPhone は Watch が記録している間だけ休憩の Live Activity を止めているので、やめたら出す側に戻す。
+// やめた後に始め直した("started" が後)なら、やめていない。iPhone が寝ている間に両方が溜まって一度に届くことがあり、
+// 順番を見ないと「Watch は記録していない」と誤解したままになった(1.4.2 の無操作での終了、reviewer 指摘)
 function watchWorkoutStopped(ops, recordStartAt) {
   if (!Number.isFinite(recordStartAt)) return false;
-  return (ops || []).some(op => op && op.kind === "workout" && op.status === "discarded" && op.recordStartAt === recordStartAt);
+  let last = null;
+  (ops || []).forEach(op => {
+    if (!op || op.kind !== "workout" || op.recordStartAt !== recordStartAt) return;
+    if (op.status !== "discarded" && op.status !== "started") return;
+    if (last == null || (op.at || 0) >= (last.at || 0)) last = op;
+  });
+  return last != null && last.status === "discarded";
 }
 
 // Watch に任せたヘルスケアの書き込みを、Watch の結果で締める(純粋関数)。

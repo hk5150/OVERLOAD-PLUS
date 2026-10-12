@@ -110,9 +110,12 @@ final class SessionStore: NSObject, ObservableObject {
         let op = WatchOp(opId: UUID().uuidString, kind: "set", exId: exId, setIndex: setIndex,
                          weight: weight, reps: reps, rir: rir,
                          restStartAt: startsRest ? now : nil, at: now)
+        lastActivityAt = Date()
         pending.append(op)
         save()
         send(op)
+        // 無操作で終えた後に Watch でセットを入れたら、その場でワークアウトを始め直す(iPhone が寝ていても)
+        startWorkoutIfNeeded()
         if startsRest {
             ownRestStartAt = now
             scheduledRestStartAt = now
@@ -130,9 +133,11 @@ final class SessionStore: NSObject, ObservableObject {
         let op = WatchOp(opId: UUID().uuidString, kind: "add", exId: exId, setIndex: ex.sets.count,
                          weight: last?.weight ?? "", reps: last?.reps ?? "", rir: nil,
                          restStartAt: nil, at: now)
+        lastActivityAt = Date()
         pending.append(op)
         save()
         send(op)
+        startWorkoutIfNeeded()
     }
 
     // MARK: - 合流(iPhone の applyWatchOps と同じ規則。表示のためだけに使う)
@@ -160,6 +165,10 @@ final class SessionStore: NSObject, ObservableObject {
     fileprivate func receive(_ snap: WatchSnapshot) {
         // 古いスナップショットが後から届いても巻き戻さない
         if let cur = base, cur.sentAt > snap.sentAt { return }
+        // セットか休憩が変わっていれば、届いた状態の時刻を「記録が動いた時刻」にする
+        if base.map(activityKey) != activityKey(snap) {
+            lastActivityAt = max(lastActivityAt, Date(timeIntervalSince1970: snap.sentAt / 1000))
+        }
         base = snap
         let applied = Set(snap.applied ?? [])
         pending.removeAll { applied.contains($0.opId) }
@@ -229,11 +238,18 @@ final class SessionStore: NSObject, ObservableObject {
         if let saved = snap.lastSaved, saved.startAt == r { return nil }
         return r
     }
-    func startWorkoutIfNeeded() {
+    // 裏に回った印(Views の scenePhase で立てる)。background → inactive → active と2段で戻っても判定できるように
+    var wentBackground = false
+    // userOpened: Watch で KURABELL を開いた(起動した・裏から前面に戻した)ときに呼ばれた。手首を上げただけは含まない
+    func startWorkoutIfNeeded(userOpened: Bool = false) {
         // 起動直後で iPhone との通信がまだ有効でない間は、前回の古い状態しか知らない(保存済みの記録に始めてしまう。reviewer 指摘)。
         // 有効になれば activationDidCompleteWith → receive からここが呼ばれる
         guard WCSession.default.activationState == .activated else { return }
         guard let r = recordInProgress, !selfStarting, !selfStartTried.contains(r) else { return }
+        if let t = idleEnded[r] {
+            guard userOpened || lastActivityAt > t else { return }
+            idleEnded[r] = nil
+        }
         let wm = WorkoutManager.shared
         guard !wm.isRunning, !wm.isBusy else { return }
         guard WKApplication.shared().applicationState == .active else { return }
@@ -380,6 +396,23 @@ final class SessionStore: NSObject, ObservableObject {
     }
 
     // 休憩の通知の予約の世代。予約や取り消しのたびに進め、古い予約の続きは捨てる。
+    // 最後に記録が動いた時刻(Watch でのセットの入力・セットの追加、iPhone から届いた新しい状態)。
+    // これから WorkoutManager.idleLimit たっても動かなければ、Watch のワークアウトを終える(1.4.2、北村さん
+    // 「アプリを終了したが Apple Watch が閉じない」。保存しないまま iPhone のアプリを閉じたとき用)
+    private(set) var lastActivityAt: Date = .distantPast
+    // 無操作で終えた記録と、終えた時刻。その後にセットが入るか、Watch で KURABELL を開き直すまで始め直さない
+    // (保存のために iPhone を開いた・手首を上げただけで始め直すと、終えた記録に短いワークアウトが付いてしまう)
+    private var idleEnded: [Double: Date] = [:]
+    func markIdleEnded(_ r: Double) { idleEnded[r] = Date() }
+    // アプリが再起動してワークアウトを引き取り直したとき(WorkoutManager.adopt)。lastActivityAt はメモリにしか無いので、
+    // ここを起点にしないと、続いている記録を次の見回りで無操作と見なして捨てる(reviewer 指摘)
+    func noteActivity() { lastActivityAt = max(lastActivityAt, Date()) }
+    // 記録の中身(セットと休憩)。これが変わったときだけ「記録が動いた」と数える(iPhone を開いた・閉じたは数えない)
+    private func activityKey(_ snap: WatchSnapshot) -> String {
+        let sets = snap.exercises.map { ex in ex.id + ":" + ex.sets.map { "\($0.weight)x\($0.reps)r\($0.rir.map(String.init) ?? "-")" }.joined(separator: ",") }
+        return sets.joined(separator: "|") + "#" + (snap.restStartAt.map { String($0) } ?? "")
+    }
+
     // 権限の確認と add は非同期で、続けて予約し直すと古い時刻の add が後から入り、ずれた時刻に鳴っていた(1.4 (18)、北村さん「インターバル通知がズレて来る」)
     private var restNotifyGeneration = 0
     // 休憩画面を開いているか。開いている間は、休憩の通知のバナーで画面を覆わず、音と振動だけにする(willPresent)。

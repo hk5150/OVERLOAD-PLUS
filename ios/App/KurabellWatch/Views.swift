@@ -47,8 +47,17 @@ struct RootView: View {
         } else {
             main
                 // 前面に来たら、iPhone の記録に Watch のワークアウトが付いていなければ始める(SessionStore.startWorkoutIfNeeded)
-                .onChange(of: scenePhase) { _, phase in if phase == .active { store.startWorkoutIfNeeded() } }
-                .onAppear { store.startWorkoutIfNeeded() }
+                // 裏から戻ったときだけ「開いた」と数える(手首を上げただけの inactive → active は数えない)。
+                // 戻るときに background → inactive → active と2段で変わることがあるので、background に入った印で見る(reviewer 指摘)
+                .onChange(of: scenePhase) { _, phase in
+                    if phase == .background { store.wentBackground = true }
+                    if phase == .active {
+                        let opened = store.wentBackground
+                        store.wentBackground = false
+                        store.startWorkoutIfNeeded(userOpened: opened)
+                    }
+                }
+                .onAppear { store.startWorkoutIfNeeded(userOpened: true) }
         }
     }
 
