@@ -6425,10 +6425,18 @@ function App() {
                 style={{ ...btn(C.surface2, C.text), width: "100%", padding: 12, fontSize: 14, marginBottom: 8, border: `1px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
                 <Icon name="paste" size={15} />{t("coach.paste")}</button>
               {coachPasteFailed && <div role="alert" style={{ fontSize: 12, color: C.muted, marginBottom: 8, lineHeight: 1.5 }}>{t("coach.pasteFailed")}</div>}
-              {/* 16px 未満にすると iOS がフォーカス時に画面を拡大する */}
-              <textarea value={coachAnswer} onChange={e => { setCoachAnswer(e.target.value); setCoachResult(null); setCoachPasteFailed(false); }} rows={4}
-                aria-label={t("coach.pasteLabel")} placeholder={t("coach.pasteLabel")}
-                style={{ width: "100%", background: C.bg, color: C.text, border: `1px solid ${C.border}`, borderRadius: 10, padding: 10, fontSize: 16, lineHeight: 1.4, resize: "vertical", fontFamily: "inherit" }} />
+              {/* 16px 未満にすると iOS がフォーカス時に画面を拡大する。
+                  右上の「消す」は、貼った答えを入れ直すとき用(長い答えを手で全部消すのが手間。北村さん、2026-10-13) */}
+              <div style={{ position: "relative" }}>
+                <textarea value={coachAnswer} onChange={e => { setCoachAnswer(e.target.value); setCoachResult(null); setCoachPasteFailed(false); }} rows={4}
+                  aria-label={t("coach.pasteLabel")} placeholder={t("coach.pasteLabel")}
+                  style={{ width: "100%", background: C.bg, color: C.text, border: `1px solid ${C.border}`, borderRadius: 10, padding: 10, paddingRight: coachAnswer ? 64 : 10, fontSize: 16, lineHeight: 1.4, resize: "vertical", fontFamily: "inherit" }} />
+                {coachAnswer && (
+                  <button onClick={() => { setCoachAnswer(""); setCoachResult(null); setCoachPasteFailed(false); }} aria-label={t("coach.clear")}
+                    style={{ ...btn(C.surface2, C.muted), position: "absolute", top: 6, right: 6, padding: "5px 9px", fontSize: 12, border: `1px solid ${C.border}`, display: "flex", alignItems: "center", gap: 4 }}>
+                    <Icon name="trash" size={13} />{t("coach.clear")}</button>
+                )}
+              </div>
               <button onClick={() => readCoachAnswer()} disabled={!coachAnswer.trim()}
                 style={{ ...btn(C.surface2, coachAnswer.trim() ? C.text : C.grey), width: "100%", padding: 12, fontSize: 14, marginTop: 8, border: `1px solid ${C.border}` }}>
                 {t("coach.read")}</button>

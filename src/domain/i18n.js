@@ -267,6 +267,7 @@ const STRINGS = {
   "coach.pasteFailed": { ja: "貼り付けられませんでした。AIの答えをコピーしてから押すか、下の欄を長押しして「ペースト」してください。", en: "Couldn't paste. Copy the AI's answer first, or long-press the box below and tap Paste." },
   "coach.step2":       { ja: "AIの答えをまるごとコピーして、ここに貼り付け", en: "Copy the AI's whole answer and paste it here" },
   "coach.pasteLabel":  { ja: "AIの答え",               en: "The AI's answer" },
+  "coach.clear":       { ja: "消す",                   en: "Clear" },
   "coach.read":        { ja: "読み込む",               en: "Read the plan" },
   "coach.err.empty":   { ja: "答えが貼り付けられていません。", en: "Nothing pasted yet." },
   "coach.err.notFound":{ ja: "答えの中に取り込み用のブロック(kurabell)が見つかりませんでした。答えの最後のブロックまで含めてコピーしてください。", en: "Couldn't find the import block (kurabell) in the answer. Copy the answer through to the final block." },
