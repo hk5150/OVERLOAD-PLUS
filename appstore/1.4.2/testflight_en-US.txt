@@ -1,0 +1,4 @@
+What to check in 1.4.2 (38):
+1. "Story image" on the finish screen and each day in History: a tall image with every exercise and set. Post it to an Instagram story and check nothing is hidden at the top or bottom
+2. "Post image" is the same image as before
+3. AI Coach: when the answer box has text, "Clear" at its top right empties it
