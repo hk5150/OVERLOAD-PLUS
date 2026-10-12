@@ -117,7 +117,7 @@ const STRINGS = {
   // お疲れ様の画面(iPhone、1.4)。見出し・数字は Watch の完了画面と同じ watch.* を使う
   "finish.volume":     { ja: "総ボリューム",           en: "TOTAL VOLUME" },
   "finish.report":     { ja: "AIコーチに報告",         en: "Report to AI Coach" },
-  "finish.reportDone": { ja: "コピーしました。AIに貼り付けて送信してください", en: "Copied. Paste it into the AI chat and send it" },
+  "finish.reportDone": { ja: "コピーしました。AIの入力欄を長押しして「ペースト」→ 送信してください", en: "Copied. In the AI chat, long-press the message box, tap Paste, then send" },
   "finish.image":      { ja: "Instagram 用の画像",     en: "Image for Instagram" },
   // 人体図(どこを鍛えたか)の読み上げ
   "body.aria":         { ja: "鍛えた部位: {list}",     en: "Trained: {list}" },
@@ -260,7 +260,9 @@ const STRINGS = {
   "coach.leadReplan":  { ja: "ここまでの記録をもとに、残りをAIに組み直してもらいます。実施済み(RIR入力済み)のセットは変わりません。", en: "Have an AI rework the rest of today's session. Sets you've finished (RIR entered) stay as they are." },
   "coach.step1":       { ja: "相談文をコピーしてAIを開く", en: "Copy the request and open the AI" },
   "coach.copy":        { ja: "コピーして {ai} を開く", en: "Copy and open {ai}" },
-  "coach.copied":      { ja: "コピーしました。AIの画面に貼り付けて送信してください", en: "Copied. Paste it into the AI chat and send it" },
+  "coach.copied":      { ja: "コピーしました。AIの入力欄を長押しして「ペースト」→ 送信してください", en: "Copied. In the AI chat, long-press the message box, tap Paste, then send" },
+  "coach.paste":       { ja: "AIの答えを貼り付けて読み込む", en: "Paste the AI's answer and read it" },
+  "coach.pasteFailed": { ja: "貼り付けられませんでした。AIの答えをコピーしてから押すか、下の欄を長押しして「ペースト」してください。", en: "Couldn't paste. Copy the AI's answer first, or long-press the box below and tap Paste." },
   "coach.step2":       { ja: "AIの答えをまるごとコピーして、ここに貼り付け", en: "Copy the AI's whole answer and paste it here" },
   "coach.pasteLabel":  { ja: "AIの答え",               en: "The AI's answer" },
   "coach.read":        { ja: "読み込む",               en: "Read the plan" },

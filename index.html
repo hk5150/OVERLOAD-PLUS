@@ -761,6 +761,8 @@ const ICON_PATHS = {
   swap:    <><path d="M4 8h13l-3-3M20 16H7l3 3"/></>,
   link:    <><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></>,
   share:   <><path d="M12 3v12M7.5 7.5 12 3l4.5 4.5"/><path d="M5 12v7a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-7"/></>,
+  // 貼り付け(クリップボード)。AIコーチの「AIの答えを貼り付けて読み込む」
+  paste: <><rect x="8" y="3" width="8" height="4" rx="1" /><path d="M8 5H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2" /></>,
   music:   <><path d="M9 18V6l11-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/></>,
   settings:<><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></>,
 };
@@ -2487,8 +2489,8 @@ function App() {
     window.open(aiServiceOf(profile.aiService).url, "_blank", "noopener,noreferrer");
   };
 
-  const readCoachAnswer = () => {
-    const r = extractCoachPlan(coachAnswer);
+  const readCoachAnswer = (text = coachAnswer) => {
+    const r = extractCoachPlan(text);
     if (!r.ok) { setCoachResult({ error: r.error }); return; }
     const v = validateCoachPlan(r.plan, {
       resolveName: coachResolveName,
@@ -2497,6 +2499,18 @@ function App() {
       maxReps: Math.min(100, SET_VALUE_LIMITS.reps[1]),
     });
     setCoachResult(v.exercises.length ? v : { ...v, error: "none" });
+  };
+  // AI の答えを1回で貼って読み込む(北村さん、2026-10-12。戻ってきてから欄を長押しして「ペースト」する手間を省く)。
+  // iOS の WebView では、押したときに「ペースト」の確認が出て、許可すると読める。読めなければ長押しでの貼り付けを案内する
+  const [coachPasteFailed, setCoachPasteFailed] = useState(false);
+  const pasteCoachAnswer = async () => {
+    setCoachPasteFailed(false);
+    try {
+      const text = await navigator.clipboard.readText();
+      if (!text || !text.trim()) { setCoachPasteFailed(true); return; }
+      setCoachAnswer(text);
+      readCoachAnswer(text);
+    } catch { setCoachPasteFailed(true); }
   };
 
   const applyCoach = async () => {
@@ -6302,11 +6316,15 @@ function App() {
               {coachCopied && <div style={{ fontSize: 12, color: C.green, marginTop: 6, lineHeight: 1.5 }}>{t("coach.copied")}</div>}
 
               {stepHead(2, t("coach.step2"))}
+              <button onClick={pasteCoachAnswer}
+                style={{ ...btn(C.surface2, C.text), width: "100%", padding: 12, fontSize: 14, marginBottom: 8, border: `1px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+                <Icon name="paste" size={15} />{t("coach.paste")}</button>
+              {coachPasteFailed && <div role="alert" style={{ fontSize: 12, color: C.muted, marginBottom: 8, lineHeight: 1.5 }}>{t("coach.pasteFailed")}</div>}
               {/* 16px 未満にすると iOS がフォーカス時に画面を拡大する */}
-              <textarea value={coachAnswer} onChange={e => { setCoachAnswer(e.target.value); setCoachResult(null); }} rows={4}
+              <textarea value={coachAnswer} onChange={e => { setCoachAnswer(e.target.value); setCoachResult(null); setCoachPasteFailed(false); }} rows={4}
                 aria-label={t("coach.pasteLabel")} placeholder={t("coach.pasteLabel")}
                 style={{ width: "100%", background: C.bg, color: C.text, border: `1px solid ${C.border}`, borderRadius: 10, padding: 10, fontSize: 16, lineHeight: 1.4, resize: "vertical", fontFamily: "inherit" }} />
-              <button onClick={readCoachAnswer} disabled={!coachAnswer.trim()}
+              <button onClick={() => readCoachAnswer()} disabled={!coachAnswer.trim()}
                 style={{ ...btn(C.surface2, coachAnswer.trim() ? C.text : C.grey), width: "100%", padding: 12, fontSize: 14, marginTop: 8, border: `1px solid ${C.border}` }}>
                 {t("coach.read")}</button>
               {coachResult?.error && (
