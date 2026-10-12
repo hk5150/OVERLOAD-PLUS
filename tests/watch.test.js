@@ -610,7 +610,8 @@ describe("Watch のワークアウトの起こし直し(ここが崩れると記
   it("WorkoutManager.start は始められたかを返し、呼び出し側が結果を使わなくても警告にならない", () => {
     expect(read("ios/App/KurabellWatch/WorkoutManager.swift")).toMatch(/@discardableResult\s*func start\(_ config: HKWorkoutConfiguration, forRecord: Double\? = nil\) async -> Bool \{/);
     const start = wmStart();
-    expect(start).toMatch(/\} catch \{\s*cleanUp\(\)\s*return false\s*\}/);
+    // startActivity の後で失敗したら、始まったセッションを止めてから手放す(参照を捨てるだけだと止められないワークアウトが残る)
+    expect(start).toMatch(/\} catch \{[^}]*session\?\.end\(\)\s*builder\?\.discardWorkout\(\)\s*cleanUp\(\)\s*return false\s*\}/);
     expect(start).toMatch(/SessionStore\.shared\.workoutDidStart\(\)\s*return true\s*$/);
   });
 
