@@ -78,9 +78,27 @@ final class WorkoutManager: NSObject, ObservableObject {
         // (handleActiveWorkoutRecovery より先にここが走ると、recover は isBusy で何もしないため。reviewer 指摘)。
         // 保存・破棄・対応付けは、この後の workoutDidStart で今の状態から決まる
         if await adoptRecoveredSession() {
+            let ongoing = SessionStore.shared.recordInProgress
+            let fresh = Date().timeIntervalSince1970 * 1000 - sessionStartMs < Self.attachWindow * 1000
             isBusy = false
-            SessionStore.shared.workoutDidStart()
-            return true
+            if let r = recordStartAt, r == ongoing {
+                SessionStore.shared.workoutDidStart()
+                return true
+            }
+            if recordStartAt == nil, fresh {
+                if let r = forRecord, r == ongoing, attach(recordStartAt: r) { SessionStore.shared.sendWorkoutEvent("started", recordStartAt: r) }
+                SessionStore.shared.workoutDidStart()
+                return true
+            }
+            // 前の記録の残りだった。締めて(保存済みなら保存、でなければ破棄)から、今の記録のために新しく始める。
+            // ここで返すと、その記録の間ずっと心拍が出なかった(reviewer 指摘)
+            if let r = recordStartAt, let saved = SessionStore.shared.lastSaved, saved.startAt == r {
+                await finish(key: saved.key, endAt: saved.endAt)
+            } else {
+                await discard(report: recordStartAt != nil)
+            }
+            guard !isRunning, !isBusy else { return false }
+            isBusy = true
         }
         let energy = HKQuantityType(.activeEnergyBurned)
         let heartRate = HKQuantityType(.heartRate)
@@ -156,13 +174,43 @@ final class WorkoutManager: NSObject, ObservableObject {
         if adopted { SessionStore.shared.workoutDidStart() }
     }
 
+    // 残っているセッションを HealthKit に尋ねる。返事が来ないと isBusy が立ったまま開始も終了もできなくなるので、3秒で諦める(reviewer 指摘)
+    private func recoverSession() async -> HKWorkoutSession? {
+        final class Once: @unchecked Sendable { var done = false }
+        let once = Once()
+        return await withCheckedContinuation { (cont: CheckedContinuation<HKWorkoutSession?, Never>) in
+            store.recoverActiveWorkoutSession { s, _ in
+                Task { @MainActor in
+                    if once.done {
+                        // 諦めた後に届いた。手が空いていれば引き取り、そうでなければ止める
+                        // (end() だけだと、記録中のワークアウトを自分で止めて心拍が消える。reviewer 指摘)
+                        guard let s else { return }
+                        if self.session == nil, !self.isBusy, self.adopt(s) { SessionStore.shared.workoutDidStart() }
+                        else if self.session !== s { s.end() }
+                        return
+                    }
+                    once.done = true
+                    cont.resume(returning: s)
+                }
+            }
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 3_000_000_000)
+                if once.done { return }
+                once.done = true
+                cont.resume(returning: nil)
+            }
+        }
+    }
+
     // 呼ぶ側が isBusy を立てておく
     private func adoptRecoveredSession() async -> Bool {
         guard session == nil else { return false }
-        let recovered: HKWorkoutSession? = await withCheckedContinuation { cont in
-            store.recoverActiveWorkoutSession { s, _ in cont.resume(returning: s) }
-        }
-        guard let session = recovered else { return false }
+        guard let session = await recoverSession() else { return false }
+        return adopt(session)
+    }
+
+    // 取り戻したセッションに builder・delegate を付け直して、このクラスの状態にする
+    private func adopt(_ session: HKWorkoutSession) -> Bool {
         let builder = session.associatedWorkoutBuilder()
         // 終わりかけのセッションは引き取らずに手放す
         guard session.state == .running || session.state == .paused else {
@@ -213,6 +261,12 @@ final class WorkoutManager: NSObject, ObservableObject {
                 try? await Task.sleep(nanoseconds: 1_000_000_000)
                 s.end()
                 s.associatedWorkoutBuilder().discardWorkout()
+                // 本当に止まったかを確かめ直す。まだ動いているセッションが返ってくれば、止められていない(reviewer 指摘)
+                try? await Task.sleep(nanoseconds: 500_000_000)
+                if let left = await recoverSession(), left.state == .running || left.state == .paused {
+                    left.end()
+                    return false
+                }
                 return true
             }
         }
@@ -318,12 +372,17 @@ extension WorkoutManager: HKWorkoutSessionDelegate {
                                     from fromState: HKWorkoutSessionState, date: Date) {
         guard toState == .ended else { return }
         Task { @MainActor in
+            // 手放した古いセッションの遅れた知らせで、今のセッションを捨てないように(reviewer 指摘)
+            guard workoutSession === self.session else { return }
             if self.endedWaiter != nil { self.resumeEndedWaiter() } else { self.sessionEndedUnexpectedly() }
         }
     }
 
     nonisolated func workoutSession(_ workoutSession: HKWorkoutSession, didFailWithError error: Error) {
-        Task { @MainActor in self.sessionEndedUnexpectedly() }
+        Task { @MainActor in
+            guard workoutSession === self.session else { return }
+            self.sessionEndedUnexpectedly()
+        }
     }
 }
 

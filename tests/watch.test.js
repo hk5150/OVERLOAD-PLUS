@@ -664,3 +664,71 @@ describe("Watch のワークアウトの起こし直し(ここが崩れると記
     expect(watch).toEqual(phone);
   });
 });
+
+describe("保存した後に Watch のワークアウトが残らない(2026-10-12、北村さんの実機で4時間近く残った)", () => {
+  const read = (rel) => fs.readFileSync(path.join(process.cwd(), rel), "utf-8");
+  const swiftFunc = (src, sig) => {
+    const start = src.indexOf(sig);
+    expect(start).toBeGreaterThanOrEqual(0);
+    return src.slice(start, src.indexOf("\n    }\n", start));
+  };
+  const wm = () => read("ios/App/KurabellWatch/WorkoutManager.swift");
+
+  it("iPhone は裏に回るとき、スナップショットを待たずに送る(保存してすぐ閉じても届くように)", () => {
+    const html = read("index.html");
+    const i = html.indexOf("const watchKeyRef = useRef(\"\");");
+    const effect = html.slice(i, html.indexOf("}, [loaded, today, restStartAt", i));
+    expect(effect).toMatch(/if \(!pageVisible\) \{ send\(\); return; \}/);
+    expect(effect).toMatch(/setTimeout\(send, 400\)/);
+  });
+
+  it("保存途中のスナップショット(lastSaved が入り recordStartAt が残る)でも締める", () => {
+    const sync = swiftFunc(read("ios/App/KurabellWatch/SessionStore.swift"), "private func syncWorkout(with snap: WatchSnapshot)");
+    const finishAt = sync.indexOf("if let saved = snap.lastSaved, saved.startAt == r");
+    const stillAt = sync.indexOf("if snap.recordStartAt == r { return }");
+    expect(finishAt).toBeGreaterThanOrEqual(0);
+    expect(finishAt).toBeLessThan(stillAt);
+  });
+
+  it("ワークアウト中にアプリが再起動したら、残っているセッションを引き取る", () => {
+    expect(read("ios/App/KurabellWatch/KurabellWatchApp.swift")).toMatch(/func handleActiveWorkoutRecovery\(\) \{[\s\S]*?WorkoutManager\.shared\.recover\(\)/);
+    const start = swiftFunc(wm(), "func start(_ config: HKWorkoutConfiguration, forRecord: Double? = nil) async -> Bool {");
+    // start の冒頭でも引き取る。前の記録の残りなら締めてから、今の記録のために新しく始める(ここで返すと心拍が出ない)
+    const adopt = start.slice(start.indexOf("if await adoptRecoveredSession() {"), start.indexOf("let energy"));
+    expect(adopt).toContain("await finish(key: saved.key, endAt: saved.endAt)");
+    expect(adopt).toContain("await discard(report: recordStartAt != nil)");
+    expect(adopt).toMatch(/guard !isRunning, !isBusy else \{ return false \}\s*isBusy = true\s*\}\s*$/);
+  });
+
+  it("引き取る記録の startAt は、セッションの開始時刻と組で保存し、一致したときだけ戻す", () => {
+    const src = wm();
+    expect(src).toMatch(/UserDefaults\.standard\.set\(\["record": r, "session": sessionStartMs\]/);
+    expect(src).toMatch(/abs\(s - sessionStartMs\) < 1000/);
+  });
+
+  it("HealthKit に残りのセッションを尋ねるときは、3秒で諦める(返事が来ないと開始も終了もできなくなる)", () => {
+    const rec = swiftFunc(wm(), "private func recoverSession() async -> HKWorkoutSession? {");
+    expect(rec).toContain("Task.sleep(nanoseconds: 3_000_000_000)");
+    expect(swiftFunc(wm(), "private func adoptRecoveredSession() async -> Bool {")).toContain("await recoverSession()");
+  });
+
+  it("10分たっても記録に対応付かないセッションは破棄する", () => {
+    const timers = swiftFunc(wm(), "private func armTimers() {");
+    expect(timers).toMatch(/Self\.attachWindow/);
+    expect(timers).toMatch(/self\.recordStartAt == nil else \{ return \}\s*await self\.discard\(report: false\)/);
+  });
+
+  it("delegate は、今持っているセッションの知らせだけで終了を扱う", () => {
+    const src = wm();
+    expect(src.match(/guard workoutSession === self\.session else \{ return \}/g)?.length).toBe(2);
+  });
+
+  it("「ワークアウトを終了」は iPhone で記録中は何もしない・出さない", () => {
+    expect(swiftFunc(wm(), "func forceEnd() async -> Bool {")).toMatch(/guard !isBusy, SessionStore\.shared\.recordInProgress == nil/);
+    expect(read("ios/App/KurabellWatch/Views.swift")).toMatch(/struct EndWorkoutButton: View \{[\s\S]*?if store\.recordInProgress == nil \{/);
+    for (const l of ["ja", "en"]) {
+      const s = read(`ios/App/KurabellWatch/${l}.lproj/Localizable.strings`);
+      for (const k of ["workout.end", "workout.ended", "workout.end.hint", "workout.endFailed"]) expect(s).toContain(`"${k}" =`);
+    }
+  });
+});

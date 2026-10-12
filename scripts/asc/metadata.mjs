@@ -7,6 +7,7 @@
 //   node scripts/asc/metadata.mjs build 1.4 17 [--apply]    # 版にビルドを付ける
 //   node scripts/asc/metadata.mjs check 1.4                 # 提出できる状態か(ビルド・文面・スクリーンショット)を確かめる
 //   node scripts/asc/metadata.mjs submit 1.4 --apply --yes-submit   # 審査へ提出(北村さんの確認を取ってから)
+//   node scripts/asc/metadata.mjs cancel 1.4.1 --apply --yes-cancel # 審査待ち・審査中の提出を取り下げる(北村さんの確認を取ってから)
 //
 // ファイルの置き方(appstore/<版>/):
 //   ja/description.txt  ja/keywords.txt  ja/promotional_text.txt  ja/whats_new.txt
@@ -208,6 +209,28 @@ else if (cmd === "check" || cmd === "submit") {
       relationships: { reviewSubmission: { data: { type: "reviewSubmissions", id: sub.id } }, appStoreVersion: { data: { type: "appStoreVersions", id: v.id } } } } } });
     const done = (await api(`/v1/reviewSubmissions/${sub.id}`, { method: "PATCH", body: { data: { type: "reviewSubmissions", id: sub.id, attributes: { submitted: true } } } })).data;
     console.log(`審査へ提出した(${done.attributes.state}、${done.attributes.submittedDate ?? ""})`);
+  }
+}
+
+// 審査の取り下げ(2026-10-12 に足した。1.4.1 (35) を取り下げて (36) で出し直すため)。
+// 提出(reviewSubmissions)を canceled にすると、版は PREPARE_FOR_SUBMISSION 相当に戻り、ビルドを付け替えて出し直せる
+else if (cmd === "cancel") {
+  const v = await findVersion(ver);
+  if (!v) { console.error(`版 ${ver} が無い`); process.exit(1); }
+  const subs = (await api(`/v1/reviewSubmissions?filter[app]=${APP_ID}&filter[state]=WAITING_FOR_REVIEW,IN_REVIEW,UNRESOLVED_ISSUES&include=items&limit=10`)).data;
+  const target = [];
+  for (const sub of subs) {
+    const items = (await api(`/v1/reviewSubmissions/${sub.id}/items?include=appStoreVersion`)).data;
+    if (items.some(i => i.relationships?.appStoreVersion?.data?.id === v.id)) target.push(sub);
+  }
+  console.log(`版 ${ver}: ${v.attributes.appVersionState}`);
+  if (!target.length) { console.log("取り下げる提出が無い"); process.exit(0); }
+  for (const sub of target) console.log(`  提出 ${sub.id}: ${sub.attributes.state}(${sub.attributes.submittedDate ?? ""})`);
+  if (!APPLY || !has("--yes-cancel")) { console.log("\n取り下げるには --apply --yes-cancel の両方を付ける(北村さんの確認を取ってから)"); process.exit(0); }
+  checkLocks();
+  for (const sub of target) {
+    const done = (await api(`/v1/reviewSubmissions/${sub.id}`, { method: "PATCH", body: { data: { type: "reviewSubmissions", id: sub.id, attributes: { canceled: true } } } })).data;
+    console.log(`  取り下げた: ${done.attributes.state}`);
   }
 }
 

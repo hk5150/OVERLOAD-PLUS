@@ -898,12 +898,15 @@ struct IdleView: View {
 // iPhone で記録中(種目を全部消して入れ直す途中でメニュー画面になっているときも)は出さない
 struct EndWorkoutButton: View {
     @ObservedObject private var store = SessionStore.shared
+    @Environment(\.scenePhase) private var scenePhase
     @State private var ending = false
     @State private var result: Bool?
 
     var body: some View {
         if store.recordInProgress == nil {
             content
+                // 開き直したら、また押せるように戻す(「終了しました」のまま翌日も押せなかった。reviewer 指摘)
+                .onChange(of: scenePhase) { _, phase in if phase == .active, !ending { result = nil } }
         }
     }
 
