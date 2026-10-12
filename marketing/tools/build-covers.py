@@ -43,7 +43,8 @@ h1 em { font-style:normal; color:var(--yellow); display:block; }
 .cmp .val { font-size:150px; line-height:1; }
 .cmp .val small { font-family:"Hiragino Sans",sans-serif; font-size:44px; font-weight:700; color:var(--muted); margin:0 10px 0 6px; }
 .cmp .g { color:var(--green); }
-.brand { position:absolute; left:84px; top:1540px; display:flex; align-items:center; gap:20px; }
+/* ロゴは右下。左下はプロフィールの一覧で Instagram が再生数を重ねて表示する場所(10/12 に #3・#5 で読みにくくなった) */
+.brand { position:absolute; right:84px; top:1540px; display:flex; align-items:center; gap:20px; }
 .brand img { width:76px; height:76px; border-radius:18px; }
 .brand span { font-family:"Barlow C"; font-weight:800; font-size:54px; letter-spacing:.06em; }
 """
