@@ -20,6 +20,7 @@
 | 版にビルドを付ける | `node scripts/asc/metadata.mjs build 1.4 17 --apply` |
 | 提出できる状態か確かめる | `node scripts/asc/metadata.mjs check 1.4` |
 | 審査へ提出(**北村さんの確認を取ってから**) | `node scripts/asc/metadata.mjs submit 1.4 --apply --yes-submit` |
+| 審査を取り下げる(**確認を取ってから**。版は DEVELOPER_REJECTED に戻り、ビルドを付け替えて出し直せる) | `node scripts/asc/metadata.mjs cancel 1.4.1 --apply --yes-cancel` |
 | TestFlight の処理を待って「テスト内容」を入れる | `node scripts/asc/testflight.mjs 17 --wait --apply`(`ios:upload` の最後で自動) |
 | スクリーンショットを丸ごと入れ替える | `node scripts/asc/screenshots.mjs 1.4 --dir ~/Desktop/KURABELL-appstore-screenshots/v5 --exclude 08 --apply` |
 | カスタマーレビューを読む / 返信(**確認を取ってから**) | `node scripts/asc/reviews.mjs` / `reviews.mjs reply <id> --text "…" --apply` |
