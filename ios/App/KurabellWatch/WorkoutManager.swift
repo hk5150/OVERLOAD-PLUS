@@ -34,8 +34,16 @@ final class WorkoutManager: NSObject, ObservableObject {
     private(set) var heartRateAt: Date = .distantPast
     // start / finish / discard の途中(await の間)に、別のスナップショットで二重に呼ばれないように
     private(set) var isBusy = false
-    // このワークアウトが対応する iPhone の記録の startAt(ms)。スナップショットで知る
-    private(set) var recordStartAt: Double?
+    // このワークアウトが対応する iPhone の記録の startAt(ms)。スナップショットで知る。
+    // アプリが再起動してセッションを引き取り直す(recover)ときのために、セッションの開始時刻と組で端末にも残す
+    // (組にしないと、片付けずに落ちた前のセッションの値で、別のセッションを前の記録として締めうる。reviewer 指摘)
+    private(set) var recordStartAt: Double? {
+        didSet {
+            if let r = recordStartAt { UserDefaults.standard.set(["record": r, "session": sessionStartMs], forKey: Self.recordKey) }
+            else { UserDefaults.standard.removeObject(forKey: Self.recordKey) }
+        }
+    }
+    private static let recordKey = "watch.workoutRecord.v1"
     private(set) var sessionStartMs: Double = 0
     // 心拍を iPhone に送った最後の時刻(5秒に1回までに絞る。sendMessage は iPhone のアプリを裏で起こすため)
     private var lastHeartRateSentAt: Date = .distantPast
@@ -66,14 +74,25 @@ final class WorkoutManager: NSObject, ObservableObject {
         }
         isBusy = true
         defer { isBusy = false }
+        // アプリが再起動した直後で、引き取られていないセッションが残っていれば、新しく始めずにそれを引き取る
+        // (handleActiveWorkoutRecovery より先にここが走ると、recover は isBusy で何もしないため。reviewer 指摘)。
+        // 保存・破棄・対応付けは、この後の workoutDidStart で今の状態から決まる
+        if await adoptRecoveredSession() {
+            isBusy = false
+            SessionStore.shared.workoutDidStart()
+            return true
+        }
         let energy = HKQuantityType(.activeEnergyBurned)
         let heartRate = HKQuantityType(.heartRate)
+        recordStartAt = nil
         do {
             // 初回だけ許可を求める(iPhone 側にも同じシートが出ることがある)
             try await store.requestAuthorization(toShare: [HKObjectType.workoutType(), energy],
                                                  read: [heartRate, energy])
             let session = try HKWorkoutSession(healthStore: store, configuration: config)
+            self.session = session
             let builder = session.associatedWorkoutBuilder()
+            self.builder = builder
             builder.dataSource = HKLiveWorkoutDataSource(healthStore: store, workoutConfiguration: config)
             // 記録中の心拍を iPhone の画面に出す(1.4、北村さん)
             builder.delegate = self
@@ -81,26 +100,14 @@ final class WorkoutManager: NSObject, ObservableObject {
             let now = Date()
             session.startActivity(with: now)
             try await builder.beginCollection(at: now)
-            self.session = session
-            self.builder = builder
-            recordStartAt = nil
             sessionStartMs = now.timeIntervalSince1970 * 1000
             isRunning = true
-            watchdog = Task { [weak self] in
-                try? await Task.sleep(nanoseconds: UInt64(Self.maxDuration * 1_000_000_000))
-                guard !Task.isCancelled else { return }
-                await self?.discard(report: true)
-            }
-            // 記録に対応付かないまま attachWindow を過ぎたら、待たずに破棄する(記録のスナップショットがそれより遅れて届く場合は諦める)。
-            // 対応付いていないセッションは、iPhone から新しいスナップショットが届くまで終わらない(syncWorkout)。
-            // 起こす要求が遅れて届く・iPhone のアプリが閉じられている等で届かないと、4時間の上限まで動き続けていた(2026-10-12、北村さんの実機)
-            let started = sessionStartMs
-            Task { [weak self] in
-                try? await Task.sleep(nanoseconds: UInt64(Self.attachWindow * 1_000_000_000))
-                guard let self, self.isRunning, self.sessionStartMs == started, self.recordStartAt == nil else { return }
-                await self.discard(report: false)
-            }
+            armTimers()
         } catch {
+            // startActivity の後で失敗したら、始まったセッションを止めてから手放す(参照を捨てるだけだと、
+            // 誰にも止められないワークアウトが残る)
+            session?.end()
+            builder?.discardWorkout()
             cleanUp()
             return false
         }
@@ -112,6 +119,74 @@ final class WorkoutManager: NSObject, ObservableObject {
         }
         // 記録中のスナップショットが先に届いていれば、その場で対応付ける(forRecord のときは、記録が続いているかを確かめる)
         SessionStore.shared.workoutDidStart()
+        return true
+    }
+
+    // 4時間の上限と、対応付かないセッションの破棄(10分)。start と recover から
+    private func armTimers() {
+        watchdog?.cancel()
+        let started = sessionStartMs
+        let left = max(0, Self.maxDuration - (Date().timeIntervalSince1970 * 1000 - started) / 1000)
+        watchdog = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(left * 1_000_000_000))
+            guard !Task.isCancelled else { return }
+            await self?.discard(report: true)
+        }
+        // 記録に対応付かないまま attachWindow を過ぎたら、待たずに破棄する(記録のスナップショットがそれより遅れて届く場合は諦める)。
+        // 対応付いていないセッションは、iPhone から新しいスナップショットが届くまで終わらない(syncWorkout)。
+        // 起こす要求が遅れて届く・iPhone のアプリが閉じられている等で届かないと、4時間の上限まで動き続けていた(2026-10-12、北村さんの実機)
+        let wait = max(0, Self.attachWindow - (Date().timeIntervalSince1970 * 1000 - started) / 1000)
+        Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(wait * 1_000_000_000))
+            guard let self, self.isRunning, self.sessionStartMs == started, self.recordStartAt == nil else { return }
+            await self.discard(report: false)
+        }
+    }
+
+    // ワークアウト中にアプリが再起動した(更新・システムによる終了など)とき、システムが handleActiveWorkoutRecovery で呼ぶ。
+    // 引き取り直さないと、このクラスはセッションを知らないまま、ワークアウトだけが誰にも止められずに残る
+    // (2026-10-12、北村さんの実機。iPhone で保存しても Watch の文字盤に経過時間が出続け、アプリの一覧からも消せなかった)
+    // start の途中で呼ばれたら、start が冒頭で同じことをする(adoptRecoveredSession)
+    func recover() async {
+        guard session == nil, !isBusy else { return }
+        isBusy = true
+        let adopted = await adoptRecoveredSession()
+        isBusy = false
+        // 引き取る間に届いていた状態で、保存・破棄・対応付けを決める
+        if adopted { SessionStore.shared.workoutDidStart() }
+    }
+
+    // 呼ぶ側が isBusy を立てておく
+    private func adoptRecoveredSession() async -> Bool {
+        guard session == nil else { return false }
+        let recovered: HKWorkoutSession? = await withCheckedContinuation { cont in
+            store.recoverActiveWorkoutSession { s, _ in cont.resume(returning: s) }
+        }
+        guard let session = recovered else { return false }
+        let builder = session.associatedWorkoutBuilder()
+        // 終わりかけのセッションは引き取らずに手放す
+        guard session.state == .running || session.state == .paused else {
+            builder.discardWorkout()
+            if session.state != .ended { session.end() }
+            return false
+        }
+        builder.dataSource = HKLiveWorkoutDataSource(healthStore: store, workoutConfiguration: session.workoutConfiguration)
+        builder.delegate = self
+        session.delegate = self
+        self.session = session
+        self.builder = builder
+        sessionStartMs = (session.startDate ?? Date()).timeIntervalSince1970 * 1000
+        // 残っている記録の startAt は、このセッションのものだと確かめられたときだけ戻す
+        let saved = UserDefaults.standard.dictionary(forKey: Self.recordKey)
+        if let r = saved?["record"] as? Double, let s = saved?["session"] as? Double, abs(s - sessionStartMs) < 1000 {
+            recordStartAt = r
+        } else {
+            recordStartAt = nil
+        }
+        isRunning = true
+        // このアプリは一時停止を使わないが、システムや文字盤のボタンで止められていた場合の保険
+        if session.state == .paused { session.resume() }
+        armTimers()
         return true
     }
 

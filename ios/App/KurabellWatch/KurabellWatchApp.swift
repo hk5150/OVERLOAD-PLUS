@@ -7,6 +7,11 @@ final class AppDelegate: NSObject, WKApplicationDelegate {
     func handle(_ workoutConfiguration: HKWorkoutConfiguration) {
         Task { @MainActor in await WorkoutManager.shared.start(workoutConfiguration) }
     }
+
+    // ワークアウト中にアプリが再起動したとき。動いているセッションを引き取り直す
+    func handleActiveWorkoutRecovery() {
+        Task { @MainActor in await WorkoutManager.shared.recover() }
+    }
 }
 
 @main
