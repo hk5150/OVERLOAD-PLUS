@@ -190,6 +190,41 @@ final class WorkoutManager: NSObject, ObservableObject {
         return true
     }
 
+    // 「ワークアウトを終了」(Watch の待機・メニュー画面のボタン。2026-10-12、北村さん)。iPhone で記録していないのに残っている
+    // ワークアウトを止める。このクラスが知らない・引き取れないセッションも、新しいセッションを始めてすぐ終えることで止める
+    // (watchOS で動くワークアウトは同時に1つだけなので、新しい方を始めると前のものはシステムが終える)。
+    // (33)(34) で原因を推定して直しても実機で消えなかったので、原因に頼らず止められる手段として置く
+    // 止められた(または止めるものが無かった)なら true。iPhone で記録中なら何もしない(種目を全部消して入れ直す途中は
+    // Watch がメニュー画面になるが、記録は続いている。reviewer 指摘)
+    func forceEnd() async -> Bool {
+        guard !isBusy, SessionStore.shared.recordInProgress == nil, HKHealthStore.isHealthDataAvailable() else { return false }
+        if !isRunning {
+            isBusy = true
+            let adopted = await adoptRecoveredSession()
+            isBusy = false
+            if !adopted {
+                isBusy = true
+                defer { isBusy = false }
+                let config = HKWorkoutConfiguration()
+                config.activityType = .traditionalStrengthTraining
+                config.locationType = .indoor
+                guard let s = try? HKWorkoutSession(healthStore: store, configuration: config) else { return false }
+                s.startActivity(with: Date())
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                s.end()
+                s.associatedWorkoutBuilder().discardWorkout()
+                return true
+            }
+        }
+        // iPhone で保存済みの記録なら締めて保存し、そうでなければ破棄する(syncWorkout と同じ判断)
+        if let r = recordStartAt, let saved = SessionStore.shared.lastSaved, saved.startAt == r {
+            await finish(key: saved.key, endAt: saved.endAt)
+        } else {
+            await discard(report: true)
+        }
+        return !isRunning
+    }
+
     // スナップショットで分かった、この記録の startAt。開始時刻が離れすぎていれば対応付けない
     func attach(recordStartAt r: Double) -> Bool {
         guard isRunning, !isBusy, recordStartAt == nil else { return false }

@@ -865,6 +865,8 @@ struct MenuView: View {
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(Palette.muted)
                 .listRowBackground(Color.clear)
+            EndWorkoutButton()
+                .listRowBackground(Color.clear)
         }
         .navigationTitle(snap.dayName ?? "")
     }
@@ -872,15 +874,61 @@ struct MenuView: View {
 
 struct IdleView: View {
     var body: some View {
-        VStack(spacing: 8) {
-            Image(systemName: "iphone")
-                .font(.system(size: 28))
-                .foregroundStyle(Palette.muted)
-            Text("idle.message")
-                .font(.system(size: 14, weight: .medium))
-                .multilineTextAlignment(.center)
-                .foregroundStyle(Palette.text)
+        // 「ワークアウトを終了」を足したので、小さい画面でも文が切れないようにスクロールさせる
+        ScrollView {
+            VStack(spacing: 8) {
+                Image(systemName: "iphone")
+                    .font(.system(size: 28))
+                    .foregroundStyle(Palette.muted)
+                Text("idle.message")
+                    .font(.system(size: 14, weight: .medium))
+                    .multilineTextAlignment(.center)
+                    .foregroundStyle(Palette.text)
+                    .fixedSize(horizontal: false, vertical: true)
+                EndWorkoutButton()
+                    .padding(.top, 10)
+            }
+            .padding(.horizontal)
         }
-        .padding()
+    }
+}
+
+// iPhone で記録していないのに、文字盤に KURABELL のワークアウトの経過時間が残っているときに止める(WorkoutManager.forceEnd)。
+// Watch アプリがそのワークアウトを見失っている(isRunning が false)こともあるので、記録していない画面では常に出す
+// iPhone で記録中(種目を全部消して入れ直す途中でメニュー画面になっているときも)は出さない
+struct EndWorkoutButton: View {
+    @ObservedObject private var store = SessionStore.shared
+    @State private var ending = false
+    @State private var result: Bool?
+
+    var body: some View {
+        if store.recordInProgress == nil {
+            content
+        }
+    }
+
+    private var content: some View {
+        VStack(spacing: 2) {
+            Button {
+                ending = true
+                Task {
+                    let ok = await WorkoutManager.shared.forceEnd()
+                    ending = false
+                    result = ok
+                    WKInterfaceDevice.current().play(ok ? .success : .failure)
+                }
+            } label: {
+                Text(result == true ? LocalizedStringKey("workout.ended") : LocalizedStringKey("workout.end"))
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Palette.text)
+            }
+            // 失敗したら押し直せるようにする
+            .disabled(ending || result == true)
+            Text(result == false ? LocalizedStringKey("workout.endFailed") : LocalizedStringKey("workout.end.hint"))
+                .font(.system(size: 11, weight: .medium))
+                .multilineTextAlignment(.center)
+                .foregroundStyle(Palette.muted)
+                .fixedSize(horizontal: false, vertical: true)
+        }
     }
 }

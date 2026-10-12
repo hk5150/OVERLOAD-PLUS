@@ -2,3 +2,8 @@
 "idle.message" = "Open KURABELL on your iPhone";
 /* Body of the rest notification started on the watch. %d is minutes elapsed */
 "rest.elapsed" = "%d min elapsed. Time for your next set.";
+/* Button to stop a leftover workout (idle and menu screens) */
+"workout.end" = "End workout";
+"workout.ended" = "Workout ended";
+"workout.end.hint" = "Use this if the KURABELL timer is still on your watch face";
+"workout.endFailed" = "Couldn't stop it. Try again, or restart your Watch";

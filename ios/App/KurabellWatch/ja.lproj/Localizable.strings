@@ -2,3 +2,8 @@
 "idle.message" = "iPhoneでKURABELLを開いてください";
 /* Watchで始めた休憩の通知本文。%d は経過分 */
 "rest.elapsed" = "%d分経過しました。次のセットへ。";
+/* 残ったワークアウトを止めるボタン(待機・メニュー画面) */
+"workout.end" = "ワークアウトを終了";
+"workout.ended" = "終了しました";
+"workout.end.hint" = "文字盤にKURABELLの経過時間が残っているときに押してください";
+"workout.endFailed" = "止められませんでした。もう一度押すか、Watchを再起動してください";
