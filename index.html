@@ -2769,10 +2769,12 @@ function App() {
   // ---- Apple Watchへ今の状態を送る(iOS版のみ。Web版では何もしない) ----
   // 表示文字列・単位換算・前回の同じ番手の対応付けはここで済ませ、Watchは並べるだけにする。
   // セット入力のたびに作り直すと重いので、入力が止まってから送る。内容が変わっていなければ送らない。
+  // ただし裏に回るときは待たずに送る。保存してすぐアプリを閉じると、0.4秒の待ちの間に JS が止まって「保存した」が
+  // Watch に届かず、Watch のワークアウトが4時間の上限まで動き続けた(2026-10-12、北村さんの実機。2時間18分の時点で発覚)
   const watchKeyRef = useRef("");
   useEffect(() => {
     if (!loaded) return;
-    const timer = setTimeout(() => {
+    const send = () => {
       const snap = buildWatchSnapshot({
         now: Date.now(),
         restStartAt,
@@ -2824,7 +2826,9 @@ function App() {
       if (key === watchKeyRef.current) return;
       watchKeyRef.current = key;
       syncWatchSnapshot(snap);
-    }, 400);
+    };
+    if (!pageVisible) { send(); return; }
+    const timer = setTimeout(send, 400);
     return () => clearTimeout(timer);
   }, [loaded, today, restStartAt, todayDay, autoMenu, watchApplied, workouts, lang, unit, customExercises, exerciseOverrides, startAt, watchLastSaved, watchFinished, profile.bodyweight, soundOn, restMinutesKey, pageVisible]);
 

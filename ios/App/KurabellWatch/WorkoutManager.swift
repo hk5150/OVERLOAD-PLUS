@@ -91,6 +91,15 @@ final class WorkoutManager: NSObject, ObservableObject {
                 guard !Task.isCancelled else { return }
                 await self?.discard(report: true)
             }
+            // 記録に対応付かないまま attachWindow を過ぎたら、待たずに破棄する(記録のスナップショットがそれより遅れて届く場合は諦める)。
+            // 対応付いていないセッションは、iPhone から新しいスナップショットが届くまで終わらない(syncWorkout)。
+            // 起こす要求が遅れて届く・iPhone のアプリが閉じられている等で届かないと、4時間の上限まで動き続けていた(2026-10-12、北村さんの実機)
+            let started = sessionStartMs
+            Task { [weak self] in
+                try? await Task.sleep(nanoseconds: UInt64(Self.attachWindow * 1_000_000_000))
+                guard let self, self.isRunning, self.sessionStartMs == started, self.recordStartAt == nil else { return }
+                await self.discard(report: false)
+            }
         } catch {
             cleanUp()
             return false

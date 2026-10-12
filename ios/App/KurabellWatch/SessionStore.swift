@@ -255,6 +255,12 @@ final class SessionStore: NSObject, ObservableObject {
         let wm = WorkoutManager.shared
         guard wm.isRunning, !wm.isBusy else { return }
         if let r = wm.recordStartAt {
+            // 保存の途中の状態(lastSaved は入ったが recordStartAt はまだ残っている)でも締める。iPhone は裏に回ると
+            // 待たずに送るので、保存の途中で JS が止まると、この状態が最後のスナップショットになりうる(reviewer 指摘)
+            if let saved = snap.lastSaved, saved.startAt == r {
+                Task { await wm.finish(key: saved.key, endAt: saved.endAt) }
+                return
+            }
             if snap.recordStartAt == r { return } // 記録はまだ続いている(種目を消して入れ直す途中も含む)
             // 記録 r が終わった(保存・破棄)か、別の記録に替わった
             if let saved = snap.lastSaved, saved.startAt == r {
