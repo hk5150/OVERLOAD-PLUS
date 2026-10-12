@@ -1,4 +1,4 @@
-What to check in 1.4.1 (33):
+What to check in 1.4.1 (34):
 1. Split tab: each day shows "Last: Xd ago" ("Done today" for a day you trained today). Days are counted by date, so a day trained last night shows "Last: 1d ago" the next morning
 2. Today's day: when you open the app, the day you've gone longest without should already be "Today" (in (20) it kept the old order until you saved). A day you pick with "Today" stays until your next save. Days never trained come first
 3. Exercise cards in the Log tab: the "Last ... Trend ..." line is gone, and the last date now sits in the "Your best" row (left of the max weight). Hints for repeating the same weight still appear
@@ -14,3 +14,4 @@ What to check in 1.4.1 (33):
 13. On the Watch, your current heart rate (red heart and number) appears at the right of the rest timer row at the top of the set list
 14. AI Coach: copy the AI's answer, come back and tap "Paste the AI's answer and read it": the plan should appear in one tap (allow the iOS Paste prompt)
 15. Save a workout and close the app right away: the KURABELL workout on the Watch (the timer on the watch face) should still end
+16. Even if KURABELL on the Watch restarts during a workout (e.g. a TestFlight update), saving on the iPhone should clear the timer on the watch face
