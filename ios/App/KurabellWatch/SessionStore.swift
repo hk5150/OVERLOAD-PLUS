@@ -382,8 +382,19 @@ final class SessionStore: NSObject, ObservableObject {
     // 休憩の通知の予約の世代。予約や取り消しのたびに進め、古い予約の続きは捨てる。
     // 権限の確認と add は非同期で、続けて予約し直すと古い時刻の add が後から入り、ずれた時刻に鳴っていた(1.4 (18)、北村さん「インターバル通知がズレて来る」)
     private var restNotifyGeneration = 0
-    // 休憩画面を開いているか。開いている間は、休憩の通知のバナーで画面を覆わず、音と振動だけにする(willPresent)
-    var restViewVisible = false
+    // 休憩画面を開いているか。開いている間は、休憩の通知のバナーで画面を覆わず、音と振動だけにする(willPresent)。
+    // willPresent はメインスレッドを待たずに読む。以前は MainActor.run で読んでいて、手首を下ろした常時表示の間は
+    // メインスレッドが間引かれるため、通知が届いてから鳴るまで15秒ほど待たされていた(1.4.2、北村さん「インターバルの通知が15秒遅れる」)
+    var restViewVisible: Bool {
+        get { Self.restViewVisibleNow() }
+        set { Self.visibleLock.lock(); Self.visibleFlag = newValue; Self.visibleLock.unlock() }
+    }
+    nonisolated private static let visibleLock = NSLock()
+    nonisolated(unsafe) private static var visibleFlag = false
+    nonisolated static func restViewVisibleNow() -> Bool {
+        visibleLock.lock(); defer { visibleLock.unlock() }
+        return visibleFlag
+    }
 
     private func scheduleRestNotifications(from start: Date) {
         restNotifyGeneration += 1
@@ -470,9 +481,9 @@ extension SessionStore: UNUserNotificationCenterDelegate {
     // Watch アプリを開いているときも、バナーと触覚で知らせる
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
         // 休憩画面を開いている間は、バナーで経過時間を覆わず、音と振動だけで知らせる。
-        // 画面側で振動させるのはやめた(手首を下ろすと遅れて鳴った。Views.swift の RestTimerView)。知らせは常にこの通知1本なので二重にはならない
-        if notification.request.identifier.hasPrefix("kurabell-watch-rest-"),
-           await MainActor.run(body: { self.restViewVisible }) {
+        // 画面側で振動させるのはやめた(手首を下ろすと遅れて鳴った。Views.swift の RestTimerView)。知らせは常にこの通知1本なので二重にはならない。
+        // ここで MainActor を待たない(常時表示の間はメインスレッドが間引かれ、鳴るのが15秒ほど遅れた)
+        if notification.request.identifier.hasPrefix("kurabell-watch-rest-"), Self.restViewVisibleNow() {
             return [.sound]
         }
         return [.banner, .sound]

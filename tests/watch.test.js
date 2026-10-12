@@ -428,7 +428,7 @@ describe("Watch アプリのネイティブ設定", () => {
     expect(restView).not.toContain("play(.notification)");
     // 開いている間はバナーで経過時間を覆わず、音と振動だけにする(以前の return [] は通知そのものを止めていた)
     const willPresent = store.slice(store.indexOf("willPresent notification"));
-    expect(willPresent).toMatch(/self\.restViewVisible[\s\S]*?return \[\.sound\]/);
+    expect(willPresent).toMatch(/Self\.restViewVisibleNow\(\)[\s\S]*?return \[\.sound\]/);
     expect(willPresent).not.toMatch(/return \[\]/);
   });
 
@@ -730,5 +730,18 @@ describe("保存した後に Watch のワークアウトが残らない(2026-10-
       const s = read(`ios/App/KurabellWatch/${l}.lproj/Localizable.strings`);
       for (const k of ["workout.end", "workout.ended", "workout.end.hint", "workout.endFailed"]) expect(s).toContain(`"${k}" =`);
     }
+  });
+});
+
+describe("Watch の休憩の通知は、届いたらすぐ鳴らす(1.4.2、北村さん「15秒遅れる」)", () => {
+  const read = (rel) => fs.readFileSync(path.join(process.cwd(), rel), "utf-8");
+  it("willPresent はメインスレッドを待たない(常時表示の間は間引かれて、鳴るのが遅れた)", () => {
+    const src = read("ios/App/KurabellWatch/SessionStore.swift");
+    const i = src.indexOf("func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent");
+    expect(i).toBeGreaterThanOrEqual(0);
+    const body = src.slice(i, src.indexOf("\n    }\n", i));
+    expect(body).not.toMatch(/MainActor\.run|await MainActor/);
+    expect(body).toContain("Self.restViewVisibleNow()");
+    expect(src).toMatch(/nonisolated static func restViewVisibleNow\(\) -> Bool/);
   });
 });
