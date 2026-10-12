@@ -48,6 +48,7 @@ h1 em { font-style:normal; color:var(--yellow); display:block; }
 .brand { gap:16px; }
 .brand img { width:66px; height:66px; border-radius:16px; }
 .brand span { font-family:"Barlow C"; font-weight:800; font-size:46px; letter-spacing:.04em; }
+.brand small { font-size:34px; letter-spacing:.03em; margin-left:4px; }
 """
 
 def html(lang, kicker, l1, l2, photo, extra):
@@ -55,7 +56,7 @@ def html(lang, kicker, l1, l2, photo, extra):
     css = CSS.replace("FONT_URL", (REPO / "fonts/barlow-condensed-800-latin.woff2").as_uri())
     return (f'<!doctype html><html lang="{lang}"><head><meta charset="utf-8"><style>{css}</style></head>'
             f'<body class="{lang}">{bg}<p class="kicker">{kicker}</p><h1>{l1}<em>{l2}</em></h1>{extra}'
-            f'<div class="brand"><img src="{ICON.as_uri()}"><span>KURABELL Workout Log</span></div></body></html>')
+            f'<div class="brand"><img src="{ICON.as_uri()}"><span>KURABELL <small>Workout Log</small></span></div></body></html>')
 
 
 def main():
