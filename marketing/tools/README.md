@@ -7,6 +7,8 @@
 
 | ファイル | 何を作るか | 使い方 |
 |---|---|---|
+| `tts.sh` | ナレーションを1場面ぶん作る(Gemini 3.8 Flash TTS、声 Charon)。Genspark が応答しないときは5分で打ち切り、1回やり直して失敗で終わる | `tts.sh <出力.mp3> <ja\|en> "<読む文>"` |
+| `shoot-frames.sh` | reel.html の各場面を Chrome のヘッドレスで `frames/sN.png` にし、確認用の横並び `sheet.png` も作る | `shoot-frames.sh <リールのフォルダ>` |
 | `add-theme.sh` | ナレーション入りのリール(制作フォルダの `build-reel.sh` の出力)にテーマソングを重ねる。**2026-10-11 から新しいリールはこの型**(エビデンス → アプリの機能、30〜45秒) | `add-theme.sh <ナレーションだけの mp4> <出力.mp4>` |
 | `build-silent-reel.sh` | ナレーションなしのリール(文字 + テーマソング、15〜20秒)。2026-10-10〜11 に使った型。北村さんの判断で使うのをやめた(機能説明だけに見えるため) | `build-silent-reel.sh <リールのフォルダ> <出力.mp4>`(フォルダに `reel.html`・`durations.txt`) |
 | `build-covers.py` | カバー画像(1080×1920)。一覧で 3:4 に切られても文字が残る位置 | `python3 build-covers.py [covers.json] [名前 ...]`(既定は `~/Desktop/KURABELL-reels/covers/covers.json`) |
@@ -16,3 +18,5 @@
 - 制作フォルダの `build-silent-reel.sh` と `covers/build-covers.py` は、ここを呼ぶだけの入口(古いパスのまま使えるように残している)
 - `build-silent-reel.sh` は `-loop 1` を付けない(zoompan は入力1コマから場面を作るので、ループ入力だと1場面目だけの動画になる。2026-10-10 に踏んだ)
 - `shoot-sns*.js` はサーバーを立てない。Playwright がページの読み込みをリポジトリのファイルで返す(開発サーバーの上限に当たったため)
+
+- 13時のルーティンは無人で動くので、ここのスクリプトを**絶対パスで単独で**呼ぶ(`.claude/settings.local.json` の許可の一覧に、その形で入れてある。2026-10-12)。呼び方を変えるときは許可の一覧も揃える
