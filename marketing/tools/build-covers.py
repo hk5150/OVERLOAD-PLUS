@@ -45,8 +45,9 @@ h1 em { font-style:normal; color:var(--yellow); display:block; }
 .cmp .g { color:var(--green); }
 /* ロゴは右下。左下はプロフィールの一覧で Instagram が再生数を重ねて表示する場所(10/12 に #3・#5 で読みにくくなった) */
 .brand { position:absolute; right:84px; top:1540px; display:flex; align-items:center; gap:20px; }
-.brand img { width:76px; height:76px; border-radius:18px; }
-.brand span { font-family:"Barlow C"; font-weight:800; font-size:54px; letter-spacing:.06em; }
+.brand { gap:16px; }
+.brand img { width:66px; height:66px; border-radius:16px; }
+.brand span { font-family:"Barlow C"; font-weight:800; font-size:46px; letter-spacing:.04em; }
 """
 
 def html(lang, kicker, l1, l2, photo, extra):
@@ -54,7 +55,7 @@ def html(lang, kicker, l1, l2, photo, extra):
     css = CSS.replace("FONT_URL", (REPO / "fonts/barlow-condensed-800-latin.woff2").as_uri())
     return (f'<!doctype html><html lang="{lang}"><head><meta charset="utf-8"><style>{css}</style></head>'
             f'<body class="{lang}">{bg}<p class="kicker">{kicker}</p><h1>{l1}<em>{l2}</em></h1>{extra}'
-            f'<div class="brand"><img src="{ICON.as_uri()}"><span>KURABELL</span></div></body></html>')
+            f'<div class="brand"><img src="{ICON.as_uri()}"><span>KURABELL Workout Log</span></div></body></html>')
 
 
 def main():
