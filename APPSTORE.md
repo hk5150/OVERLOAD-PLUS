@@ -680,6 +680,15 @@ English:
   Playwright MCP のブラウザが使用中だったので、scratchpad の `playwright-core@1.63.0` から `~/Library/Caches/ms-playwright/chromium-1234` を直接起動した。
   シートが画面の下まで届くよう、`compose.html` の `shift`(ja 112 / en 154)で表示を上にずらしている
 
+### スクリーンショット(v7、1.4.1 で入れる)
+**2026-10-12 に作成: `~/Desktop/KURABELL-appstore-screenshots/v7/{ja,en}/` 1320×2868 各9枚**。登録するのは 01〜08(09 の料金は外す)。v6 と同じ並び・見出しで、1.4.1 の画面で撮り直した。
+- 01・08: 種目カードから「前回 ○/○ 推移」の行が消えたので、位置合わせを種目名に替え、拡大枠は撮影時に測った行の位置で決めた(ja 01 `[494,162]`・08 `[365,60]`、en 01 `[492,156]`・08 `[367,60]`)
+- 02 AIコーチ: 「AI の答えを貼り付けて読み込む」の分だけ案が下がったので、シートを「この案を使う」まで送ってから撮った(`shift` は外した)
+- 03 Apple Watch: 入力画面から、種目一覧の一番上(休憩タイマー・心拍・ボリューム)に替えた。Watch シミュレータ(46mm)で `-KurabellSample -KurabellLang ja|en -KurabellHR 128`。説明文を「休憩タイマーと心拍も、手元でひと目で。」/ `Rest timer and heart rate at a glance.` に
+- 07 履歴: 今月(10月)のカレンダーと、その日の人体図が写る
+- 撮り方: `.playwright-mcp/store-v7/` の `shoot-{ja,en}.js`・`coach-{ja,en}.js` → `compose-run.js`。Playwright MCP のブラウザが使用中だったので、scratchpad の `playwright-core@1.63.0` から `chromium-1234` を直接起動した
+- 日本語名の変更とは別の版になった(北村さんが 1.4.1 で撮り直しを指示)
+
 ### 1.4 (ビルド19) — 2026-10-10 12:28 に審査へ提出
 
 **2026-10-11 4:06 に公開**(審査を通過、自動リリース。iTunes lookup の日米で 1.4 を確認)。

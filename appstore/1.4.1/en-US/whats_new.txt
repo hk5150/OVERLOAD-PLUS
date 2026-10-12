@@ -1,0 +1,10 @@
+• Split tab: each day shows when you last trained it. When you open the app, the day you've gone longest without becomes "Today".
+• A body map shows which muscles you trained (finish screen, "Last 7 days" on the Split tab, and each day in History).
+• A new image for Instagram: volume vs last time, each exercise vs last time, and today's score. You can also make it from any day in History.
+• Tidier exercise cards: the last date now sits in the "Your best" row.
+• YOU WIN! now appears only when a set beats your best so far, today's sets included.
+• Exercise list review: Adductors added, and you can search by common nicknames.
+• AI Coach: paste and read the AI's answer with one tap.
+• Apple Watch: the rest timer and your current heart rate are always shown at the top of the set list.
+• Apple Watch: if the workout didn't start, opening KURABELL on the watch starts it.
+• Apple Watch: fixed the workout sometimes continuing after you save, and rest alerts that could arrive late. Added "End workout" to stop a leftover workout.
