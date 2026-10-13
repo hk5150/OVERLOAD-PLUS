@@ -148,7 +148,6 @@ const STRINGS = {
   "compare.line":      { ja: "推定1RM {now}{unit}(ベスト比 {diff}{unit})", en: "Est. 1RM {now}{unit} ({diff}{unit} vs best)" },
   "compare.lineFirst": { ja: "初回記録 推定1RM {v}{unit}", en: "First record: est. 1RM {v}{unit}" },
   "compare.lineNow":   { ja: "推定1RM {v}{unit}", en: "Est. 1RM {v}{unit}" },
-  "compare.lineBest":  { ja: "過去のベスト 推定1RM {v}{unit}", en: "Your best: est. 1RM {v}{unit}" },
   "compare.win":       { ja: "過去の自分に勝利", en: "New best" },
   "compare.bestWeight": { ja: "最大重量 {v}{unit}", en: "Top weight {v}{unit}" },
   "compare.prTop":     { ja: "最大重量 {v}{unit}", en: "Top weight {v}{unit}" },

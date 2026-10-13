@@ -4568,14 +4568,6 @@ function App() {
                   <div style={{ fontSize: 15, fontWeight: 700, lineHeight: 1.4, flex: 1, minWidth: 0, paddingTop: 3 }}>
                     {inGroup && <span style={{ color: C.blue, fontWeight: 800, marginRight: 6 }}>{ssLetter}.</span>}
                     {exName(ex.name)}
-                    {/* 過去の自己ベスト(推定1RM)を名前の横に(北村さん、2026-10-10)。prMap は実効重量なので、
-                        ダンベルは両手計・自重は体重込みと分かるようにする。記録の無い種目には出さない */}
-                    {prMap[ex.name]?.best1RM > 0 && (
-                      <span style={{ display: "inline-block", marginLeft: 8, fontSize: 11, fontWeight: 800, color: C.yellow, whiteSpace: "nowrap", verticalAlign: "1px" }}>
-                        MAX 1RM <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 14 }}>{toU(prMap[ex.name].best1RM).toFixed(1)}</span>
-                        <span style={{ fontWeight: 600, color: C.muted }}>{resolveIsDb(ex.name, ex.isDb) ? t("share.bothHands", { unit: uLabel() }) : (ex.bwFactor || 0) > 0 ? t("share.withBw", { unit: uLabel() }) : uLabel()}</span>
-                      </span>
-                    )}
                     {ex.muscle && <span style={{ color: C.muted, fontSize: 12, fontWeight: 400, marginLeft: 6 }}>{muscleName(ex.muscle)}</span>}
                     {resolveIsDb(ex.name, ex.isDb) && <span style={{ color: C.muted, fontSize: 12, marginLeft: 4 }}>{t("menu.perHandShort")}</span>}
                     {resolveRom(ex.name, ex.rom) < 1 && <span style={{ color: C.muted, fontSize: 12, marginLeft: 4 }}>ROM×{resolveRom(ex.name, ex.rom)}</span>}
@@ -4587,57 +4579,10 @@ function App() {
                   style={{ ...btn("transparent", C.muted), width: 30, height: 30, padding: 0, display: "grid", placeItems: "center", flexShrink: 0, fontSize: 15 }}>✕</button>
               </div>
 
-              {/* 判断材料: 重量の停滞。前回の各セットはセット行に並べて出すのでここでは繰り返さない。
-                  直近4回の代表セットを並べた「推移」は外した(北村さん、2026-10-11)。最後の値はセット行の「前回」と重なり、
-                  重量を変えた日が混ざると伸びたのか落ちたのか読めず、伸びは下の「過去のベスト」の欄と履歴のグラフで見える。
-                  前回の日付はその欄に移したので、ここに出すのは欄が出ないときだけ。助言も無ければ行ごと出さない */}
-              {(() => {
-                if (!ins) return null;
-                // topWeightがnullの日(全セットが補助あり等)は重量の判断材料を出せない
-                const hasStreak = ins.topWeight != null && ins.streak >= 2;
-                const hasAdvice = hasStreak && ins.canAddWeight;
-                const pr = prMap[ex.name];
-                const bestShown = (!!pr && (pr.best1RM > 0 || pr.bestWeight > 0)) || liveBest1RM(ex) > 0; // 下の欄と同じ条件
-                if (!hasAdvice && bestShown) return null;
-                const unit = ins.isDb ? t("share.perHand", { unit: uLabel() }) : uLabel();
-                return (
-                  <div style={{ background: C.bg, borderRadius: 10, padding: "6px 10px", marginBottom: 10, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-                    {!bestShown && <span style={{ fontSize: 12, color: C.muted }}>{t("log.lastDate", { date: fmtDate(ins.date) })}</span>}
-                    {/* 加重できない種目(腕立てなど)では重量の連続に意味がない。「0kgで5セッション連続」
-                        としか言えず、取れる行動もない。回数の伸びはセット行の「前回」で見える。 */}
-                    {hasStreak && ins.canAddWeight && (
-                      <span style={{ fontSize: 12, fontWeight: 700, color: ins.streak >= 4 ? C.yellow : C.muted }}>
-                        {t("log.streak", { w: wU(ins.topWeight), unit, n: ins.streak })}
-                      </span>
-                    )}
-                    {/* 同じ重量が3回続いたら、そろそろ重量を上げる判断材料として明示する。
-                        自動で重量を決めるのではなく、気づきを渡すだけに留める(アプリの中心思想)。
-                        回数が直近の最高を下回っている間は「上げどき」と言わず事実だけ渡す
-                        (実データで15kg×13回→9回の後退局面に「そろそろ上げどき」が出ていた)。
-                        加重できない種目(常に自重のみ)では重量の助言自体が成立しないので出さない。 */}
-                    {/* 同じ重量で3回とも余力0のまま回数も伸びていない(stalledAtFailure、1.4)。ディロードを知らせるだけで、数字は変えない */}
-                    {ins.topWeight != null && ins.streak >= 3 && ins.canAddWeight && (
-                      ins.stalledAtFailure ? (
-                        // 文が長く2行に折り返すので、上げどきのピル(角丸999)ではなく角丸8の帯にする
-                        <span style={{ fontSize: 12, fontWeight: 800, color: C.yellow, background: "rgba(232,179,60,0.15)", padding: "4px 8px", borderRadius: 8, lineHeight: 1.5 }}>
-                          <Icon name="warn" size={12} style={{ marginRight: 4 }} />{t("log.deloadHint")}
-                        </span>
-                      ) : ins.readyToProgress ? (
-                        <span style={{ fontSize: 12, fontWeight: 800, color: C.yellow, background: "rgba(232,179,60,0.15)", padding: "2px 8px", borderRadius: 999 }}>
-                          <Icon name="warn" size={12} style={{ marginRight: 4 }} />{t("log.plateauAlert", { n: ins.streak })}
-                        </span>
-                      ) : (
-                        <span style={{ fontSize: 12, color: C.muted }}>
-                          {t("log.repsDown", { best: ins.bestRecentReps, prev: ins.topReps })}
-                        </span>
-                      )
-                    )}
-                  </div>
-                );
-              })()}
-
-              {/* 過去の自分 vs 今日の自分。以前は「過去の自分 / VS / 今日の自分」の3列・到達度バー・「YOU WIN!」の帯・
-                  更新バッジの4段で、1種目あたり170px近くあった。比較は1行にまとめ、勝ったら行ごと緑にする。 */}
+              {/* セット行の上は「情報の1行」と「今日の結果の1行」だけにする(2026-10-13、北村さん「UI は改善の余地あり」。
+                  以前は助言の箱・推定1RMの箱・前回の日付・最大重量のピルと、セット行に着くまでに5層あった)。
+                  情報の行: 前回の日付 · MAX 1RM(過去のベスト。名前の横から移した) · 最大重量 · 停滞の助言(文字だけ、箱に入れない)
+                  結果の行: 今日セットを入れてから。推定1RM とベスト比。勝ったら緑。入れる前の「過去のベスト 推定1RM」は MAX 1RM と同じ値なので出さない */}
               {(() => {
                 const pr = prMap[ex.name];
                 const live1RM = liveBest1RM(ex);            // 今日の推定1RM
@@ -4647,44 +4592,59 @@ function App() {
                 const isPRw = liveW > 0 && liveW > bestW + 0.01;
                 const isPR1RM = live1RM > 0 && live1RM > best1RM + 0.01;
                 const hasHistory = !!pr && (pr.best1RM > 0 || pr.bestWeight > 0);
-                if (!hasHistory && live1RM === 0) return null; // 初めての種目で未実施なら表示しない
-                const daysSincePR = pr?.date ? Math.floor((Date.now() - new Date(pr.date).getTime()) / 86400000) : null;
-                const unit = ex.bwFactor > 0 ? t("share.withBw", { unit: uLabel() }) : resolveIsDb(ex.name, ex.isDb) ? t("share.bothHands", { unit: uLabel() }) : uLabel();
                 const f1 = (v) => toU(v).toFixed(1);
-                // 13回以上しか記録していない種目は、最大重量はあっても推定1RMが無い(est1RM が 0)。
-                // そのときは「過去のベスト 推定1RM 0.0」や「初回記録」を出さない(reviewer 指摘)
+                // prMap は実効重量なので、ダンベルは両手計・自重は体重込みと分かるようにする
+                const unit = ex.bwFactor > 0 ? t("share.withBw", { unit: uLabel() }) : resolveIsDb(ex.name, ex.isDb) ? t("share.bothHands", { unit: uLabel() }) : uLabel();
+                const daysSincePR = pr?.date ? Math.floor((Date.now() - new Date(pr.date).getTime()) / 86400000) : null;
+                // 停滞の判断材料(加重できない種目では重量の連続に意味がない。回数が直近の最高を下回っている間は「上げどき」と言わない)
+                const hasStreak = !!ins && ins.topWeight != null && ins.streak >= 2 && ins.canAddWeight;
+                // 3回以上続いていれば助言(頭打ち・ディロード)。回数が落ちている局面は「同じ重量で」の前提が文に無いので、連続の文と並べる(reviewer 指摘)
+                let advice = null, adviceHot = false;
+                const streakTxt = hasStreak ? t("log.streak", { w: wU(ins.topWeight), unit: ins.isDb ? t("share.perHand", { unit: uLabel() }) : uLabel(), n: ins.streak }) : null;
+                if (hasStreak && ins.streak >= 3) {
+                  if (ins.stalledAtFailure) { advice = t("log.deloadHint"); adviceHot = true; }
+                  else if (ins.readyToProgress) { advice = t("log.plateauAlert", { n: ins.streak }); adviceHot = true; }
+                  else advice = `${streakTxt}。${t("log.repsDown", { best: ins.bestRecentReps, prev: ins.topReps })}`;
+                } else if (hasStreak) {
+                  advice = streakTxt;
+                }
+                const sep = <span aria-hidden="true" style={{ color: C.grey, margin: "0 6px" }}>·</span>;
+                const info = [];
+                if (ins) info.push(<span key="d">{t("log.lastDate", { date: fmtDate(ins.date) })}</span>);
+                if (best1RM > 0) info.push(<span key="m" style={{ whiteSpace: "nowrap" }}>MAX 1RM <strong style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 14, fontWeight: 800, color: C.yellow }}>{f1(best1RM)}</strong>{unit}</span>);
+                if (bestW > 0 && !isPRw) info.push(<span key="w" style={{ whiteSpace: "nowrap" }}>{t("compare.bestWeight", { v: f1(bestW), unit })}</span>);
+                if (!isPR1RM && daysSincePR != null && daysSincePR >= 30) info.push(<span key="s" style={{ color: daysSincePR >= 60 ? C.yellow : C.muted }}>{t("compare.prStale", { n: daysSincePR })}</span>);
                 let main = null;
                 if (live1RM > 0 && best1RM > 0) {
                   const d = live1RM - best1RM;
                   main = t("compare.line", { now: f1(live1RM), diff: `${d >= 0 ? "+" : "−"}${f1(Math.abs(d))}`, unit: uLabel() });
                 } else if (live1RM > 0) {
                   main = hasHistory ? t("compare.lineNow", { v: f1(live1RM), unit: uLabel() }) : t("compare.lineFirst", { v: f1(live1RM), unit: uLabel() });
-                } else if (best1RM > 0) {
-                  main = t("compare.lineBest", { v: f1(best1RM), unit: uLabel() });
                 }
                 return (
-                  <div style={{
-                    display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 10,
-                    padding: "7px 10px", borderRadius: 10, background: C.bg,
-                    border: `1px solid ${isPR1RM && best1RM > 0 ? C.green : "transparent"}`,
-                  }}>
-                    {main && <span style={{ fontSize: 13, fontWeight: isPR1RM ? 800 : 600, color: isPR1RM ? C.green : C.text }}>{main}</span>}
-                    {isPR1RM && best1RM > 0 && <span style={{ fontSize: 12, color: C.green }}>{t("compare.win")}</span>}
-                    <span style={{ marginLeft: "auto", display: "inline-flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                      {/* 前回の日付。続く「最大重量」は通算の値なので、「前回の最大重量」と読まれないよう点で区切る(reviewer 指摘) */}
-                      {ins && <span style={{ fontSize: 12, color: C.muted }}>{t("log.lastDate", { date: fmtDate(ins.date) })}{(isPRw || bestW > 0) && <span style={{ color: C.grey, marginLeft: 8 }}>·</span>}</span>}
-                      {isPRw ? (
-                        <span style={{ background: C.green, color: "#fff", borderRadius: 999, padding: "2px 9px", fontSize: 12, fontWeight: 800, display: "inline-flex", alignItems: "center", gap: 4 }}>
-                          <Icon name="trophy" size={13} />{t("compare.prTop", { v: f1(liveW), unit })}
-                        </span>
-                      ) : bestW > 0 ? (
-                        <span style={{ fontSize: 12, color: C.muted }}>{t("compare.bestWeight", { v: f1(bestW), unit })}</span>
-                      ) : null}
-                      {!isPR1RM && daysSincePR != null && daysSincePR >= 30 && (
-                        <span style={{ fontSize: 12, color: daysSincePR >= 60 ? C.yellow : C.muted }}>{t("compare.prStale", { n: daysSincePR })}</span>
-                      )}
-                    </span>
-                  </div>
+                  <>
+                    {(info.length > 0 || advice) && (
+                      <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.6, marginBottom: 8, marginTop: -2 }}>
+                        {info.map((x, i) => <React.Fragment key={i}>{i > 0 && sep}{x}</React.Fragment>)}
+                        {advice && (
+                          <div style={{ color: adviceHot ? C.yellow : C.muted, fontWeight: adviceHot ? 700 : 400 }}>
+                            {adviceHot && <Icon name="warn" size={12} style={{ marginRight: 4 }} />}{advice}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {(main || isPRw) && (
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 8, fontSize: 13 }}>
+                        {main && <span style={{ fontWeight: isPR1RM ? 800 : 600, color: isPR1RM ? C.green : C.text }}>{main}</span>}
+                        {isPR1RM && best1RM > 0 && <span style={{ fontSize: 12, color: C.green }}>{t("compare.win")}</span>}
+                        {isPRw && (
+                          <span style={{ background: C.green, color: "#fff", borderRadius: 999, padding: "2px 9px", fontSize: 12, fontWeight: 800, display: "inline-flex", alignItems: "center", gap: 4 }}>
+                            <Icon name="trophy" size={13} />{t("compare.prTop", { v: f1(liveW), unit })}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </>
                 );
               })()}
 
@@ -5809,13 +5769,25 @@ function App() {
                       </span>
                     )}
                   </div>
-                  <div style={{ color: C.muted, fontSize: 13, lineHeight: 1.6, wordBreak: "break-word" }}>
-                    {ex.sets.map((s, si) => (
-                      <span key={si} style={hasPR && si === prIdx ? { color: C.yellow, fontWeight: 700 } : undefined}>
-                        {si > 0 && <span style={{ color: C.muted, fontWeight: 400 }}> / </span>}
-                        {hasPR && si === prIdx ? <Icon name="bolt" size={12} style={{ marginRight: 1 }} /> : ""}{s.warmup ? t("menu.warmupShort") : ""}{s.assisted ? t("menu.assistedShort") : ""}{wU(s.weight)}×{s.reps}{s.rir != null ? `(RIR${s.rir})` : ""}
-                      </span>
-                    ))}
+                  {/* セットは札で並べる(Instagram のストーリー用の画像と同じ形。スラッシュ区切りの文は 320px で3行に折れて読みにくかった。2026-10-13)。
+                      ウォームアップと補助ありは薄く、1RM を更新したセットは黄色。RIR は札の中に小さく */}
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 4 }}>
+                    {ex.sets.map((s, si) => {
+                      const hot = hasPR && si === prIdx, faint = s.warmup || s.assisted;
+                      return (
+                        <span key={si} style={{
+                          display: "inline-flex", alignItems: "baseline", gap: 3, padding: "3px 8px", borderRadius: 7,
+                          background: hot ? "rgba(232,179,60,0.16)" : C.bg, border: `1px solid ${hot ? "rgba(232,179,60,0.4)" : C.border}`,
+                          color: hot ? C.yellow : faint ? C.muted : C.text, fontWeight: hot ? 800 : 600, // 同梱の Barlow は 600 と 800 だけ
+                          fontFamily: "'Barlow Condensed', sans-serif", fontSize: 15, lineHeight: 1.2, whiteSpace: "nowrap",
+                        }}>
+                          {s.warmup && <span style={{ fontSize: 11, fontWeight: 700 }}>{t("menu.warmupShort")}</span>}
+                          {s.assisted && <span style={{ fontSize: 11, fontWeight: 700 }}>{t("menu.assistedShort")}</span>}
+                          {wU(s.weight)}×{s.reps}
+                          {s.rir != null && <span style={{ fontSize: 10, fontWeight: 600, color: hot ? C.yellow : C.muted, opacity: 0.85 }}>RIR{s.rir}</span>}
+                        </span>
+                      );
+                    })}
                   </div>
                 </div>
                 );
