@@ -1,4 +1,4 @@
-What to check in 1.4.2 (41):
+What to check in 1.4.2 (42):
 1. "Story image" on the finish screen and each day in History: a tall image with every exercise and set. Post it to an Instagram story and check nothing is hidden at the top or bottom
 2. "Post image" is the same image as before
 3. AI Coach: when the answer box has text, "Clear" at its top right empties it
@@ -6,3 +6,6 @@ What to check in 1.4.2 (41):
 5. If you close the iPhone app without saving, the Watch workout (timer on the watch face) should end after 30 minutes. Opening KURABELL on the watch or logging a set should start it again
 6. Log tab exercise cards: above the sets there is now one line (Last · MAX 1RM · Top weight, plus a plateau hint), and the est. 1RM vs best appears only after you log a set today
 7. History: each set is a chip (weight × reps, RIR small). The set that beat your 1RM is yellow
+8. Before you start logging (menu, AI Coach), the top bar (elapsed / volume / rest) is hidden; it appears once you start
+9. Primary buttons (start, save, AI Coach, end rest) are now yellow; red is only for destructive actions
+10. Muscle names are plain text (today's session, split, history); rounded pills are only for things you can tap
