@@ -40,7 +40,10 @@ struct RootView: View {
         // 保存したら「お疲れ様でした」(改善要望 12)。シートで重ねると、休憩画面などの子のシートが出ている・閉じかけている
         // 間は出せずに終わり、値が残ったまま以後ずっと出なくなる(reviewer 指摘)。画面ごと差し替える
         // (NavigationStack ごと外れるので、子のシートも一緒に閉じる)
-        if let f = store.showingFinished {
+        if ProcessInfo.processInfo.arguments.contains("-KurabellDiag") {
+            // 確認用: 起動引数 -KurabellDiag で記録(DiagLog)の画面から始める(シミュレータでは長押しが届かないため)
+            DiagLogView()
+        } else if let f = store.showingFinished {
             FinishedView(finished: f, stats: store.workoutStats?.recordStartAt == f.id ? store.workoutStats : nil) {
                 store.finishedDismissed(f)
             }
@@ -910,6 +913,7 @@ struct EndWorkoutButton: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var ending = false
     @State private var result: Bool?
+    @State private var showingDiag = false
 
     var body: some View {
         if store.recordInProgress == nil {
@@ -941,6 +945,33 @@ struct EndWorkoutButton: View {
                 .multilineTextAlignment(.center)
                 .foregroundStyle(Palette.muted)
                 .fixedSize(horizontal: false, vertical: true)
+                // 実機の不具合を調べるための記録(DiagLog)。ふだんは見せないので、この説明文の長押しで開く
+                .onLongPressGesture { showingDiag = true }
+        }
+        .sheet(isPresented: $showingDiag) { DiagLogView() }
+    }
+}
+
+// DiagLog の中身(新しい順)。ワークアウトが止まらない・休憩の知らせが遅れるときに、北村さんが読んで伝えるための画面
+struct DiagLogView: View {
+    private let lines = DiagLog.lines()
+
+    var body: some View {
+        // 行が多いので、List のカードにせず詰めて並べる
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 6) {
+                if lines.isEmpty {
+                    Text("-").foregroundStyle(Palette.muted)
+                }
+                ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
+                    Text(line)
+                        .font(.system(size: 10, weight: .medium).monospaced())
+                        .foregroundStyle(Palette.text)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 4)
         }
     }
 }

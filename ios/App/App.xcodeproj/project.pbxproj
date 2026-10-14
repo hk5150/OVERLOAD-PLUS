@@ -15,6 +15,7 @@
 		32E91C24F130AAFFB7B13463 /* KurabellWatch.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = B18524BA9E23F0695ABD9894 /* KurabellWatch.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		3568666FA01BED71A1C9E2E2 /* WatchPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7812A8755F6BE2451C88A107 /* WatchPlugin.swift */; };
 		399B179AC9878CEA83BBAF31 /* SampleData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1DDE05CC57F5D774E8504675 /* SampleData.swift */; };
+		5D1A6C0E2F4B8A9C0D1E2F30 /* DiagLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D1A6C0E2F4B8A9C0D1E2F31 /* DiagLog.swift */; };
 		412C948172910A54B4C53024 /* HealthPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F46C657204AD1B2F3180EEAC /* HealthPlugin.swift */; };
 		41ED8E19A1465DD2D4223448 /* RestActivityBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0CAF3FA0EB0D91FD57B7661 /* RestActivityBundle.swift */; };
 		426BC6942F84D982D9F70207 /* RestActivity.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 30BD14DAAAE86D5CC41D0A7A /* RestActivity.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
@@ -97,6 +98,7 @@
 		0F583D8E24C3A2E6183FAD88 /* Assets.xcassets */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		126678B07836F7BF2C036333 /* ja */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.strings; name = ja; path = ja.lproj/Localizable.strings; sourceTree = "<group>"; };
 		1DDE05CC57F5D774E8504675 /* SampleData.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SampleData.swift; sourceTree = "<group>"; };
+		5D1A6C0E2F4B8A9C0D1E2F31 /* DiagLog.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DiagLog.swift; sourceTree = "<group>"; };
 		2258CE603024CBCA8EBC9642 /* ja */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.strings; name = ja; path = ja.lproj/InfoPlist.strings; sourceTree = "<group>"; };
 		2FAD9762203C412B000D30F8 /* config.xml */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = config.xml; sourceTree = "<group>"; };
 		30BD14DAAAE86D5CC41D0A7A /* RestActivity.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = RestActivity.appex; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -293,6 +295,7 @@
 				999DC06A7ED296A4FF29B986 /* WatchModels.swift */,
 				DC1A1EC10F9C10A4FBF2BE46 /* Views.swift */,
 				1DDE05CC57F5D774E8504675 /* SampleData.swift */,
+				5D1A6C0E2F4B8A9C0D1E2F31 /* DiagLog.swift */,
 				0F583D8E24C3A2E6183FAD88 /* Assets.xcassets */,
 				AD480C0721A61B46103A3F41 /* Localizable.strings */,
 				FD6C99B61B52D5D166DCD8E7 /* WorkoutManager.swift */,
@@ -573,6 +576,7 @@
 				5B98AF87C7D69E960032AF6A /* WatchModels.swift in Sources */,
 				064641D0D11FEDE526FF8DA2 /* Views.swift in Sources */,
 				399B179AC9878CEA83BBAF31 /* SampleData.swift in Sources */,
+				5D1A6C0E2F4B8A9C0D1E2F30 /* DiagLog.swift in Sources */,
 				CAD1B389E14726C0A8EB539C /* WorkoutManager.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

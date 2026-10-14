@@ -435,10 +435,12 @@ describe("Watch アプリのネイティブ設定", () => {
     expect(restView).toContain("store.restViewVisible = true");
     expect(restView).not.toContain("Task.sleep");
     expect(restView).not.toContain("play(.notification)");
-    // 開いている間はバナーで経過時間を覆わず、音と振動だけにする(以前の return [] は通知そのものを止めていた)
+    // 開いている間はバナーで経過時間を覆わず、音と振動だけにする(以前の return [] は通知そのものを止めていた)。
+    // return [] は、ワークアウト中に Watch 自身が同じ回を鳴らすときだけ(1.4.2、2026-10-15)
     const willPresent = store.slice(store.indexOf("willPresent notification"));
-    expect(willPresent).toMatch(/Self\.restViewVisibleNow\(\)[\s\S]*?return \[\.sound\]/);
-    expect(willPresent).not.toMatch(/return \[\]/);
+    expect(willPresent).toMatch(/Self\.restViewVisibleNow\(\) \{ return \[\.sound\] \}/);
+    expect(willPresent.match(/return \[\]/g)?.length).toBe(1);
+    expect(willPresent).toMatch(/Self\.deferToOwnAlert\(id, fireMs\) \|\| !Self\.claimAlert\(id, fireMs\) \{[^}]*return \[\]/);
   });
 
   it("保存したら完了画面を一度だけ出し、タップか15秒で閉じる(改善要望 12)", () => {
@@ -723,9 +725,25 @@ describe("保存した後に Watch のワークアウトが残らない(2026-10-
   });
 
   it("10分たっても記録に対応付かないセッションは破棄する", () => {
+    const limits = swiftFunc(wm(), "private func checkLimits(started: Double) async -> Bool {");
+    expect(limits).toMatch(/guard let r = recordStartAt else \{[\s\S]*?guard age >= Self\.attachWindow else \{ return false \}[\s\S]*?await discard\(report: false\)/);
+  });
+
+  it("見張りは1回きりにしない。手が空いていなければ次の回に見直し、毎回届いている状態で締め直す(2026-10-15)", () => {
     const timers = swiftFunc(wm(), "private func armTimers() {");
-    expect(timers).toMatch(/Self\.attachWindow/);
-    expect(timers).toMatch(/self\.recordStartAt == nil else \{ return \}\s*await self\.discard\(report: false\)/);
+    expect(timers).toMatch(/while !Task\.isCancelled \{/);
+    expect(timers).toMatch(/guard !self\.isBusy else \{ continue \}/);
+    expect(timers).toContain("if await self.checkLimits(started: started) { return }");
+    expect(timers).toContain("SessionStore.shared.workoutDidStart()");
+    // 4時間の上限も同じ見張りで見る(別の1回きりの Task にしない)
+    expect(swiftFunc(wm(), "private func checkLimits(started: Double) async -> Bool {")).toMatch(/age >= Self\.maxDuration[\s\S]*?await discard\(report: true\)/);
+    expect(wm()).not.toMatch(/idleWatch/);
+  });
+
+  it("ended を待つ3秒の待ちは、自分の回の待ちだけを解く", () => {
+    const end = swiftFunc(wm(), "private func endSession(_ session: HKWorkoutSession) async {");
+    expect(end).toMatch(/let id = endedWaiterId/);
+    expect(end).toMatch(/self\.endedWaiterId == id/);
   });
 
   it("delegate は、今持っているセッションの知らせだけで終了を扱う", () => {
@@ -745,12 +763,44 @@ describe("保存した後に Watch のワークアウトが残らない(2026-10-
 
 describe("Watch の休憩の通知は、届いたらすぐ鳴らす(1.4.2、北村さん「15秒遅れる」)", () => {
   const read = (rel) => fs.readFileSync(path.join(process.cwd(), rel), "utf-8");
+  const ss = () => read("ios/App/KurabellWatch/SessionStore.swift");
+  const fn = (src, sig) => {
+    const i = src.indexOf(sig);
+    expect(i).toBeGreaterThanOrEqual(0);
+    return src.slice(i, src.indexOf("\n    }\n", i));
+  };
+  // 原因は、iPhone のアプリがある Watch アプリの通知が iPhone の同じ通知を最大13秒待つこと(Apple DTS)。
+  // ワークアウト中は Watch 自身が予定の時刻に振動させ、同じ回の通知は出さない
+  it("休憩の通知を予約するときは、Watch 自身の知らせ(時刻指定・まとめて遅らせないタイマー)も用意する", () => {
+    expect(fn(ss(), "private func scheduleRestNotifications(from start: Date) {")).toContain("armRestAlerts(from: start, notices: restNotices())");
+    const arm = fn(ss(), "private func armRestAlerts(from start: Date, notices: [WatchSnapshot.RestNotice]) {");
+    expect(arm).toMatch(/DispatchSource\.makeTimerSource\(flags: \.strict/);
+    expect(arm).toMatch(/wallDeadline: \.now\(\) \+ max\(0, wait - Self\.restAlertLead\)/);
+    expect(fn(ss(), "private func cancelRestNotifications() {")).toContain("cancelRestAlerts()");
+  });
+  it("Watch 自身が鳴らすのはワークアウトが動いている間だけで、鳴らしたら同じ回の通知を取り消す", () => {
+    const fired = fn(ss(), "private func restAlertFired(id: String, fireAt: Date) {");
+    expect(fired).toMatch(/guard running, late < Self\.restAlertMaxLate \|\| deferred else/);
+    expect(fired).toContain("Self.claimAlert(id, fireMs)");
+    // play は効いたかを返さないので、予備の通知を先に消すのは画面を見ているときだけ(鳴らない、を作らない)
+    expect(fired).toMatch(/play\(\.notification\)[\s\S]*?if app\.applicationState == \.active \{\s*UNUserNotificationCenter\.current\(\)\.removePendingNotificationRequests\(withIdentifiers: \[id\]\)/);
+    // willPresent が譲った回は、タイマーが遅れても鳴らす
+    expect(fired).toContain("let deferred = Self.takeDeferred(id, fireMs)");
+    expect(read("ios/App/KurabellWatch/WorkoutManager.swift")).toMatch(/var isRunning = false \{[\s\S]*?SessionStore\.setWorkoutRunning\(isRunning\)/);
+  });
+  it("willPresent は、Watch 自身が鳴らす回・鳴らした回の休憩の通知を出さない", () => {
+    const src = ss();
+    const i = src.indexOf("func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent");
+    const body = src.slice(i, src.indexOf("\n    }\n", i));
+    expect(body).toMatch(/if Self\.deferToOwnAlert\(id, fireMs\) \|\| !Self\.claimAlert\(id, fireMs\) \{[\s\S]*?return \[\]/);
+    expect(src).toMatch(/content\.userInfo = \["fireAt":/);
+  });
   it("willPresent はメインスレッドを待たない(常時表示の間は間引かれて、鳴るのが遅れた)", () => {
     const src = read("ios/App/KurabellWatch/SessionStore.swift");
     const i = src.indexOf("func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent");
     expect(i).toBeGreaterThanOrEqual(0);
     const body = src.slice(i, src.indexOf("\n    }\n", i));
-    expect(body).not.toMatch(/MainActor\.run|await MainActor/);
+    expect(body).not.toMatch(/MainActor\.run|await MainActor|WorkoutManager\.shared/);
     expect(body).toContain("Self.restViewVisibleNow()");
     expect(src).toMatch(/nonisolated static func restViewVisibleNow\(\) -> Bool/);
   });
@@ -762,13 +812,13 @@ describe("保存しないまま終わった記録の Watch のワークアウト
   const ss = () => read("ios/App/KurabellWatch/SessionStore.swift");
   it("30分たっても記録が動かなければ、保存済みなら締め、そうでなければ破棄する", () => {
     expect(wm()).toMatch(/static let idleLimit: TimeInterval = 30 \* 60/);
-    const i = wm().indexOf("idleWatch = Task");
-    const body = wm().slice(i, wm().indexOf("let wait = max(0, Self.attachWindow", i));
+    const i = wm().indexOf("private func checkLimits(started: Double) async -> Bool {");
+    const body = wm().slice(i, wm().indexOf("\n    }\n", i));
     expect(body).toContain("Self.idleLimit");
     expect(body).toContain("SessionStore.shared.markIdleEnded(r)");
-    expect(body).toContain("await self.finish(key: saved.key, endAt: saved.endAt)");
-    expect(body).toContain("await self.discard(report: true)");
-    expect(wm()).toMatch(/private func cleanUp\(\) \{[\s\S]*?idleWatch\?\.cancel\(\)/);
+    expect(body).toContain("await finish(key: saved.key, endAt: saved.endAt)");
+    expect(body).toContain("await discard(report: true)");
+    expect(wm()).toMatch(/private func cleanUp\(\) \{[\s\S]*?watchdog\?\.cancel\(\)/);
   });
   it("「記録が動いた」はセットと休憩の変化だけ(iPhone を開いた・閉じたでは数えない)", () => {
     expect(ss()).toMatch(/if base\.map\(activityKey\) != activityKey\(snap\) \{/);
@@ -786,5 +836,19 @@ describe("保存しないまま終わった記録の Watch のワークアウト
   it("Watch でセットを入れたら、その場で始め直しを見る", () => {
     const commit = ss().slice(ss().indexOf("func commit(exId:"), ss().indexOf("func addSet(exId:"));
     expect(commit).toContain("startWorkoutIfNeeded()");
+  });
+});
+
+describe("Watch のソースはすべてターゲットに入っている", () => {
+  const read = (rel) => fs.readFileSync(path.join(process.cwd(), rel), "utf-8");
+  it("ios/App/KurabellWatch の .swift は、どれも project.pbxproj の Sources に載っている(足し忘れるとビルドが通らない)", () => {
+    const pbx = read("ios/App/App.xcodeproj/project.pbxproj");
+    // KurabellWatch の Sources の段(Watch にしか無い SampleData.swift を含む段)の中で確かめる
+    const phases = pbx.split(/\n\t\t[0-9A-F]{24} \/\* Sources \*\/ = \{/).slice(1).map(b => b.slice(0, b.indexOf("\n\t\t};")));
+    const watch = phases.filter(b => b.includes("SampleData.swift in Sources"));
+    expect(watch.length).toBe(1);
+    const files = fs.readdirSync(path.join(process.cwd(), "ios/App/KurabellWatch")).filter(f => f.endsWith(".swift"));
+    expect(files).toContain("DiagLog.swift");
+    for (const f of files) expect(watch[0]).toContain(`/* ${f} in Sources */`);
   });
 });
