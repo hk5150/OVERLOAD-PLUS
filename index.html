@@ -311,8 +311,9 @@ const C = {
   bg: "#141517", surface: "#1E2023", surface2: "#26292D", border: "#2E3237",
   // muted は補助文字の色。#8E939A だとジムの照明の下で 11〜12px の文字が読みにくかったので一段明るくした
   text: "#F2F0EB", muted: "#A3A8B0",
-  // 色の役割: 赤=主要操作と削除、黄=余力(RIR)・インターバル・注意、緑=前回を超えた印、
-  // 青=スーパーセットと「補助あり」の印だけ(以前は選択中のチップや枠など、あちこちに使っていた)
+  // 色の役割: 黄=主要操作・余力(RIR)・インターバル・注意、赤=削除や上書きなど壊す操作(とロゴ・タブの印)、緑=前回を超えた印、
+  // 青=スーパーセットと「補助あり」の印だけ(以前は選択中のチップや枠など、あちこちに使っていた)。
+  // 2026-10-13 に主要操作を赤→黄にした(北村さん「UI 改善」。「記録を開始」と休憩の「終了」が同じ赤で、赤の意味が無くなっていた)
   red: "#E2453C", blue: "#3D7BD9", yellow: "#E8B33C", green: "#4CAF6E", grey: "#5A6069",
 };
 // 本文用フォント。<head>のbodyと同じ指定。Barlow Condensed(数字用)の中に
@@ -678,7 +679,8 @@ const cfgInput = {
   width: 46, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8,
   padding: "5px 2px", color: C.text, textAlign: "center", fontSize: 16, fontFamily: "inherit",
 };
-// 選択中のチップは白地に黒文字(以前は青)。色は役割を持たせた所(赤=主要操作など)だけに使う
+// 選択中のチップは白地に黒文字(以前は青)。色は役割を持たせた所だけに使う。
+// 丸い札(borderRadius 999)は押せるものだけ。表示だけの札は角の小さい四角(borderRadius 4〜6)にする(2026-10-13)
 const chip = (active, activeColor = C.text) => ({
   padding: "6px 12px", borderRadius: 999, fontSize: 13, cursor: "pointer", fontFamily: "inherit",
   border: `1px solid ${active ? activeColor : C.border}`, background: active ? activeColor : C.surface2,
@@ -814,7 +816,7 @@ const BodyMap = React.memo(function BodyMap({ hit, height = 150, line = C.surfac
 
 function JudgeBadge({ type }) {
   const j = JUDGE[type] || { label: "―", color: C.grey };
-  return <span style={{ background: j.color, color: "#fff", borderRadius: 999, padding: "3px 11px", fontSize: 13, fontWeight: 800, whiteSpace: "nowrap" }}>{t(j.labelKey)}</span>;
+  return <span style={{ background: j.color, color: "#fff", borderRadius: 5, padding: "2px 9px", fontSize: 12, fontWeight: 800, whiteSpace: "nowrap" }}>{t(j.labelKey)}</span>;
 }
 
 // 初回ガイドのビジュアル(絵文字ではなくSVG線画)
@@ -3826,7 +3828,9 @@ function App() {
   // ================= 画面 =================
   // 上部バーの表示条件。ノッチ帯を誰が塞ぐか(バー or header + 目隠し)がこれで決まるので、
   // 参照する3箇所で条件がずれないよう1つにまとめる。
-  const barVisible = view === "log" || restStartAt != null;
+  // 記録を始める前(メニュー・AIコーチの画面)は「0:00 / 0kg / インターバル開始」が一番上に居座るだけだったので出さない(2026-10-13、北村さん「UI 改善」)。
+  // notice(「元に戻す」)はバーの中に出すので、出ている間はバーも出す
+  const barVisible = (view === "log" && (startAt != null || today.length > 0 || !!notice)) || restStartAt != null;
   // 案内(「書き出す ›」「購入 ›」)から設定タブの該当の欄へ飛ぶ。購入欄・バックアップ欄は設定の下の方にあるので、
   // タブを切り替えるだけでは見えない。切り替え直後は欄がまだ描画されていないので、次のフレームまで待つ
   const goToSettings = (anchorId) => {
@@ -3980,7 +3984,7 @@ function App() {
                 ))}
               </div>
               {imageError === "finish" && <div role="alert" style={{ fontSize: 12, color: C.red, textAlign: "center" }}>{t("finish.imageFailed")}</div>}
-              <button onClick={closeFinish} style={{ ...btn(C.red), padding: 15, fontSize: 15, marginTop: 4 }}>{t("common.close")}</button>
+              <button onClick={closeFinish} style={{ ...btn(C.yellow, C.bg), padding: 15, fontSize: 15, marginTop: 4 }}>{t("common.close")}</button>
             </div>
           </div>
         );
@@ -4075,7 +4079,7 @@ function App() {
               {t("common.close")}
             </button>
             <button onClick={() => stopRest()}
-              style={{ ...btn(C.red), flex: 1, padding: "11px 0", fontSize: 13 }}>
+              style={{ ...btn(C.yellow, C.bg), flex: 1, padding: "11px 0", fontSize: 13 }}>
               {t("rest.finish")}
             </button>
           </div>
@@ -4150,10 +4154,10 @@ function App() {
             <div style={{ maxWidth: 460, width: "100%", margin: "0 auto" }}>
               <div style={{ display: "flex", justifyContent: "center", gap: 8, margin: "24px 0" }}>
                 {steps.map((_, i) => (
-                  <div key={i} style={{ width: i === guideStep ? 22 : 8, height: 8, borderRadius: 999, background: i === guideStep ? C.red : C.border, transition: "width .2s" }} />
+                  <div key={i} style={{ width: i === guideStep ? 22 : 8, height: 8, borderRadius: 999, background: i === guideStep ? C.yellow : C.border, transition: "width .2s" }} />
                 ))}
               </div>
-              <button onClick={() => last ? finishGuide() : setGuideStep(guideStep + 1)} style={{ ...btn(C.red), width: "100%", padding: 16, fontSize: 16 }}>
+              <button onClick={() => last ? finishGuide() : setGuideStep(guideStep + 1)} style={{ ...btn(C.yellow, C.bg), width: "100%", padding: 16, fontSize: 16 }}>
                 {last ? t("guide.start") : t("guide.next")}
               </button>
               <button onClick={finishGuide} style={{ ...btn("transparent", C.muted), width: "100%", padding: 12, fontSize: 13, marginTop: 6 }}>
@@ -4186,7 +4190,7 @@ function App() {
                 else if (status === "pending") setIapPending(true);
               } catch { setIapError(t("paywall.purchaseFailed")); }
               setIapBusy(false);
-            }} style={{ ...btn(C.red), width: "100%", padding: 16, fontSize: 16, opacity: iapBusy ? 0.6 : 1 }}>
+            }} style={{ ...btn(C.yellow, C.bg), width: "100%", padding: 16, fontSize: 16, opacity: iapBusy ? 0.6 : 1 }}>
               {t("paywall.unlock", { price: iapProduct?.displayPrice ?? "…" })}
             </button>
             <button onClick={closePaywall} style={{ ...btn("transparent", C.muted), width: "100%", padding: 12, fontSize: 13, marginTop: 6 }}>
@@ -4366,7 +4370,7 @@ function App() {
         <div role="alert" style={{ margin: "0 16px 12px", padding: 12, borderRadius: 10, background: "#3A2224", color: "#F5B8B3", fontSize: 13 }}>
           <div>{error}</div>
           {saveStatus === "error" && (
-            <button onClick={retrySave} style={{ ...btn(C.red), padding: "8px 14px", fontSize: 13, marginTop: 8 }}>{t("common.retry")}</button>
+            <button onClick={retrySave} style={{ ...btn(C.yellow, C.bg), padding: "8px 14px", fontSize: 13, marginTop: 8 }}>{t("common.retry")}</button>
           )}
         </div>
       )}
@@ -4401,7 +4405,7 @@ function App() {
           background: C.surface, border: `1px solid ${C.border}`, display: "flex", gap: 10, alignItems: "center",
         }}>
           <div style={{ flex: 1, minWidth: 0, fontSize: 13, color: C.text, lineHeight: 1.6 }}>{t("update.ready")}</div>
-          <button onClick={() => location.reload()} style={{ ...btn(C.red), padding: "7px 14px", fontSize: 13, flexShrink: 0 }}>
+          <button onClick={() => location.reload()} style={{ ...btn(C.yellow, C.bg), padding: "7px 14px", fontSize: 13, flexShrink: 0 }}>
             {t("update.reload")}
           </button>
         </div>
@@ -4434,9 +4438,10 @@ function App() {
                 <div style={{ fontSize: 12, color: C.muted, fontWeight: 800 }}>{t("split.session", { n: split.cursor % split.days.length + 1, total: split.days.length, name: splitName(split.name) })}</div>
               </div>
               <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 26, fontWeight: 800, margin: "4px 0 8px" }}>{dayName(todayDay.name)}</div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+              {/* 押せないものはピルにしない(2026-10-13)。部位名と最後にやった日を文字で並べる */}
+              <div style={{ display: "flex", flexWrap: "wrap", columnGap: 14, rowGap: 4, fontSize: 13, color: C.muted }}>
                 {todayDay.muscles.map(m => { const d = lastTrained(m); return (
-                  <span key={m} style={{ ...chip(false), cursor: "default", background: C.bg }}>{muscleName(m)}{d != null && <span style={{ color: C.yellow }}> ・{d === 0 ? t("common.today") : t("common.daysAgo", { n: d })}</span>}</span>
+                  <span key={m} style={{ whiteSpace: "nowrap" }}>{muscleName(m)}{d != null && <span style={{ color: C.yellow, fontWeight: 700, marginLeft: 4 }}>{d === 0 ? t("common.today") : t("common.daysAgo", { n: d })}</span>}</span>
                 ); })}
               </div>
               {/* AIコーチの入口(北村さんの要望で、部位のすぐ下に大きく。2026-10-09)。始める前は今日のメニューを丸ごと、
@@ -4514,7 +4519,7 @@ function App() {
               {coachMenuActive && (
                 <button onClick={() => setCoachMenu(null)} style={{ ...btn(C.surface2, C.text), width: "100%", padding: 11, fontSize: 13, marginTop: 6 }}>{t("coach.revert")}</button>
               )}
-              <button onClick={startAutoMenu} style={{ ...btn(C.red), width: "100%", padding: 14, fontSize: 15, marginTop: 8 }}>{t("menu.start")}</button>
+              <button onClick={startAutoMenu} style={{ ...btn(C.yellow, C.bg), width: "100%", padding: 14, fontSize: 15, marginTop: 8 }}>{t("menu.start")}</button>
             </div>
           )}
 
@@ -4638,7 +4643,7 @@ function App() {
                         {main && <span style={{ fontWeight: isPR1RM ? 800 : 600, color: isPR1RM ? C.green : C.text }}>{main}</span>}
                         {isPR1RM && best1RM > 0 && <span style={{ fontSize: 12, color: C.green }}>{t("compare.win")}</span>}
                         {isPRw && (
-                          <span style={{ background: C.green, color: "#fff", borderRadius: 999, padding: "2px 9px", fontSize: 12, fontWeight: 800, display: "inline-flex", alignItems: "center", gap: 4 }}>
+                          <span style={{ background: C.green, color: "#fff", borderRadius: 5, padding: "2px 8px", fontSize: 12, fontWeight: 800, display: "inline-flex", alignItems: "center", gap: 4 }}>
                             <Icon name="trophy" size={13} />{t("compare.prTop", { v: f1(liveW), unit })}
                           </span>
                         )}
@@ -5050,18 +5055,18 @@ function App() {
             {!(inGroup && !groupEnd) && !isLast && (
               <>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0 6px" }}>
-                  <div style={{ flex: 1, height: 1, background: insertAt === exIdx + 1 ? C.red : C.border }} />
+                  <div style={{ flex: 1, height: 1, background: insertAt === exIdx + 1 ? C.yellow : C.border }} />
                   <button onClick={() => { setInsertAt(insertAt === exIdx + 1 ? null : exIdx + 1); setSearch(""); setPickerMuscle(""); }}
                     style={{
                       padding: "5px 14px", borderRadius: 999, cursor: "pointer",
                       fontSize: 13, fontFamily: "inherit", fontWeight: 700, whiteSpace: "nowrap",
-                      border: `1px dashed ${insertAt === exIdx + 1 ? C.red : C.border}`,
-                      background: insertAt === exIdx + 1 ? C.red : "transparent",
+                      border: `1px dashed ${insertAt === exIdx + 1 ? C.yellow : C.border}`,
+                      background: insertAt === exIdx + 1 ? C.yellow : "transparent",
                       color: insertAt === exIdx + 1 ? "#fff" : C.muted,
                     }}>
                     {insertAt === exIdx + 1 ? t("picker.insertClose") : t("picker.insertHere")}
                   </button>
-                  <div style={{ flex: 1, height: 1, background: insertAt === exIdx + 1 ? C.red : C.border }} />
+                  <div style={{ flex: 1, height: 1, background: insertAt === exIdx + 1 ? C.yellow : C.border }} />
                 </div>
 
                 {/* その場で種目を選べるパネル(下までスクロール不要) */}
@@ -5097,7 +5102,7 @@ function App() {
                           </select>
                         </div>
                         <button onClick={() => addExercise(search, { muscle: customDraft.muscle, eq: customDraft.eq, isDb: customDraft.eq === "ダンベル", bwFactor: customDraft.eq === "自重" ? 0.7 : 0 }, exIdx + 1)}
-                          style={{ ...btn(C.red), width: "100%", padding: 10, fontSize: 14 }}>
+                          style={{ ...btn(C.yellow, C.bg), width: "100%", padding: 10, fontSize: 14 }}>
                           {t("picker.addCustomShort", { name: search.trim() })}
                         </button>
                       </div>
@@ -5117,7 +5122,7 @@ function App() {
           )}
 
           {/* 種目選択 */}
-          <div style={{ background: C.surface, borderRadius: 14, padding: 14, border: `1px solid ${insertAt != null ? C.red : C.border}` }}>
+          <div style={{ background: C.surface, borderRadius: 14, padding: 14, border: `1px solid ${insertAt != null ? C.yellow : C.border}` }}>
             {insertAt != null && (
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, background: C.bg, borderRadius: 8, padding: "8px 10px", marginBottom: 10 }}>
                 <span style={{ fontSize: 13, color: C.red, fontWeight: 700, minWidth: 0 }}>
@@ -5169,14 +5174,14 @@ function App() {
                     <option value="">{t("settings.other")}</option>{EQUIPMENT.map(q => <option key={q} value={q}>{eqName(q)}</option>)}
                   </select>
                 </div>
-                <button onClick={() => addExercise(search, { muscle: customDraft.muscle, eq: customDraft.eq, isDb: customDraft.eq === "ダンベル", bwFactor: customDraft.eq === "自重" ? 0.7 : 0 })} style={{ ...btn(C.red), width: "100%", padding: 10, fontSize: 14 }}>{t("picker.addWithConfig")}</button>
+                <button onClick={() => addExercise(search, { muscle: customDraft.muscle, eq: customDraft.eq, isDb: customDraft.eq === "ダンベル", bwFactor: customDraft.eq === "自重" ? 0.7 : 0 })} style={{ ...btn(C.yellow, C.bg), width: "100%", padding: 10, fontSize: 14 }}>{t("picker.addWithConfig")}</button>
               </div>
             )}
 
           </div>
 
           {today.length > 0 && (
-            <button onClick={saveWorkout} disabled={saving} style={{ ...btn(C.red), width: "100%", marginTop: 16, padding: 16, fontSize: 16 }}>
+            <button onClick={saveWorkout} disabled={saving} style={{ ...btn(C.yellow, C.bg), width: "100%", marginTop: 16, padding: 16, fontSize: 16 }}>
               {saving ? t("log.saving") : (split ? t("log.saveWorkoutNext") : t("log.saveWorkout"))}
             </button>
           )}
@@ -5206,7 +5211,7 @@ function App() {
                   <div style={{ fontSize: 13, color: C.muted, marginBottom: 10, lineHeight: 1.6 }}>
                     {t("split.noSplitHint")}
                   </div>
-                  <button onClick={() => setView("log")} style={{ ...btn(C.red), width: "100%", padding: 14, fontSize: 15 }}>{t("split.logNow")}</button>
+                  <button onClick={() => setView("log")} style={{ ...btn(C.yellow, C.bg), width: "100%", padding: 14, fontSize: 15 }}>{t("split.logNow")}</button>
                 </div>
               )}
               <p style={{ color: C.muted, fontSize: 13, margin: "0 0 10px" }}>{split ? t("split.pickPattern") : t("split.orConfigure")}</p>
@@ -5230,14 +5235,14 @@ function App() {
                 const goToLog = isNext && !editing;
                 return (
                   <div key={i} id={`split-day-${i}`} onClick={goToLog ? () => setView("log") : undefined}
-                    style={{ background: C.surface, borderRadius: 14, padding: 14, marginBottom: 8, border: `1px solid ${isNext ? C.red : C.border}`, cursor: goToLog ? "pointer" : "default" }}>
+                    style={{ background: C.surface, borderRadius: 14, padding: 14, marginBottom: 8, border: `1px solid ${isNext ? C.yellow : C.border}`, cursor: goToLog ? "pointer" : "default" }}>
                     {/* 320px 幅では ▲▼・今日はこれ・編集で名前の場所が無くなり、「Pull」が「Pu」で切れてボタンの下に隠れていた。
                         名前の側に最低幅(120px)を持たせ、足りなければボタンを次の行へ回す。それでも長い名前は省略記号で切る */}
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 8, flex: "1 1 120px", minWidth: 0 }}>
                         <span style={{ color: C.muted, fontSize: 13, flexShrink: 0 }}>Day {i + 1}</span>
                         {!editing && <strong style={{ fontSize: 15, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{dayName(d.name)}</strong>}
-                        {isNext && <span style={{ background: C.red, color: "#fff", borderRadius: 999, padding: "2px 8px", fontSize: 11, fontWeight: 800, flexShrink: 0 }}>{t("common.today")}</span>}
+                        {isNext && <span style={{ background: C.yellow, color: C.bg, borderRadius: 4, padding: "1px 7px", fontSize: 11, fontWeight: 800, flexShrink: 0 }}>{t("common.today")}</span>}
                       </div>
                       <div style={{ display: "flex", gap: 4, flexShrink: 0, alignItems: "center", marginLeft: "auto" }} onClick={e => e.stopPropagation()}>
                         <button onClick={() => moveDay(i, -1)} disabled={i === 0} aria-label={t("log.moveUp")}
@@ -5253,7 +5258,7 @@ function App() {
                     {editing && <input value={d.name} onChange={e => updDay(i, { name: e.target.value })} onFocus={selectOnFocus} aria-label={t("split.dayNameAria")} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: "6px 10px", fontSize: 16, fontFamily: "inherit", width: "100%", marginTop: 10 }} />}
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 10 }}>
                       {editing ? MUSCLES.map(m => <button key={m} onClick={() => toggleDayMuscle(i, m)} style={chip(d.muscles.includes(m))}>{muscleName(m)}</button>)
-                        : d.muscles.length ? d.muscles.map(m => <span key={m} style={{ ...chip(false), cursor: "default" }}>{muscleName(m)}</span>)
+                        : d.muscles.length ? <span style={{ color: C.text, fontSize: 13, lineHeight: 1.7 }}>{d.muscles.map(muscleName).join(t("common.listSep"))}</span>
                           : <span style={{ color: C.muted, fontSize: 13 }}>{t("split.muscleUnset")}</span>}
                       {/* 最後にやってから何日か(2026-10-11、北村さん)。見出しの行は ▲▼・今日はこれ・編集で 320px 幅だと余白が無いので、チップの並びの末尾に置く */}
                       {!editing && (() => {
@@ -5271,7 +5276,7 @@ function App() {
                       // 貼り付けの案内は下の行に高さを取っておく(このカードは登録すれば出なくなるので、常時取っても数枚だけ)
                       <div style={{ marginTop: 10 }} onClick={e => e.stopPropagation()}>
                         <div style={{ display: "flex", gap: 8 }}>
-                          <button onClick={() => fillDayStarter(i)} style={{ ...btn(C.red), flex: 1, padding: "10px 6px", fontSize: 13 }}>{t("split.autoFill")}</button>
+                          <button onClick={() => fillDayStarter(i)} style={{ ...btn(C.yellow, C.bg), flex: 1, padding: "10px 6px", fontSize: 13 }}>{t("split.autoFill")}</button>
                           <button onClick={() => consultAi(dayToText(d, i), `day:${i}`)}
                             style={{ ...btn(C.surface2, copiedIdx === `day:${i}` ? C.green : C.text), flex: 1, padding: "10px 6px", fontSize: 13, border: `1px solid ${C.border}` }}>
                             {copiedIdx === `day:${i}` ? t("log.consultAiDone") : t("split.aiPick")}
@@ -5358,7 +5363,7 @@ function App() {
                                 <option value="">{t("settings.other")}</option>{EQUIPMENT.map(q => <option key={q} value={q}>{eqName(q)}</option>)}
                               </select>
                             </div>
-                            <button onClick={() => addDayCustomExercise(i)} style={{ ...btn(C.red), width: "100%", padding: 10, fontSize: 14 }}>{t("picker.addWithConfig")}</button>
+                            <button onClick={() => addDayCustomExercise(i)} style={{ ...btn(C.yellow, C.bg), width: "100%", padding: 10, fontSize: 14 }}>{t("picker.addWithConfig")}</button>
                           </div>
                         )}
                       </div>
@@ -5368,7 +5373,7 @@ function App() {
                       </div>
                     )}
 
-                    {goToLog && <div style={{ marginTop: 10, fontSize: 13, color: C.red, fontWeight: 700 }}>{t("split.tapToLog")}</div>}
+                    {goToLog && <div style={{ marginTop: 10, fontSize: 13, color: C.yellow, fontWeight: 700 }}>{t("split.tapToLog")}</div>}
                     {editing && (
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginTop: 12 }}>
                         <button onClick={() => removeDay(i)} style={{ ...btn("transparent", "#FF5A4E"), fontSize: 13, padding: "8px 0" }}>{t("split.deleteDay")}</button>
@@ -5446,7 +5451,7 @@ function App() {
                 {offerSaveAsMenu.dayIdx != null ? t("menu.saveToDayPrompt", { day: dayName(offerSaveAsMenu.dayName) }) : t("menu.savePrompt")}
               </div>
               <div style={{ display: "flex", gap: 8 }}>
-                <button onClick={applyOfferedMenu} style={{ ...btn(C.red), flex: 1, padding: 10, fontSize: 14 }}>{t("menu.saveYes")}</button>
+                <button onClick={applyOfferedMenu} style={{ ...btn(C.yellow, C.bg), flex: 1, padding: 10, fontSize: 14 }}>{t("menu.saveYes")}</button>
                 <button onClick={dismissOfferedMenu} style={{ ...btn(C.surface2, C.muted), flex: 1, padding: 10, fontSize: 14 }}>{t("menu.saveNo")}</button>
               </div>
             </div>
@@ -5521,7 +5526,7 @@ function App() {
                     {chartMuscles.map(m => <button key={m} onClick={() => setChartMuscle(m)} style={{ ...chip(chartMuscle === m), flexShrink: 0 }}>{muscleName(m)}</button>)}
                   </div>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
-                    {chartExerciseChoices.map(name => <button key={name} onClick={() => setChartExercise(name)} style={chip(chartExercise === name, C.red)}>{exName(name)}</button>)}
+                    {chartExerciseChoices.map(name => <button key={name} onClick={() => setChartExercise(name)} style={chip(chartExercise === name)}>{exName(name)}</button>)}
                   </div>
                 </>)}
                 {chartData.length >= 2 ? (
@@ -5649,9 +5654,12 @@ function App() {
                     ))}
                   </div>
                 )}
-                <div style={{ fontSize: 12, color: C.muted, marginTop: 8, textAlign: "center" }}>
-                  {selectedDate ? t("history.tapAgain") : t("history.calendarHint")}
-                </div>
+                {/* 一度分かれば不要なので、使い始め(記録3回未満)か日付を選んでいるときだけ */}
+                {(selectedDate || workouts.length < 3) && (
+                  <div style={{ fontSize: 12, color: C.muted, marginTop: 8, textAlign: "center" }}>
+                    {selectedDate ? t("history.tapAgain") : t("history.calendarHint")}
+                  </div>
+                )}
               </div>
             );
           })()}
@@ -5670,11 +5678,15 @@ function App() {
             return (
             <div key={idx} style={{ background: C.surface, borderRadius: 14, padding: 14, marginBottom: 10, border: `1px solid ${editing ? C.yellow : C.border}` }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4, gap: 8 }}>
-                <div style={{ fontWeight: 900, fontSize: 14, minWidth: 0 }}>{fmtDate(w.date)}{w.session && <span style={{ color: C.muted, marginLeft: 8, fontSize: 13, fontWeight: 700 }}>{dayName(w.session)}</span>}</div>
+                {/* 日付は折らない(320px で「10/10」と「(土)」が2行に分かれていた)。Day 名は入らなければ次の行へ */}
+                <div style={{ fontWeight: 900, fontSize: 14, minWidth: 0, display: "flex", flexWrap: "wrap", alignItems: "baseline", columnGap: 8 }}>
+                  <span style={{ whiteSpace: "nowrap" }}>{fmtDate(w.date)}</span>
+                  {w.session && <span style={{ color: C.muted, fontSize: 13, fontWeight: 700 }}>{dayName(w.session)}</span>}
+                </div>
                 <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
                   {editing ? (
                     <>
-                      <button onClick={saveEditWorkout} style={{ ...btn(C.red), padding: "5px 12px", fontSize: 13 }}>{t("common.save")}</button>
+                      <button onClick={saveEditWorkout} style={{ ...btn(C.yellow, C.bg), padding: "5px 12px", fontSize: 13 }}>{t("common.save")}</button>
                       <button onClick={cancelEditWorkout} style={{ ...btn(C.surface2, C.muted), padding: "5px 10px", fontSize: 13 }}>{t("history.cancelEdit")}</button>
                     </>
                   ) : (
@@ -5704,10 +5716,8 @@ function App() {
                 return parts.length > 0 ? (
                   <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}>
                     {hit.size > 0 && <div style={{ flexShrink: 0 }}><BodyMap hit={hit} height={88} label={t("body.aria", { list: [...hit].map(muscleName).join(t("common.listSep")) })} /></div>}
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, minWidth: 0 }}>
-                      {parts.map(m => (
-                        <span key={m} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 999, padding: "3px 10px", fontSize: 12, color: C.text }}>{muscleName(m)}</span>
-                      ))}
+                    <div style={{ fontSize: 13, color: C.text, lineHeight: 1.7, minWidth: 0 }}>
+                      {parts.map(muscleName).join(t("common.listSep"))}
                     </div>
                   </div>
                 ) : null;
@@ -5873,7 +5883,7 @@ function App() {
                           ))}
                         {!findExercise(editAddSearch.trim()) && (
                           <button onClick={() => editAddExercise(editAddSearch)}
-                            style={{ ...btn(C.red), width: "100%", padding: 9, fontSize: 13 }}>
+                            style={{ ...btn(C.yellow, C.bg), width: "100%", padding: 9, fontSize: 13 }}>
                             {t("picker.addCustomShort", { name: editAddSearch.trim() })}
                           </button>
                         )}
@@ -6292,7 +6302,7 @@ function App() {
                     else if (status === "pending") setIapPending(true);
                   } catch { setIapError(t("paywall.purchaseFailed")); }
                   setIapBusy(false);
-                }} style={{ ...btn(C.red), width: "100%", padding: 14, fontSize: 14, marginBottom: 8, opacity: iapBusy ? 0.6 : 1 }}>
+                }} style={{ ...btn(C.yellow, C.bg), width: "100%", padding: 14, fontSize: 14, marginBottom: 8, opacity: iapBusy ? 0.6 : 1 }}>
                   {t("settings.iap.unlock", { price: iapProduct?.displayPrice ?? "…" })}
                 </button>
               )}
@@ -6453,7 +6463,7 @@ function App() {
                       </div>
                     );
                   })}
-                  <button onClick={applyCoach} style={{ ...btn(C.red), width: "100%", padding: 14, fontSize: 15, marginTop: 10 }}>{t("coach.apply")}</button>
+                  <button onClick={applyCoach} style={{ ...btn(C.yellow, C.bg), width: "100%", padding: 14, fontSize: 15, marginTop: 10 }}>{t("coach.apply")}</button>
                 </>
               )}
             </div>
