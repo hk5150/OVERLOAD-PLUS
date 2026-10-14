@@ -5062,7 +5062,7 @@ function App() {
                       fontSize: 13, fontFamily: "inherit", fontWeight: 700, whiteSpace: "nowrap",
                       border: `1px dashed ${insertAt === exIdx + 1 ? C.yellow : C.border}`,
                       background: insertAt === exIdx + 1 ? C.yellow : "transparent",
-                      color: insertAt === exIdx + 1 ? "#fff" : C.muted,
+                      color: insertAt === exIdx + 1 ? C.bg : C.muted,
                     }}>
                     {insertAt === exIdx + 1 ? t("picker.insertClose") : t("picker.insertHere")}
                   </button>
@@ -5071,7 +5071,7 @@ function App() {
 
                 {/* その場で種目を選べるパネル(下までスクロール不要) */}
                 {insertAt === exIdx + 1 && (
-                  <div style={{ background: C.surface, borderRadius: 14, padding: 12, marginBottom: 12, border: `1px solid ${C.red}` }}>
+                  <div style={{ background: C.surface, borderRadius: 14, padding: 12, marginBottom: 12, border: `1px solid ${C.yellow}` }}>
                     <input value={search} onChange={e => setSearch(e.target.value)} onFocus={selectOnFocus}
                       placeholder={t("picker.searchPlaceholder")}
                       style={{ width: "100%", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: "9px 10px", fontSize: 16, fontFamily: "inherit", marginBottom: 8 }} />
@@ -5125,7 +5125,7 @@ function App() {
           <div style={{ background: C.surface, borderRadius: 14, padding: 14, border: `1px solid ${insertAt != null ? C.yellow : C.border}` }}>
             {insertAt != null && (
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, background: C.bg, borderRadius: 8, padding: "8px 10px", marginBottom: 10 }}>
-                <span style={{ fontSize: 13, color: C.red, fontWeight: 700, minWidth: 0 }}>
+                <span style={{ fontSize: 13, color: C.yellow, fontWeight: 700, minWidth: 0 }}>
                   {t("picker.insertAt", { n: insertAt })}
                 </span>
                 <button onClick={() => setInsertAt(null)} style={{ ...btn("transparent", C.muted), padding: "2px 8px", fontSize: 12, flexShrink: 0 }}>{t("picker.insertReset")}</button>
@@ -6338,7 +6338,7 @@ function App() {
               <div role="status" style={{ background: "#1E3226", color: "#A8E6BC", borderRadius: 8, padding: 10, fontSize: 13, marginBottom: 10 }}>{backupMsg}</div>
             )}
             <button onClick={exportBackup} disabled={workouts.length === 0}
-              style={{ ...btn(workouts.length === 0 ? C.surface2 : C.red, workouts.length === 0 ? C.muted : "#fff"), width: "100%", padding: 14, fontSize: 14, marginBottom: 8 }}>
+              style={{ ...btn(workouts.length === 0 ? C.surface2 : C.yellow, workouts.length === 0 ? C.muted : C.bg), width: "100%", padding: 14, fontSize: 14, marginBottom: 8 }}>
               {t("backup.export")}
             </button>
 
