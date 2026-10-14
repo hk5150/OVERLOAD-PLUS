@@ -1,0 +1,1 @@
+- [Watch ワークアウト再始動・終了の罠](watch-workout-restart-pitfall.md) — start() は走行中を捨てる。終了は syncWorkout のみ、lastSaved より recordStartAt 一致が優先

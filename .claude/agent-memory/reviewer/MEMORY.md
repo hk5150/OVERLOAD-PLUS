@@ -19,7 +19,18 @@
 - [await跨ぎのsetState分割](kurabell-await-split-setstate.md) — saveWorkoutでawait前後に分けたsetStateが中間renderでLive Activity等のeffectを一瞬走らせる(v134)
 - [UISceneライフサイクル](kurabell-uiscene-lifecycle.md) — 1.1.1(12)でscene化。AppDelegateのdidBecomeActive/windowは死ぬ。Capacitor 6.2.1コアはkeyWindow不使用(確認済)
 - [spanのaria-label](kurabell-aria-label-on-span.md) — role無しspanのaria-labelは無視されうる。分割+aria-hiddenで読み上げが欠ける(v1.3改善要望9)
-- [種目削除の元に戻す](kurabell-remove-undo.md) — v1.3の✕削除のundoは1枠・Day名で照合・保存後も残る。連打で前の削除のDay登録が戻らない
+- [種目削除の元に戻す](kurabell-remove-undo.md) — notice 1枠・Day名で照合。連打で前の削除のDay登録が戻らない。保存/破棄でclearNoticeされる(1.4)
 - [Day名は履歴のキー](kurabell-day-name-is-history-key.md) — sessionで履歴を引く。自動改名・同名Dayで前回が切れる/混ざる。プリセットDayは登録0件。v1.3でautoMenu登録優先(0→1の崖)
 - [Watch完了画面のsheet](kurabell-watch-finished-sheet.md) — v1.3改善12: 子sheet表示中に親sheetを出す経路が未確認。shown idを閉じた時に書くので固着/再表示の窓
 - [差し替えでex.idは変わらない](kurabell-exid-survives-swap.md) — swapExerciseはid保持。ex.idキーのキャッシュ(1.4次の一手のAI文)が別種目・別単位に持ち越される
+- [AIコーチの取り込みとundo](kurabell-coach-merge-undo.md) — 1.4: mergeCoachPlanはid/行番号保持。undoはtoday丸ごとで5秒内の入力を消す。案は表示単位で保持
+- [YOU WIN!の判定経路](kurabell-you-win-trigger.md) — 1.4: RirSelectのonChangeだけで判定、⚡/緑は描画時。基準は10-09→10-10→10-11で2回反転、コメント/テスト/docs取り残し注意
+- [画像共有と写真の権限](kurabell-image-share-photo-permission.md) — UIImage共有はNSPhotoLibraryAddUsageDescription必須(1.4(19))。休憩のblur抑止とWU、SS正規化とundo
+- [「今日」の自動選択effect](kurabell-auto-cursor-effect.md) — stalestDayIndex includeFrom+split.manual。未来時刻で保存直後に戻る/改名・追加で即ジャンプ/並走persist
+- [内蔵種目と同名カスタム](kurabell-builtin-vs-custom-name-collision.md) — EXERCISE_DB追加で既存の同名カスタムが2行化・内蔵の係数が勝つ・設定編集が効かない(2026-10-11)
+- [ドメイン名とApp内ローカルの影](kurabell-domain-global-shadowing.md) — 新グローバルがApp内の同名ローカルに隠れ起動後に落ちる(trainedMuscles, 2026-10-11)。grepで宣言を全部見る
+- [Watch心拍の古さと行の跳ね](kurabell-watch-hr-freshness.md) — 1.4.1(31): 途切れても最後の値が残る(iPhoneは15秒で隠す)。心拍の有無でヘッダ行の高さが変わる
+- [Watchの引き取り直しとforceEnd](kurabell-watch-recover-adopt.md) — 1.4.1(35): start冒頭adoptが新記録の開始を消費/forceEnd使い捨ては成否不明でボタン固着
+- [Instagramストーリー画像](kurabell-insta-story-image.md) — story分岐は一覧744pxで8種目から切れる/上下の重なり/drawBest切り出しで投稿用の字が変化(2026-10-12)
+- [Watch無操作30分終了](kurabell-watch-idle-end.md) — 1.4.2: lastActivityAt非永続でrecover後に誤discard/discarded+startedの同一drain/scenePhase判定
+- [Barlow Condensedのウェイト](kurabell-barlow-weights.md) — 同梱は600/800のみ。fontWeight 700は800に丸まり、700/800の強弱は見えない(2026-10-13 履歴チップ)

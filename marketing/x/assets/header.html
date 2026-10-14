@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8">
+<style>
+@font-face { font-family: "Barlow Condensed"; font-weight: 800; src: url(barlow-condensed-800-latin.woff2) format("woff2"); }
+:root { --bg: #141517; --line: #2E3237; --text: #F2F0EB; --muted: #A3A8B0; --yellow: #E8B33C; --green: #4CAF6E; }
+html, body { margin: 0; width: 1500px; height: 500px; background: var(--bg); overflow: hidden;
+  font-family: "Hiragino Sans", "Hiragino Kaku Gothic ProN", sans-serif; color: var(--text); }
+.head { position: absolute; left: 92px; top: 96px; font-size: 78px; font-weight: 800; line-height: 1.12; letter-spacing: -0.01em; }
+.head em { font-style: normal; color: var(--yellow); }
+.sub { position: absolute; left: 96px; top: 296px; font-size: 25px; font-weight: 600; color: var(--muted); }
+.cmp { position: absolute; right: 70px; top: 70px; width: 700px; }
+.line { display: flex; align-items: baseline; gap: 22px; padding: 10px 0; border-bottom: 2px solid var(--line); }
+.lab { width: 70px; font-size: 26px; font-weight: 700; color: var(--muted); }
+.num { font-family: "Barlow Condensed"; font-weight: 800; font-size: 84px; line-height: 1; }
+.u { font-size: 26px; color: var(--muted); font-weight: 700; margin: 0 4px; }
+.today .num { color: var(--green); }
+.today .lab { color: var(--text); }
+.diff { margin-left: auto; font-family: "Barlow Condensed"; font-weight: 800; font-size: 52px; color: var(--green); }
+.row { position: absolute; right: 80px; top: 196px; width: 720px; border-radius: 16px; clip-path: inset(0 0 0 8px round 16px); }
+.cap { position: absolute; right: 86px; top: 152px; font-size: 22px; font-weight: 700; color: var(--muted); letter-spacing: .04em; }
+.pts { position: absolute; left: 722px; top: 372px; display: flex; gap: 26px; font-size: 22px; font-weight: 700; color: var(--text); }
+.pts span::before { content: ""; display: inline-block; width: 8px; height: 8px; background: var(--yellow); margin-right: 12px; vertical-align: 4px; }
+</style></head><body>
+<div class="head">毎回の<em>伸び</em>が、<br>見える。</div>
+<div class="sub">前回の重量・回数・余力が、セットごとに並ぶ。</div>
+<div class="cap">1RMを更新したセット</div>
+<img class="row" src="row1.png">
+<div class="pts"><span>Apple Watch 対応</span><span>買い切り・サブスクなし</span><span>圏外でも動く</span></div>
+</body></html>
