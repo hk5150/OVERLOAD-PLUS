@@ -1,0 +1,8 @@
+• Story image for Instagram: a tall image with every exercise and set, from the finish screen or any day in History. Pick it or the post image you already had.
+• Tidier exercise cards: one line above the sets (Last · MAX 1RM · Top weight). The est. 1RM vs your best appears once you log a set today.
+• History: each set is shown as a chip, and the set that beat your 1RM is yellow.
+• The top bar (elapsed time, volume, rest) stays hidden until you start logging.
+• Primary buttons are now yellow; red is only for actions you can't undo.
+• AI Coach: "Clear" empties the answer box.
+• Apple Watch: rest alerts now arrive on time even with your wrist down.
+• Apple Watch: if you close the iPhone app without saving, the watch workout ends after 30 minutes.

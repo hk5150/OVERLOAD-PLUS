@@ -93,21 +93,30 @@ else if (cmd === "push") {
   let v = await findVersion(ver);
   if (!v) {
     console.log(`版 ${ver} はまだ無い → ${APPLY ? "作る" : "(--apply で作る)"}`);
-    if (!APPLY) { dryNote(); process.exit(0); }
+  }
+  // 版がまだ無い dry-run では、作ったときに引き継がれる直前の版と比べる(差分を見てから --apply できるように)
+  let cmp = v;
+  if (!v && !APPLY) {
+    const vs = await all(`/v1/apps/${APP_ID}/appStoreVersions?filter[platform]=IOS&limit=10`);
+    cmp = vs.sort((a, b) => (b.attributes.createdDate || "").localeCompare(a.attributes.createdDate || ""))[0] || null;
+    if (!cmp) { dryNote(); process.exit(0); }
+    console.log(`  (作ると前の版から引き継がれるので、${cmp.attributes.versionString}(${cmp.attributes.appVersionState})と比べる。プロモーション用テキストは空から)`);
+  } else if (!v) {
     v = (await api("/v1/appStoreVersions", { method: "POST", body: { data: {
       type: "appStoreVersions", attributes: { platform: "IOS", versionString: ver },
       relationships: { app: { data: { type: "apps", id: APP_ID } } } } } })).data;
     console.log(`  作った(${v.attributes.appVersionState})。説明文などは前の版から引き継がれ、プロモーション用テキストは空になる`);
+    cmp = v;
   } else {
     console.log(`版 ${ver}: ${v.attributes.appVersionState}`);
   }
 
-  const have = Object.fromEntries((await localizations(v.id)).map(l => [l.attributes.locale, l]));
+  const have = Object.fromEntries((await localizations(cmp.id)).map(l => [l.attributes.locale, l]));
   for (const [loc, fields] of Object.entries(want)) {
     const cur = have[loc];
     const patch = {};
     for (const [f, t] of Object.entries(fields)) {
-      const old = cur?.attributes[f] ?? "";
+      const old = cmp === v || f !== "promotionalText" ? (cur?.attributes[f] ?? "") : "";
       if (old.replace(/\n+$/, "") !== t) patch[f] = t;
     }
     const names = Object.keys(patch);
@@ -119,7 +128,7 @@ else if (cmd === "push") {
   }
 
   if (notes != null) {
-    const rd = await reviewDetail(v.id);
+    const rd = await reviewDetail(cmp.id);
     const same = (rd?.attributes.notes ?? "").replace(/\n+$/, "") === notes;
     console.log(`  審査メモ: ${same ? "変更なし" : `変える(${[...(rd?.attributes.notes ?? "")].length}→${[...notes].length}字)`}`);
     if (APPLY && !same) {
@@ -135,11 +144,16 @@ else if (cmd === "push") {
     const infos = await all(`/v1/apps/${APP_ID}/appInfos`);
     const stateOf = (i) => i.attributes.state ?? i.attributes.appStoreState;
     info = infos.find(i => !INFO_LOCKED.includes(stateOf(i)));
+    // 版がまだ無い dry-run では書ける App Info も無い。配信中の名前と比べて差分だけ見せる
+    if (!info && !APPLY && !v) {
+      info = infos[0] || null;
+      if (info) console.log(`  App Info: 書けるものは版を作ると現れる。今の ${stateOf(info)} の分と比べる`);
+    }
     if (!info) {
       console.error(`  アプリ名・サブタイトル: 書ける App Info が無い(${infos.map(stateOf).join(" / ")})。版が審査中か、まだ作っていない`);
       if (APPLY) process.exit(1);
     } else {
-      console.log(`  App Info: ${stateOf(info)}`);
+      if (v || APPLY) console.log(`  App Info: ${stateOf(info)}`);
       const have = Object.fromEntries((await all(`/v1/appInfos/${info.id}/appInfoLocalizations`)).map(l => [l.attributes.locale, l]));
       for (const [loc, fields] of Object.entries(wantInfo)) {
         const cur = have[loc];
