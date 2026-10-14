@@ -49,6 +49,9 @@
   }
 
   html, body { margin: 0; padding: 0; background: #141517; color: #F2F0EB; }
+  /* 上部バーが出入りしたときの位置は、アプリ側(barVisible の useLayoutEffect)で補正する。
+     ブラウザのスクロールアンカリング(Chrome にはあり、iOS の WebKit には無い)が同じずれを先に直すと二重になるので切る */
+  html { overflow-anchor: none; }
   body {
     font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic', Meiryo, sans-serif;
     -webkit-font-smoothing: antialiased;
@@ -302,7 +305,7 @@
 
 <!-- アプリ本体(Babelで変換して実行する。ここは直接実行されない) -->
 <script type="text/plain" id="appsrc">
-const { useState, useEffect, useMemo, useRef } = React;
+const { useState, useEffect, useLayoutEffect, useMemo, useRef } = React;
 const { LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } = Recharts;
 
 
@@ -3831,6 +3834,41 @@ function App() {
   // 記録を始める前(メニュー・AIコーチの画面)は「0:00 / 0kg / インターバル開始」が一番上に居座るだけだったので出さない(2026-10-13、北村さん「UI 改善」)。
   // notice(「元に戻す」)はバーの中に出すので、出ている間はバーも出す
   const barVisible = (view === "log" && (startAt != null || today.length > 0 || !!notice)) || restStartAt != null;
+  // バーが出入りした瞬間に、見ていた所を動かさない(2026-10-14、北村さん「位置を保つ」)。
+  // バーは sticky で文書の流れに入っているので、出る・消えるとその下の中身が丸ごと上下する
+  // (履歴タブで休憩が始まる・終わる、Watch から休憩が届く、「元に戻す」が消える、記録を始める)。
+  // header の paddingTop も safe-area 分入れ替わるので、バーの高さではなく header 下端の文書上の位置を
+  // 描画のたびに覚えておき、切り替わった描画で「直前の scrollY + 前後差」へ scrollTo する(上端では届く分だけ動く)。
+  // 差分の scrollBy にしないのは、下端近くでバーが消えると文書が縮んだ時点でブラウザが scrollY を先に詰めていて、
+  // そこからさらに引くと逆向きに跳ねるため(reviewer 指摘、実測で再現)。直前の scrollY は scroll イベントで更新する。
+  // タブの切り替えで同時に変わったときは別の画面なので補正しない
+  const headerRef = useRef(null);
+  const contentTopRef = useRef(null); // { y: header下端の文書上の位置, sy: その時点の scrollY, bar, view }
+  const measureContentTop = () => {
+    const el = headerRef.current;
+    return el ? el.getBoundingClientRect().bottom + window.scrollY : null;
+  };
+  useLayoutEffect(() => {
+    const y = measureContentTop();
+    const prev = contentTopRef.current;
+    if (y != null && prev && prev.bar !== barVisible && prev.view === view) {
+      const d = Math.round(y - prev.y);
+      if (d !== 0) window.scrollTo(0, Math.max(0, prev.sy + d));
+    }
+    contentTopRef.current = y == null ? null : { y, sy: window.scrollY, bar: barVisible, view };
+  });
+  // スクロールでは描画が起きないので、直前の scrollY はここで追う。
+  // 画面の回転などで safe-area が変わると、描画が無くても header の位置が変わる
+  useEffect(() => {
+    const onScroll = () => { if (contentTopRef.current) contentTopRef.current.sy = window.scrollY; };
+    const onResize = () => {
+      const y = measureContentTop();
+      if (y != null && contentTopRef.current) contentTopRef.current = { ...contentTopRef.current, y, sy: window.scrollY };
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onResize);
+    return () => { window.removeEventListener("scroll", onScroll); window.removeEventListener("resize", onResize); };
+  }, []);
   // 案内(「書き出す ›」「購入 ›」)から設定タブの該当の欄へ飛ぶ。購入欄・バックアップ欄は設定の下の方にあるので、
   // タブを切り替えるだけでは見えない。切り替え直後は欄がまだ描画されていないので、次のフレームまで待つ
   const goToSettings = (anchorId) => {
@@ -4345,7 +4383,7 @@ function App() {
       )}
 
       {/* 上部バーが出ているときはそちらがsafe-areaを負担しているので、ここでは足さない */}
-      <header style={{
+      <header ref={headerRef} style={{
         padding: "16px 16px 12px", display: "flex", justifyContent: "space-between", alignItems: "flex-start",
         paddingTop: barVisible ? 16 : "calc(16px + env(safe-area-inset-top))",
       }}>
@@ -4655,7 +4693,8 @@ function App() {
 
               {/* 種目の操作(改善要望 11)。1.2 では「⋯」に畳んでいたが、毎回1タップ余計にかかった。
                   畳んだ理由(2段のボタンでカードが長くなり、入力欄が下に追いやられた)に配慮して、
-                  アイコン+短い文字の7マスを1段に収める。並べ替えとスーパーセットは使う頻度が低いので薄く。
+                  アイコン+短い文字の7マスを1段に収める。並べ替え・設定・スーパーセットは使う頻度が低いので薄く
+                  (設定は 2026-10-14 に薄い側へ。よく使うのはフォーム・変更・履歴)。
                   この行は折り返さないので .tapArea を付けてよい(set 行と同じ扱い) */}
               {(() => {
                 const ssOn = inGroup && prevEx && prevEx.ssGroup === ex.ssGroup;
@@ -4669,14 +4708,15 @@ function App() {
                   display: "grid", placeItems: "center", cursor: disabled ? "default" : "pointer",
                 });
                 return (
-                  <div style={{ display: "flex", alignItems: "stretch", gap: 2, marginBottom: 10, marginTop: -2 }}>
+                  // 間は空けない(320px の英語で「Settings」が 1px はみ出したため。ボタンは透明なので見た目は変わらない)
+                  <div style={{ display: "flex", alignItems: "stretch", gap: 0, marginBottom: 10, marginTop: -2 }}>
                     <div style={{ flex: 1, minWidth: 0, display: "flex" }}>
                       <button onClick={() => moveExercise(ex.id, -1)} disabled={exIdx === 0} aria-label={t("log.moveUp")} className="tapArea" style={arrow(exIdx === 0)}>
                         <Icon name="up" size={16} /></button>
                       <button onClick={() => moveExercise(ex.id, 1)} disabled={exIdx === today.length - 1} aria-label={t("log.moveDown")} className="tapArea" style={arrow(exIdx === today.length - 1)}>
                         <Icon name="down" size={16} /></button>
                     </div>
-                    <button onClick={() => setOpenCfg({ ...openCfg, [ex.id]: !openCfg[ex.id] })} aria-label={t("log.exerciseConfig")} aria-expanded={!!openCfg[ex.id]} className="tapArea" style={cell(openCfg[ex.id])}>
+                    <button onClick={() => setOpenCfg({ ...openCfg, [ex.id]: !openCfg[ex.id] })} aria-label={t("log.exerciseConfig")} aria-expanded={!!openCfg[ex.id]} className="tapArea" style={cell(openCfg[ex.id], true)}>
                       <Icon name="settings" size={16} />{t("act.config")}</button>
                     <button onClick={() => openYouTube(ex.name)} aria-label={t("log.youtube")} className="tapArea" style={cell(false)}>
                       <Icon name="youtube" size={16} />{t("act.form")}</button>
