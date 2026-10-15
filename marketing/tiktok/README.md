@@ -12,6 +12,10 @@
    Claude はアカウントの作成・ログイン・投稿をしない
 4. 投稿したら `published/` へ移し、md の末尾に投稿日時と URL を書く
 
+投稿の確認は、Mac の Chrome(@kurabell_workout_log_jp でログイン済み)で TikTok Studio の「投稿」
+(`tiktok.com/tiktokstudio/content`)を開いて読むだけでよい。投稿日時・公開範囲・視聴数・いいね・コメントが並ぶ。
+curl では WAF の確認画面で止まる(2026-10-16)。投稿日時は動画 ID からも分かる(上位32ビットが Unix 秒)。
+
 ## 動画
 
 Instagram のリールと同じ 1080×1920(9:16)をそのまま使う。新しく作らない。
