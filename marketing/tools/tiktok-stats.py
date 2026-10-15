@@ -4,6 +4,8 @@
 ログインも API キーも使わない(誰でも見られるページの HTML に埋め込まれた JSON を読むだけ)。
 TikTok はプロフィールの HTML に投稿の一覧を入れないので、投稿は URL を1本ずつ開く。
 URL は marketing/tiktok/published/*.md と marketing/tiktok/urls.txt から集める。
+プロフィールのページは curl だと WAF の確認画面で止まる(2026-10-16、Mac で確認)。
+そのときは投稿ページに入っている投稿者の数字(authorStats)でフォロワー数などを埋める。
 
 使い方:
   python3 tiktok-stats.py [--account kurabell_workout_log_jp] [--out-dir DIR] [--dry-run]
@@ -62,7 +64,10 @@ def video(url):
         raise ValueError(f"投稿が読めない(statusCode={d.get('statusCode')})")
     s = item.get("statsV2") or item.get("stats") or {}
     posted = item.get("createTime")
+    a = item.get("authorStatsV2") or item.get("authorStats") or {}
     return {
+        "author": {"followers": a.get("followerCount"), "likes": a.get("heartCount"),
+                   "videos": a.get("videoCount")},
         "id": item.get("id"),
         "title": (item.get("desc") or "").splitlines()[0][:40] if item.get("desc") else "",
         "posted": dt.datetime.fromtimestamp(int(posted)).strftime("%Y-%m-%d") if posted else "",
@@ -145,16 +150,22 @@ def main():
     new, errors = [], []
     try:
         p = profile(a.account)
-        new.append({"date": today, "kind": "profile", "id": a.account,
-                    "url": f"https://www.tiktok.com/@{a.account}", **p})
     except Exception as e:  # noqa: BLE001  1件失敗しても残りは取る
-        errors.append(f"プロフィール: {e}")
+        p, profile_error = None, f"プロフィール: {e}"
+    author = None
     for u in video_urls(a.account):
         time.sleep(2)
         try:
-            new.append({"date": today, "kind": "video", "url": u, **video(u)})
+            v = video(u)
+            author = author or (v["author"] if v["author"]["followers"] is not None else None)
+            new.append({"date": today, "kind": "video", "url": u, **v})
         except Exception as e:  # noqa: BLE001
             errors.append(f"{u}: {e}")
+    if p or author:
+        new.insert(0, {"date": today, "kind": "profile", "id": a.account,
+                       "url": f"https://www.tiktok.com/@{a.account}", **(p or author)})
+    else:
+        errors.insert(0, profile_error)
 
     if a.dry_run:
         print(json.dumps({"rows": new, "errors": errors}, ensure_ascii=False, indent=1))
