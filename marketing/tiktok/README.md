@@ -16,6 +16,16 @@
 (`tiktok.com/tiktokstudio/content`)を開いて読むだけでよい。投稿日時・公開範囲・視聴数・いいね・コメントが並ぶ。
 curl では WAF の確認画面で止まる(2026-10-16)。投稿日時は動画 ID からも分かる(上位32ビットが Unix 秒)。
 
+## 数字の取り方
+
+毎日 11:50 に launchd(`com.kurabell.tiktok-stats`、`marketing/tools/com.kurabell.tiktok-stats.plist`)が
+`marketing/tools/tiktok-stats.py` を動かし、投稿ごとの再生・いいね・コメント・シェア・保存とフォロワー数を
+`reports/tiktok/tiktok-stats.csv`(履歴)と `.md`(最新の表と直近14日の推移)に残す。12時のルーティンが読んで報告に載せる。
+ログは `reports/tiktok/launchd.log`。
+
+- 新しい投稿は、`published/*.md` に URL(`https://www.tiktok.com/@kurabell_workout_log_jp/video/…`)を書けば翌日から拾われる
+- 止めるとき: `launchctl bootout gui/$(id -u)/com.kurabell.tiktok-stats`
+
 ## 動画
 
 Instagram のリールと同じ 1080×1920(9:16)をそのまま使う。新しく作らない。

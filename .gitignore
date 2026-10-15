@@ -14,3 +14,4 @@ www/
 
 # App Store Connect の API キー(リポジトリに入れない。置き場所は ~/.appstoreconnect/private_keys/)
 *.p8
+__pycache__/
