@@ -16,6 +16,7 @@
 | `build-silent-reel.sh` | ナレーションなしのリール(文字 + テーマソング、15〜20秒)。2026-10-10〜11 に使った型。北村さんの判断で使うのをやめた(機能説明だけに見えるため) | `build-silent-reel.sh <リールのフォルダ> <出力.mp4>`(フォルダに `reel.html`・`durations.txt`) |
 | `build-covers.py` | カバー画像(1080×1920)。一覧で 3:4 に切られても文字が残る位置 | `python3 build-covers.py [covers.json] [名前 ...]`(既定は `~/Desktop/KURABELL-reels/covers/covers.json`) |
 | `white-icon.py` | @kurabell_workout_log_en のプロフィール写真(白背景) | `python3 white-icon.py` |
+| `shoot-sns-tiktok.js` | TikTok 05〜07 用の画面(分割のパターン選択・設定の体重の欄、JP)。分割タブの Day 一覧は「最終○日前」が出るので撮らない | `shoot-sns*.js` と同じ。MCP のブラウザが使用中のときは、Node から Playwright を直接動かして `executablePath` に Google Chrome を渡す |
 | `shoot-sns*.js` | SNS 用のアプリ画面(JP・EN、1320×2868)。`shoot-sns-hr*.js` は Watch のプラグインを模して、上部バーに心拍が出ている記録画面を撮る | Playwright MCP の `browser_run_code_unsafe` に渡す。一覧は `~/Desktop/KURABELL-reels/screens/README.md` |
 
 - 制作フォルダの `build-silent-reel.sh` と `covers/build-covers.py` は、ここを呼ぶだけの入口(古いパスのまま使えるように残している)
