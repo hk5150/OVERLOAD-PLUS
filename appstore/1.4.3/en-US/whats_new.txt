@@ -1,0 +1,2 @@
+• Apple Watch: during a workout, rest alerts now come from the watch itself, right on time. Before, they could arrive more than 10 seconds late. While KURABELL is open on the watch, you get a tap and a sound without the "min elapsed" banner; the rest timer shows how long it's been.
+• Apple Watch: fixed the watch workout sometimes staying on after you save, or after you close the iPhone app without saving.
