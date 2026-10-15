@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- tiktok-stats.py を毎日 11:50 に動かす(12時のルーティンが結果を読む)。
+     入れ方: ~/Library/LaunchAgents/ にコピーして launchctl bootstrap gui/$(id -u) <plist>
+     Mac が寝ていた日は、起きたときに1回動く。 -->
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.kurabell.tiktok-stats</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/python3</string>
+    <string>/Users/hajimekitamura/OVERLOAD-PLUS/marketing/tools/tiktok-stats.py</string>
+  </array>
+  <key>WorkingDirectory</key><string>/Users/hajimekitamura/OVERLOAD-PLUS</string>
+  <key>StartCalendarInterval</key>
+  <dict><key>Hour</key><integer>11</integer><key>Minute</key><integer>50</integer></dict>
+  <key>StandardOutPath</key><string>/Users/hajimekitamura/OVERLOAD-PLUS/reports/tiktok/launchd.log</string>
+  <key>StandardErrorPath</key><string>/Users/hajimekitamura/OVERLOAD-PLUS/reports/tiktok/launchd.log</string>
+</dict>
+</plist>
