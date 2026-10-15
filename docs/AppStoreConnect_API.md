@@ -9,7 +9,7 @@
 キーはリポジトリに置かない。`~/.appstoreconnect/kurabell.json` と `private_keys/AuthKey_<keyId>.p8` を使う。日次の指標取得・`npm run ios:upload` と同じキー。
 
 **書き込む操作は、どれも `--apply` を付けたときだけ行う。** 付けなければ、何をするか(差分)を表示して終わる。
-`--apply` のときは `.claude/locks/` に印があると止まる(自分の印なら `--ignore-locks`)。審査への提出は、さらに `--yes-submit` が要る。
+`--apply` のときは `.locks/` に印があると止まる(自分の印なら `--ignore-locks`)。審査への提出は、さらに `--yes-submit` が要る。
 
 | やること | コマンド |
 |---|---|

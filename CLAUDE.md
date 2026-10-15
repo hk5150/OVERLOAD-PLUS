@@ -170,13 +170,17 @@ Web 版の起動確認(8765)は開発中の確認手段としては引き続き�
 - **作業を始めるとき**(新しい会話の最初と、時間が空いた後)は、`git log` に加えて
   `mcp__ccd_session_mgmt__list_sessions` で、cwd がこのリポジトリで直近に動いた他のセッションを見て、
   `list_events` で何をしているかを読む。同じ作業を進めているセッションがあれば、手を付ける前にユーザーに伝える
-- **外に見える共有の状態を変える作業**の前に、`.claude/locks/<作業名>.md` を確かめてから作る。対象は
+- **外に見える共有の状態を変える作業**の前に、`.locks/<作業名>.md` を確かめてから作る。対象は
   App Store Connect の入力・提出、TestFlight へのアップロード、CACHE / 版番号を上げるコミット、main へのマージ。
   中身は「セッション名(`get_session` の `self` で分かる)・何をしているか・始めた時刻」の3行。終わったら必ず消す
 - 印は `.claude/hooks/show-locks.sh` が、セッション開始時とユーザーの発言ごとに自動で文脈に出す。
   **他のセッションの印があれば、その作業には触らない。** 自分が引き取るべき状況なら、ユーザーに確かめてから
 - ぶつかったと気づいたら、`mcp__ccd_session_mgmt__send_message` で相手のセッションに、こちらの状況を短く知らせる
-- `.claude/locks/` は gitignore 済み(このMacのセッション同士でだけ使う)
+- `.locks/` は gitignore 済み(このMacのセッション同士でだけ使う)
+  **印を `.claude/` の下に置かないこと。** Claude Code は `.claude/` への書き込み・削除を、許可の一覧に書いてあっても毎回人に確かめる。
+  無人のルーティンは最初の一手(印を作る)で止まり、止まった回が終わらないと次の日の回も始まらない(10/13〜10/15 に12時・13時が丸2日止まった)。
+  2026-10-16 に `.claude/locks/` から移した。表示の仕組みと `scripts/asc/client.mjs` は旧置き場もまだ読む
+- 日次ルーティンの結果は、毎回 `reports/routines/<名前>.md` の末尾に足される(gitに入れず、このMacに置くだけ)
 - **日次ルーティン「【毎日12時】KURABELL App Store実績」**(scheduled task `kurabell-appstore-metrics`、毎日12:12頃)も同じ印を使う。
   App Store Connect API(`~/.appstoreconnect/`、分析レポートが出る前は Chrome の分析画面で補う)で読むだけで、その間 `appstore-metrics.md` の印を出す。結果は Obsidian の
   `Projects/kurabell-metrics.md`(公開・審査提出の出来事もメモ欄に入る)。指標を知りたいときはまずそこを読む。

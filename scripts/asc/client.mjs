@@ -76,10 +76,11 @@ export const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 // 印があれば止める(--ignore-locks で無視。自分の印なら付けてよい)
 export function checkLocks() {
   if (!APPLY || has("--ignore-locks")) return;
-  const dir = path.join(REPO, ".claude/locks");
-  const locks = existsSync(dir) ? readdirSync(dir).filter(f => f.endsWith(".md")) : [];
+  // 旧置き場の .claude/locks/ も見る(2026-10-16 に .locks/ へ移した)
+  const dirs = [".locks", ".claude/locks"].map(d => path.join(REPO, d));
+  const locks = dirs.flatMap(dir => existsSync(dir) ? readdirSync(dir).filter(f => f.endsWith(".md")).map(f => path.join(dir, f)) : []);
   if (locks.length) {
-    console.error(`作業中の印があります: ${locks.join(", ")}(${dir})`);
+    console.error(`作業中の印があります: ${locks.join(", ")}`);
     console.error("他のセッションの作業なら触らない。自分の印なら --ignore-locks を付けて実行する");
     process.exit(2);
   }
