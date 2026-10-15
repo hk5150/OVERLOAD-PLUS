@@ -10,6 +10,7 @@
 | `tts.sh` | ナレーションを1場面ぶん作る(Gemini 3.8 Flash TTS、声 Charon)。Genspark が応答しないときは5分で打ち切り、1回やり直して失敗で終わる | `tts.sh <出力.mp3> <ja\|en> "<読む文>"` |
 | `tiktok-safe.sh` | Instagram 用のリールを TikTok 用にする(映像を80%に縮めて余白を付ける。TikTok は左右が約1割切れるため) | `tiktok-safe.sh <元の mp4> <出力.mp4>` |
 | `tiktok-cta.sh` | TikTok 用の動画の最後の場面(参考文献とロゴ)に「App Storeで「KURABELL」と検索」を入れる(個人アカウントはフォロワー1,000人までリンクを貼れないため)。`tiktok-safe.sh` の後に使う | `tiktok-cta.sh <元のリール.mp4> <tiktok-safe 済み.mp4> <出力.mp4>` |
+| `tiktok-stats.py` | TikTok の投稿ごとの再生・いいね・コメント・シェア・保存と、フォロワー数を読む(ログインなし)。投稿は `marketing/tiktok/published/*.md` の URL を1本ずつ開く。プロフィールのページは curl だと WAF で止まるので、フォロワー数は投稿ページの値で埋める。**クラウドからは TikTok に断られるので Mac で動かす**(2026-10-16) | `python3 tiktok-stats.py [--dry-run] [--out-dir DIR]`(既定の出力は `reports/tiktok/` の csv と md。同じ日に2回動かすとその日の行を置き換える) |
 | `shoot-frames.sh` | reel.html の各場面を Chrome のヘッドレスで `frames/sN.png` にし、確認用の横並び `sheet.png` も作る | `shoot-frames.sh <リールのフォルダ>` |
 | `add-theme.sh` | ナレーション入りのリール(制作フォルダの `build-reel.sh` の出力)にテーマソングを重ねる。**2026-10-11 から新しいリールはこの型**(エビデンス → アプリの機能、30〜45秒) | `add-theme.sh <ナレーションだけの mp4> <出力.mp4>` |
 | `build-silent-reel.sh` | ナレーションなしのリール(文字 + テーマソング、15〜20秒)。2026-10-10〜11 に使った型。北村さんの判断で使うのをやめた(機能説明だけに見えるため) | `build-silent-reel.sh <リールのフォルダ> <出力.mp4>`(フォルダに `reel.html`・`durations.txt`) |
