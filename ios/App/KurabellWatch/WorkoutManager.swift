@@ -23,15 +23,21 @@ final class WorkoutManager: NSObject, ObservableObject {
     // 記録が動かないまま(SessionStore.lastActivityAt)これだけたったら、保存されないまま終わった記録と見なして終える
     // (1.4.2、北村さん「アプリを終了したが Apple Watch が閉じない」。iOS はアプリを上にスワイプして閉じても知らせてこないので、時間で見る)
     static let idleLimit: TimeInterval = 30 * 60
+    // 見張り(watchdog)の間隔
+    static let watchInterval: TimeInterval = 60
 
     private let store = HKHealthStore()
     private var session: HKWorkoutSession?
     private var builder: HKLiveWorkoutBuilder?
     private var watchdog: Task<Void, Never>?
-    private var idleWatch: Task<Void, Never>?
     private var endedWaiter: CheckedContinuation<Void, Never>?
+    // endSession の3秒の待ちの合図。前の endSession の待ちが、後の endSession の待ちを解かないように
+    private var endedWaiterId = 0
 
-    @Published private(set) var isRunning = false
+    @Published private(set) var isRunning = false {
+        // 休憩の通知を出すか(willPresent、メインスレッド以外)の判断に使う
+        didSet { SessionStore.setWorkoutRunning(isRunning) }
+    }
     // 今の心拍(Watch の画面に出す。1.4.1 (31)、北村さん「Apple Watch にも心拍数表示」)。ワークアウトが動いていないときは nil
     @Published private(set) var heartRate: Int?
     // 最後に心拍を受け取った時刻。センサーが途切れたら(バンドが緩んだ等)古い値を隠すため(iPhone と同じ15秒。reviewer 指摘)
@@ -57,6 +63,7 @@ final class WorkoutManager: NSObject, ObservableObject {
     // 始めた(または動いているセッションをそのまま使う)なら true
     @discardableResult
     func start(_ config: HKWorkoutConfiguration, forRecord: Double? = nil) async -> Bool {
+        DiagLog.add("WO start req forRecord=\(DiagLog.time(forRecord)) running=\(isRunning) busy=\(isBusy)")
         guard !isBusy, HKHealthStore.isHealthDataAvailable() else { return false }
         if isRunning {
             // まだ続いている記録に付いているセッション、または対応付けを待っている始めたばかりのセッションは捨てない。
@@ -125,7 +132,9 @@ final class WorkoutManager: NSObject, ObservableObject {
             sessionStartMs = now.timeIntervalSince1970 * 1000
             isRunning = true
             armTimers()
+            DiagLog.add("WO start ok forRecord=\(DiagLog.time(forRecord))")
         } catch {
+            DiagLog.add("WO start failed: \(error.localizedDescription)")
             // startActivity の後で失敗したら、始まったセッションを止めてから手放す(参照を捨てるだけだと、
             // 誰にも止められないワークアウトが残る)
             session?.end()
@@ -144,44 +153,58 @@ final class WorkoutManager: NSObject, ObservableObject {
         return true
     }
 
-    // 4時間の上限と、対応付かないセッションの破棄(10分)。start と recover から
+    // 見張り。start と adopt から。1分ごとに、届いている状態での締め直し・4時間の上限・対応付かないセッション・無操作を見る
+    // (常時表示で間引かれても、分単位の判断に数十秒の遅れは問題にならない)。
+    // 以前は上限と対応付けを1回きりの Task で見ていて、そのときちょうど別の保存・破棄の途中(isBusy)だと何もせずに終わり、
+    // 4時間の上限まで残った。また、途中で落とした「保存した」のスナップショットは、次のスナップショットが来るまで拾い直さなかった。
+    // ここでは手が空いていなければ次の回に見直す(2026-10-15、(33)〜(40) の見直し)
     private func armTimers() {
         watchdog?.cancel()
         let started = sessionStartMs
-        let left = max(0, Self.maxDuration - (Date().timeIntervalSince1970 * 1000 - started) / 1000)
         watchdog = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: UInt64(left * 1_000_000_000))
-            guard !Task.isCancelled else { return }
-            await self?.discard(report: true)
-        }
-        // 無操作の見張り。1分ごとに見る(常時表示で間引かれても、30分に対して数十秒の遅れは問題にならない)
-        idleWatch?.cancel()
-        idleWatch = Task { [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 60 * 1_000_000_000)
+                try? await Task.sleep(nanoseconds: UInt64(Self.watchInterval * 1_000_000_000))
                 guard let self, !Task.isCancelled, self.isRunning, self.sessionStartMs == started else { return }
-                guard let r = self.recordStartAt, !self.isBusy else { continue }
-                let last = max(SessionStore.shared.lastActivityAt, Date(timeIntervalSince1970: started / 1000))
-                guard Date().timeIntervalSince(last) >= Self.idleLimit else { continue }
-                SessionStore.shared.markIdleEnded(r)
-                // 保存の知らせが届いていなかっただけなら締めて保存し、そうでなければ破棄する(iPhone は保存時に時刻だけ書く)
-                if let saved = SessionStore.shared.lastSaved, saved.startAt == r {
-                    await self.finish(key: saved.key, endAt: saved.endAt)
-                } else {
-                    await self.discard(report: true)
-                }
-                return
+                guard !self.isBusy else { continue }
+                if await self.checkLimits(started: started) { return }
+                // 届いている最新の状態で、保存・破棄・対応付けを決め直す(受け取ったときに isBusy で落としていても拾う)
+                SessionStore.shared.workoutDidStart()
             }
         }
-        // 記録に対応付かないまま attachWindow を過ぎたら、待たずに破棄する(記録のスナップショットがそれより遅れて届く場合は諦める)。
-        // 対応付いていないセッションは、iPhone から新しいスナップショットが届くまで終わらない(syncWorkout)。
-        // 起こす要求が遅れて届く・iPhone のアプリが閉じられている等で届かないと、4時間の上限まで動き続けていた(2026-10-12、北村さんの実機)
-        let wait = max(0, Self.attachWindow - (Date().timeIntervalSince1970 * 1000 - started) / 1000)
-        Task { [weak self] in
-            try? await Task.sleep(nanoseconds: UInt64(wait * 1_000_000_000))
-            guard let self, self.isRunning, self.sessionStartMs == started, self.recordStartAt == nil else { return }
-            await self.discard(report: false)
+    }
+
+    // 上限に当たって終えたら true
+    private func checkLimits(started: Double) async -> Bool {
+        let now = Date()
+        let age = now.timeIntervalSince1970 - started / 1000
+        if age >= Self.maxDuration {
+            DiagLog.add("WO limit 4h -> discard")
+            await discard(report: true)
+            return true
         }
+        guard let r = recordStartAt else {
+            // 記録に対応付かないまま attachWindow を過ぎたら破棄する(記録のスナップショットがそれより遅れて届く場合は諦める)。
+            // 対応付いていないセッションは、iPhone から新しいスナップショットが届くまで終わらない(syncWorkout)ので、
+            // 起こす要求が遅れて届く・iPhone のアプリが閉じられている等で届かないと、4時間の上限まで動き続けていた(2026-10-12、北村さんの実機)。
+            // iPhone で記録していないときに短く切る案は採らない(記録を始めた知らせが遅れると、その記録の心拍が残らない。reviewer 指摘)
+            guard age >= Self.attachWindow else { return false }
+            DiagLog.add("WO unattached \(Int(age))s -> discard")
+            await discard(report: false)
+            return true
+        }
+        // 無操作の見張り(1.4.2 (40))。保存の知らせが届いていなかっただけなら締めて保存し、そうでなければ破棄する
+        // (iPhone は保存時に時刻だけ書く)
+        let last = max(SessionStore.shared.lastActivityAt, Date(timeIntervalSince1970: started / 1000))
+        guard now.timeIntervalSince(last) >= Self.idleLimit else { return false }
+        SessionStore.shared.markIdleEnded(r)
+        if let saved = SessionStore.shared.lastSaved, saved.startAt == r {
+            DiagLog.add("WO idle 30m, saved known -> finish")
+            await finish(key: saved.key, endAt: saved.endAt)
+        } else {
+            DiagLog.add("WO idle 30m -> discard")
+            await discard(report: true)
+        }
+        return true
     }
 
     // ワークアウト中にアプリが再起動した(更新・システムによる終了など)とき、システムが handleActiveWorkoutRecovery で呼ぶ。
@@ -189,6 +212,7 @@ final class WorkoutManager: NSObject, ObservableObject {
     // (2026-10-12、北村さんの実機。iPhone で保存しても Watch の文字盤に経過時間が出続け、アプリの一覧からも消せなかった)
     // start の途中で呼ばれたら、start が冒頭で同じことをする(adoptRecoveredSession)
     func recover() async {
+        DiagLog.add("WO recovery launch session=\(session != nil) busy=\(isBusy)")
         guard session == nil, !isBusy else { return }
         isBusy = true
         let adopted = await adoptRecoveredSession()
@@ -255,6 +279,7 @@ final class WorkoutManager: NSObject, ObservableObject {
             recordStartAt = nil
         }
         isRunning = true
+        DiagLog.add("WO adopt state=\(session.state.rawValue) start=\(DiagLog.time(sessionStartMs)) record=\(DiagLog.time(recordStartAt))")
         SessionStore.shared.noteActivity()
         // このアプリは一時停止を使わないが、システムや文字盤のボタンで止められていた場合の保険
         if session.state == .paused { session.resume() }
@@ -289,8 +314,10 @@ final class WorkoutManager: NSObject, ObservableObject {
                 try? await Task.sleep(nanoseconds: 500_000_000)
                 if let left = await recoverSession(), left.state == .running || left.state == .paused {
                     left.end()
+                    DiagLog.add("WO forceEnd: still running")
                     return false
                 }
+                DiagLog.add("WO forceEnd: replaced and ended")
                 return true
             }
         }
@@ -308,6 +335,7 @@ final class WorkoutManager: NSObject, ObservableObject {
         guard isRunning, !isBusy, recordStartAt == nil else { return false }
         guard abs(sessionStartMs - r) <= Self.attachWindow * 1000 else { return false }
         recordStartAt = r
+        DiagLog.add("WO attach record=\(DiagLog.time(r))")
         return true
     }
 
@@ -334,8 +362,10 @@ final class WorkoutManager: NSObject, ObservableObject {
             let kcal = builder.statistics(for: HKQuantityType(.activeEnergyBurned))?.sumQuantity()?.doubleValue(for: .kilocalorie())
             if let record { SessionStore.shared.workoutStats = .init(recordStartAt: record, avgHeartRate: hr, kcal: kcal) }
             _ = try await builder.finishWorkout()
+            DiagLog.add("WO finish saved record=\(DiagLog.time(record))")
             if let record { SessionStore.shared.sendWorkoutEvent("saved", recordStartAt: record) }
         } catch {
+            DiagLog.add("WO finish failed: \(error.localizedDescription)")
             builder.discardWorkout()
             // 保存できなかった。iPhone に時刻だけ書いてもらう
             if let record { SessionStore.shared.sendWorkoutEvent("discarded", recordStartAt: record) }
@@ -351,19 +381,25 @@ final class WorkoutManager: NSObject, ObservableObject {
         let record = recordStartAt
         await endSession(session)
         builder.discardWorkout()
+        DiagLog.add("WO discard record=\(DiagLog.time(record)) report=\(report)")
         if report, let record { SessionStore.shared.sendWorkoutEvent("discarded", recordStartAt: record) }
         cleanUp()
     }
 
     private func endSession(_ session: HKWorkoutSession) async {
         guard session.state != .ended else { return }
+        endedWaiterId += 1
+        let id = endedWaiterId
         await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
             endedWaiter = cont
             session.end()
-            // ended の通知が来なくても先へ進む(待ち続けて保存も破棄もできなくなるのを防ぐ)
+            // ended の通知が来なくても先へ進む(待ち続けて保存も破棄もできなくなるのを防ぐ)。
+            // 前の endSession の待ちが、後の endSession の待ちを早く解かないように、自分の回だけを解く
             Task { [weak self] in
                 try? await Task.sleep(nanoseconds: 3_000_000_000)
-                self?.resumeEndedWaiter()
+                guard let self, self.endedWaiterId == id, self.endedWaiter != nil else { return }
+                DiagLog.add("WO end: no ended event in 3s state=\(session.state.rawValue)")
+                self.resumeEndedWaiter()
             }
         }
     }
@@ -375,6 +411,7 @@ final class WorkoutManager: NSObject, ObservableObject {
 
     // 自分で終わらせていないのにセッションが終わった(ほかのワークアウトアプリを始めた等)・失敗した
     fileprivate func sessionEndedUnexpectedly() {
+        DiagLog.add("WO ended by system busy=\(isBusy)")
         guard isRunning, !isBusy else { return }
         Task { await discard(report: true) }
     }
@@ -382,8 +419,6 @@ final class WorkoutManager: NSObject, ObservableObject {
     private func cleanUp() {
         watchdog?.cancel()
         watchdog = nil
-        idleWatch?.cancel()
-        idleWatch = nil
         session = nil
         builder = nil
         recordStartAt = nil
@@ -405,6 +440,7 @@ extension WorkoutManager: HKWorkoutSessionDelegate {
     }
 
     nonisolated func workoutSession(_ workoutSession: HKWorkoutSession, didFailWithError error: Error) {
+        DiagLog.add("WO session error: \(error.localizedDescription)")
         Task { @MainActor in
             guard workoutSession === self.session else { return }
             self.sessionEndedUnexpectedly()

@@ -169,6 +169,10 @@ final class SessionStore: NSObject, ObservableObject {
         if base.map(activityKey) != activityKey(snap) {
             lastActivityAt = max(lastActivityAt, Date(timeIntervalSince1970: snap.sentAt / 1000))
         }
+        // ワークアウトの判断に使う値が変わったときだけ残す(DiagLog)
+        if base?.recordStartAt != snap.recordStartAt || base?.lastSaved != snap.lastSaved || base?.state != snap.state {
+            DiagLog.add("RX state=\(snap.state.rawValue) rec=\(DiagLog.time(snap.recordStartAt)) saved=\(DiagLog.time(snap.lastSaved?.startAt))")
+        }
         base = snap
         let applied = Set(snap.applied ?? [])
         pending.removeAll { applied.contains($0.opId) }
@@ -274,16 +278,14 @@ final class SessionStore: NSObject, ObservableObject {
             // 保存の途中の状態(lastSaved は入ったが recordStartAt はまだ残っている)でも締める。iPhone は裏に回ると
             // 待たずに送るので、保存の途中で JS が止まると、この状態が最後のスナップショットになりうる(reviewer 指摘)
             if let saved = snap.lastSaved, saved.startAt == r {
+                DiagLog.add("SYNC saved -> finish")
                 Task { await wm.finish(key: saved.key, endAt: saved.endAt) }
                 return
             }
             if snap.recordStartAt == r { return } // 記録はまだ続いている(種目を消して入れ直す途中も含む)
-            // 記録 r が終わった(保存・破棄)か、別の記録に替わった
-            if let saved = snap.lastSaved, saved.startAt == r {
-                Task { await wm.finish(key: saved.key, endAt: saved.endAt) }
-            } else {
-                Task { await wm.discard(report: true) }
-            }
+            // 記録 r が終わった(破棄)か、別の記録に替わった(保存した記録は上で締めている)
+            DiagLog.add("SYNC record gone -> discard")
+            Task { await wm.discard(report: true) }
             return
         }
         // まだ対応付いていない。
@@ -295,10 +297,12 @@ final class SessionStore: NSObject, ObservableObject {
                 sendWorkoutEvent("started", recordStartAt: r)
             } else if snap.sentAt >= wm.sessionStartMs {
                 // セッションの開始後に届いた記録が、開始時刻から離れすぎている = このセッションのための記録ではない
+                DiagLog.add("SYNC other record -> discard")
                 Task { await wm.discard(report: false) }
             }
         } else if snap.sentAt > wm.sessionStartMs + 5000 {
             // 対応付く前に記録が終わった(iPhone は started を受け取っていないので自分で書く)
+            DiagLog.add("SYNC no record -> discard")
             Task { await wm.discard(report: false) }
         }
     }
@@ -416,8 +420,8 @@ final class SessionStore: NSObject, ObservableObject {
     // 権限の確認と add は非同期で、続けて予約し直すと古い時刻の add が後から入り、ずれた時刻に鳴っていた(1.4 (18)、北村さん「インターバル通知がズレて来る」)
     private var restNotifyGeneration = 0
     // 休憩画面を開いているか。開いている間は、休憩の通知のバナーで画面を覆わず、音と振動だけにする(willPresent)。
-    // willPresent はメインスレッドを待たずに読む。以前は MainActor.run で読んでいて、手首を下ろした常時表示の間は
-    // メインスレッドが間引かれるため、通知が届いてから鳴るまで15秒ほど待たされていた(1.4.2、北村さん「インターバルの通知が15秒遅れる」)
+    // willPresent はメインスレッド以外から呼ばれうるので、ロック付きの値で読む(1.4.2 (39)。15秒の遅れの原因はこれではなく、
+    // 下の「ワークアウト中は Watch 自身が鳴らす」の13秒の待ちだった)
     var restViewVisible: Bool {
         get { Self.restViewVisibleNow() }
         set { Self.visibleLock.lock(); Self.visibleFlag = newValue; Self.visibleLock.unlock() }
@@ -429,9 +433,112 @@ final class SessionStore: NSObject, ObservableObject {
         return visibleFlag
     }
 
+    // MARK: - ワークアウト中は Watch 自身が鳴らす(1.4.2、2026-10-15)
+    //
+    // iPhone のアプリがある Watch アプリが自分で予約したローカル通知は、iPhone の同じ通知との重複を確かめるため、
+    // iPhone に同じ通知が無いと最大13秒待ってから鳴る(Apple DTS の回答、developer.apple.com/forums/thread/765669)。
+    // Watch がワークアウトを記録している間は iPhone は予約しない設計なので、休憩の知らせは毎回この待ちに当たり、
+    // 北村さんの「インターバルの通知が15秒遅れる」になっていた((23)(39) の推定は外れ。メインスレッドの待ちではなかった)。
+    // ワークアウトが動いている間は、アプリが裏・常時表示でも WKInterfaceDevice.play が効く(Apple のドキュメント)ので、
+    // 予定の時刻にアプリ自身で振動させ、同じ時刻の通知は出さない。通知の予約はアプリが落ちたときの予備として残す。
+    private var restTimers: [DispatchSourceTimer] = []
+    // 予約してある自前の知らせ("id|予定時刻ms")と、ワークアウトが動いているか。willPresent(メインスレッド以外)から読む
+    nonisolated private static let alertLock = NSLock()
+    nonisolated(unsafe) private static var armedAlerts: Set<String> = []
+    nonisolated(unsafe) private static var claimedAlerts: [String: Int64] = [:]
+    // willPresent が自前の知らせに譲って止めた回。自前のタイマーが遅れても、この回だけは鳴らす(どちらも鳴らない、を作らない)
+    nonisolated(unsafe) private static var deferredAlerts: Set<String> = []
+    nonisolated(unsafe) private static var workoutRunningFlag = false
+    // 予定より遅れすぎた自前の知らせは鳴らさない(アプリが止まっていた。通知の方が出ている)
+    private static let restAlertMaxLate: TimeInterval = 10
+    private static let restAlertLead: TimeInterval = 0.5
+
+    nonisolated static func setWorkoutRunning(_ v: Bool) {
+        alertLock.lock(); workoutRunningFlag = v; alertLock.unlock()
+    }
+    nonisolated private static func alertKey(_ id: String, _ fireMs: Int64) -> String { "\(id)|\(fireMs)" }
+    nonisolated private static func ms(_ d: Date) -> Int64 { Int64((d.timeIntervalSince1970 * 1000).rounded()) }
+    // その回の知らせを先に取った方が鳴らす(自前の振動と通知の二重を防ぐ)
+    nonisolated private static func claimAlert(_ id: String, _ fireMs: Int64) -> Bool {
+        alertLock.lock(); defer { alertLock.unlock() }
+        if claimedAlerts[id] == fireMs { return false }
+        claimedAlerts[id] = fireMs
+        return true
+    }
+    // willPresent から: ワークアウト中で、自前の知らせが待っているなら通知は出さない(その回は譲った印を付ける)
+    nonisolated private static func deferToOwnAlert(_ id: String, _ fireMs: Int64) -> Bool {
+        alertLock.lock(); defer { alertLock.unlock() }
+        let key = alertKey(id, fireMs)
+        guard workoutRunningFlag, armedAlerts.contains(key) else { return false }
+        deferredAlerts.insert(key)
+        return true
+    }
+    nonisolated private static func takeDeferred(_ id: String, _ fireMs: Int64) -> Bool {
+        alertLock.lock(); defer { alertLock.unlock() }
+        return deferredAlerts.remove(alertKey(id, fireMs)) != nil
+    }
+
+    private func armRestAlerts(from start: Date, notices: [WatchSnapshot.RestNotice]) {
+        cancelRestAlerts()
+        var keys: Set<String> = []
+        for n in notices {
+            let fireAt = start.addingTimeInterval(n.min * 60)
+            let wait = fireAt.timeIntervalSinceNow
+            guard wait > 0 else { continue }
+            let id = Self.restNotifyPrefix + String(n.min)
+            let fireMs = Self.ms(fireAt)
+            keys.insert(Self.alertKey(id, fireMs))
+            // Task.sleep ではなく、まとめて遅らせない(.strict)時刻指定のタイマー。通知より少しだけ先に鳴らし、
+            // 鳴らした後で予備の通知を取り消す(先に取り消せば、ほかの画面にいて willPresent が呼ばれないときも二重にならない)
+            let t = DispatchSource.makeTimerSource(flags: .strict, queue: .main)
+            t.schedule(wallDeadline: .now() + max(0, wait - Self.restAlertLead), leeway: .milliseconds(100))
+            t.setEventHandler { [weak self] in
+                MainActor.assumeIsolated { self?.restAlertFired(id: id, fireAt: fireAt) }
+            }
+            t.resume()
+            restTimers.append(t)
+        }
+        Self.alertLock.lock(); Self.armedAlerts = keys; Self.alertLock.unlock()
+    }
+
+    private func cancelRestAlerts() {
+        restTimers.forEach { $0.cancel() }
+        restTimers = []
+        Self.alertLock.lock(); Self.armedAlerts = []; Self.alertLock.unlock()
+    }
+
+    private func restAlertFired(id: String, fireAt: Date) {
+        let fireMs = Self.ms(fireAt)
+        Self.alertLock.lock(); Self.armedAlerts.remove(Self.alertKey(id, fireMs)); Self.alertLock.unlock()
+        let late = Date().timeIntervalSince(fireAt)
+        let running = WorkoutManager.shared.isRunning
+        // 通知を譲ってもらった回は、遅れていても鳴らす(鳴らさないと、その回は何も鳴らない。reviewer 指摘)
+        let deferred = Self.takeDeferred(id, fireMs)
+        // 振動が効くのはワークアウトが動いている間だけ(それ以外は通知に任せる)。遅れすぎた回は、アプリが止まっていて通知の方が出ている
+        guard running, late < Self.restAlertMaxLate || deferred else {
+            DiagLog.add("REST alert \(id) skipped running=\(running) late=\(String(format: "%.1f", late))s")
+            return
+        }
+        guard Self.claimAlert(id, fireMs) else {
+            DiagLog.add("REST alert \(id) already shown by notification")
+            return
+        }
+        WKInterfaceDevice.current().play(.notification)
+        let app = WKApplication.shared()
+        // 予備の通知を先に取り消すのは、画面を見ている(active)ときだけ。play は効いたかどうかを返さないので、
+        // それ以外では予備を残し、willPresent が呼ばれたら(KURABELL が前面)そこで止める。前面でなければ予備も鳴る
+        // (遅れて二重に鳴る方へ倒す。鳴らない、を作らない。reviewer 指摘)
+        if app.applicationState == .active {
+            UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [id])
+        }
+        DiagLog.add("REST alert \(id) played late=\(String(format: "%.2f", late))s app=\(app.applicationState.rawValue)")
+    }
+
     private func scheduleRestNotifications(from start: Date) {
         restNotifyGeneration += 1
         let gen = restNotifyGeneration
+        armRestAlerts(from: start, notices: restNotices())
+        DiagLog.add("REST schedule start=\(DiagLog.time(start.timeIntervalSince1970 * 1000)) running=\(WorkoutManager.shared.isRunning)")
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { granted, _ in
             guard granted else { return }
             Task { @MainActor in
@@ -449,6 +556,8 @@ final class SessionStore: NSObject, ObservableObject {
                     content.body = n.body
                     content.sound = .default
                     content.interruptionLevel = .timeSensitive
+                    // 予定の時刻(willPresent で自前の知らせと照らし合わせる・遅れを DiagLog に残す)
+                    content.userInfo = ["fireAt": Double(Self.ms(start.addingTimeInterval(n.min * 60)))]
                     let req = UNNotificationRequest(
                         identifier: Self.restNotifyPrefix + String(n.min), content: content,
                         trigger: UNTimeIntervalNotificationTrigger(timeInterval: interval, repeats: false))
@@ -467,6 +576,7 @@ final class SessionStore: NSObject, ObservableObject {
 
     private func cancelRestNotifications() {
         restNotifyGeneration += 1
+        cancelRestAlerts()
         removeRestNotifications()
     }
 
@@ -514,11 +624,20 @@ extension SessionStore: UNUserNotificationCenterDelegate {
     // Watch アプリを開いているときも、バナーと触覚で知らせる
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
         // 休憩画面を開いている間は、バナーで経過時間を覆わず、音と振動だけで知らせる。
-        // 画面側で振動させるのはやめた(手首を下ろすと遅れて鳴った。Views.swift の RestTimerView)。知らせは常にこの通知1本なので二重にはならない。
-        // ここで MainActor を待たない(常時表示の間はメインスレッドが間引かれ、鳴るのが15秒ほど遅れた)
-        if notification.request.identifier.hasPrefix("kurabell-watch-rest-"), Self.restViewVisibleNow() {
-            return [.sound]
+        // ワークアウト中は Watch 自身が予定の時刻に鳴らす(armRestAlerts)ので、同じ回の通知は出さない。
+        // ここで MainActor を待たない(メインスレッド以外から呼ばれうる)
+        let id = notification.request.identifier
+        guard id.hasPrefix("kurabell-watch-rest-") else { return [.banner, .sound] }
+        if let f = notification.request.content.userInfo["fireAt"] as? Double {
+            let fireMs = Int64(f)
+            let late = Date().timeIntervalSince1970 - f / 1000
+            if Self.deferToOwnAlert(id, fireMs) || !Self.claimAlert(id, fireMs) {
+                DiagLog.add(String(format: "REST notif %@ suppressed late=%.1fs", id, late))
+                return []
+            }
+            DiagLog.add(String(format: "REST notif %@ shown late=%.1fs", id, late))
         }
+        if Self.restViewVisibleNow() { return [.sound] }
         return [.banner, .sound]
     }
 }
