@@ -34,3 +34,5 @@
 - [Instagramストーリー画像](kurabell-insta-story-image.md) — story分岐は一覧744pxで8種目から切れる/上下の重なり/drawBest切り出しで投稿用の字が変化(2026-10-12)
 - [Watch無操作30分終了](kurabell-watch-idle-end.md) — 1.4.2: lastActivityAt非永続でrecover後に誤discard/discarded+startedの同一drain/scenePhase判定
 - [Barlow Condensedのウェイト](kurabell-barlow-weights.md) — 同梱は600/800のみ。fontWeight 700は800に丸まり、700/800の強弱は見えない(2026-10-13 履歴チップ)
+- [バー出入りのスクロール補正](kurabell-scroll-compensation-clamp.md) — 下端では文書の縮みでscrollYが先にクランプされ差分scrollByが二重(実測)/上端でheaderがバー裏(2026-10-14)
+- [Watch休憩の自前振動](kurabell-watch-rest-self-haptic.md) — 2026-10-15: play()後に予備通知を消す/willPresentで抑止。play無効・タイマー遅延で無音に。(23)の1分16秒
