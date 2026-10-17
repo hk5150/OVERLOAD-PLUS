@@ -49,3 +49,38 @@ async function requestAppReview() {
 globalThis.REVIEW_REQUESTED_KEY = REVIEW_REQUESTED_KEY;
 globalThis.shouldRequestReview = shouldRequestReview;
 globalThis.requestAppReview = requestAppReview;
+
+// ---- 意見・不具合の報告(設定タブの「ご意見・不具合の報告」) ----
+// アプリからは何も送らない。メールアプリを開くだけで、送るかどうか・何を書くかは利用者が決める
+// (App Storeの「Data Not Collected」申告と、privacy.html の「記録を外部へ送信しない」を崩さないため)。
+// 本文の末尾に添えるのは、問い合わせの返事に要る環境の情報だけ(support.html の「書いていただけるとスムーズ」と同じ項目)。
+// トレーニング記録・体重は入れない。
+const FEEDBACK_EMAIL = "hajime5150@gmail.com";
+// App Storeの「レビューを書く」画面を直接開く(iOSではApp Storeアプリが開く)
+const APP_STORE_REVIEW_URL = "https://apps.apple.com/app/id6816090624?action=write-review";
+
+// userAgent から iOS の版("18.0" など)を読む。iPad は「Macintosh」を名乗ることがあり、読めなければ null。
+function iosVersionFromUa(ua) {
+  const m = /\b(?:iPhone|CPU) OS (\d+)[_.](\d+)(?:[_.](\d+))?/.exec(String(ua || ""));
+  if (!m) return null;
+  return m[3] ? `${m[1]}.${m[2]}.${m[3]}` : `${m[1]}.${m[2]}`;
+}
+
+// 件名で受信側(Gmail)が振り分けられるよう、件名の頭は言語によらず [KURABELL] で揃える。
+// subject / bodyLead / envLabel は表示言語の文言(i18n.js の feedback.mailSubject / mailLead / mailEnv)を呼び出し側から渡す。
+// iOS の行は platform が "Web" のときは出さない。
+function buildFeedbackMailUrl({ subject, bodyLead, envLabel, appVersion, platform, userAgent, lang, unit }) {
+  const ios = iosVersionFromUa(userAgent);
+  const env = [
+    `App: ${appVersion || "?"}${platform ? ` (${platform})` : ""}`,
+    ...(platform === "Web" ? [] : [`iOS: ${ios || "?"}`]),
+    `Lang: ${lang || "?"} / Unit: ${unit || "?"}`,
+  ];
+  const body = `${bodyLead}\n\n\n\n-- ${envLabel} --\n${env.join("\n")}\n`;
+  return `mailto:${FEEDBACK_EMAIL}?subject=${encodeURIComponent(`[KURABELL] ${subject}`)}&body=${encodeURIComponent(body)}`;
+}
+
+globalThis.FEEDBACK_EMAIL = FEEDBACK_EMAIL;
+globalThis.APP_STORE_REVIEW_URL = APP_STORE_REVIEW_URL;
+globalThis.iosVersionFromUa = iosVersionFromUa;
+globalThis.buildFeedbackMailUrl = buildFeedbackMailUrl;
