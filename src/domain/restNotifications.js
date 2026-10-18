@@ -200,6 +200,101 @@ async function clearDeliveredRestNotifications() {
   } catch { /* ignore */ }
 }
 
+// ---- トレーニング日のお知らせ(UI レビュー A3、2026-10-18) ----
+// 選んだ曜日・時刻に「今日は Pull の日」と知らせる、端末内のローカル通知。アプリからは何も送らない。
+// 繰り返しの通知(schedule.on)にしないのは、本文に「次の Day」と前回の数字を入れるため。次の Day は保存するたびに変わるので、
+// 先の分を1回ずつ予約しておき、起動・保存・設定の変更のたびに取り消して積み直す。開かないまま28日たつと止まる。
+// その日にもう記録を保存していたら、その日の分は積まない(やった後に「今日は…の日」と来ないように)。
+const WORKOUT_REMINDER_ID_BASE = 5100;
+const WORKOUT_REMINDER_DAYS_AHEAD = 28;
+const WORKOUT_REMINDER_IDS = Array.from({ length: WORKOUT_REMINDER_DAYS_AHEAD }, (_, i) => WORKOUT_REMINDER_ID_BASE + i);
+const WORKOUT_REMINDER_THREAD = "kurabell-workout-reminder";
+const WORKOUT_REMINDER_DEFAULT_DAYS = [1, 3, 5]; // 月・水・金(Date#getDay の 0=日曜)
+const WORKOUT_REMINDER_DEFAULT_TIME = "19:00";
+
+const isReminderTime = (v) => typeof v === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(v);
+
+// 保存値をそろえる。未設定・壊れた値はオフ(既定の曜日・時刻)
+function normalizeWorkoutReminder(r) {
+  const days = Array.isArray(r && r.days) ? [0, 1, 2, 3, 4, 5, 6].filter((d) => r.days.includes(d)) : WORKOUT_REMINDER_DEFAULT_DAYS.slice();
+  return {
+    on: !!(r && r.on === true),
+    days,
+    time: isReminderTime(r && r.time) ? r.time : WORKOUT_REMINDER_DEFAULT_TIME,
+  };
+}
+
+// オンにしたときの最初の曜日と時刻を、直近28日の記録から決める(テスト対象)。
+// 2回以上やった曜日、時刻は一番多く始めた時(00分)。記録が足りなければ既定(月・水・金の19時)
+function suggestWorkoutReminder(workouts, now) {
+  const since = now - 28 * 86400000;
+  const recent = (workouts || []).filter((w) => {
+    const t = Date.parse(w && (w.startAt || w.date));
+    return Number.isFinite(t) && t >= since && t <= now;
+  });
+  const byDay = new Map(), byHour = new Map();
+  recent.forEach((w) => {
+    const d = new Date(Date.parse(w.startAt || w.date));
+    byDay.set(d.getDay(), (byDay.get(d.getDay()) || 0) + 1);
+    byHour.set(d.getHours(), (byHour.get(d.getHours()) || 0) + 1);
+  });
+  const days = [0, 1, 2, 3, 4, 5, 6].filter((d) => (byDay.get(d) || 0) >= 2);
+  const hour = [...byHour.entries()].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0];
+  return {
+    on: true,
+    days: days.length ? days : WORKOUT_REMINDER_DEFAULT_DAYS.slice(),
+    time: hour ? `${String(hour[0]).padStart(2, "0")}:00` : WORKOUT_REMINDER_DEFAULT_TIME,
+  };
+}
+
+// 予約する通知の配列(テスト対象)。lastWorkoutAt: 最後に保存した記録の時刻(ミリ秒、無ければ null)。
+// texts: { title: string, body: string }
+function buildWorkoutReminders(settings, now, lastWorkoutAt, texts) {
+  const r = normalizeWorkoutReminder(settings);
+  if (!r.on || r.days.length === 0) return [];
+  const [hh, mm] = r.time.split(":").map(Number);
+  const base = new Date(now);
+  const out = [];
+  for (let i = 0; i < WORKOUT_REMINDER_DAYS_AHEAD; i++) {
+    const day = new Date(base.getFullYear(), base.getMonth(), base.getDate() + i, hh, mm, 0, 0);
+    if (!r.days.includes(day.getDay())) continue;
+    if (day.getTime() <= now) continue;
+    if (lastWorkoutAt != null) {
+      const last = new Date(lastWorkoutAt);
+      if (last.getFullYear() === day.getFullYear() && last.getMonth() === day.getMonth() && last.getDate() === day.getDate()) continue;
+    }
+    out.push({
+      id: WORKOUT_REMINDER_ID_BASE + out.length,
+      title: texts.title,
+      body: texts.body,
+      threadIdentifier: WORKOUT_REMINDER_THREAD,
+      schedule: { at: day },
+      sound: "default", // 省略すると無音(buildRestNotifications の注記と同じ)
+    });
+  }
+  return out;
+}
+
+async function cancelWorkoutReminders() {
+  const plugin = capLocalNotifications();
+  if (!plugin) return;
+  try {
+    await plugin.cancel({ notifications: WORKOUT_REMINDER_IDS.map((id) => ({ id })) });
+  } catch { /* 取り消せなくても記録には関係しない */ }
+}
+
+// 取り消してから積み直す。休憩の通知と違って Time Sensitive にはしない(LocalNotifications で予約する)
+async function scheduleWorkoutReminders(settings, now, lastWorkoutAt, texts) {
+  const plugin = capLocalNotifications();
+  if (!plugin) return;
+  await cancelWorkoutReminders();
+  const notifications = buildWorkoutReminders(settings, now, lastWorkoutAt, texts);
+  if (notifications.length === 0) return;
+  try {
+    await plugin.schedule({ notifications });
+  } catch { /* 通知を出せなくても記録には関係しない */ }
+}
+
 globalThis.REST_NOTIFY_MINUTES = REST_NOTIFY_MINUTES;
 globalThis.REST_NOTIFY_CHOICES = REST_NOTIFY_CHOICES;
 globalThis.restNotifyId = restNotifyId;
@@ -215,3 +310,10 @@ globalThis.toNativeRestNotifications = toNativeRestNotifications;
 globalThis.REST_ACTIVITY_STALE_MINUTES = REST_ACTIVITY_STALE_MINUTES;
 globalThis.buildRestActivityState = buildRestActivityState;
 globalThis.syncRestActivity = syncRestActivity;
+
+globalThis.WORKOUT_REMINDER_IDS = WORKOUT_REMINDER_IDS;
+globalThis.normalizeWorkoutReminder = normalizeWorkoutReminder;
+globalThis.suggestWorkoutReminder = suggestWorkoutReminder;
+globalThis.buildWorkoutReminders = buildWorkoutReminders;
+globalThis.cancelWorkoutReminders = cancelWorkoutReminders;
+globalThis.scheduleWorkoutReminders = scheduleWorkoutReminders;

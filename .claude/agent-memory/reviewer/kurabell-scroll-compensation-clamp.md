@@ -14,5 +14,8 @@ metadata:
 - saveWorkout は `await store.del` を跨いで setView("history") するので iOS では「view 同時変更なら補正しない」が効かない
   ([[kurabell-await-split-setstate]])
 
+2026-10-18 `330b893`: タブごとの scrollY 復元(useLayoutEffect([view])、補正より前)。補正とは prev.view 判定で衝突しない。
+残る弱点: 絶対 scrollY で覚えるのでバー有無が変わると header 差分ずれ / 保存後の history・log が古い位置で開く(中身が丸ごと変わった後)。
+
 **How to apply:** スクロール位置の差分補正を見たら、文書の高さが同時に変わる場面(下端・上端)でクランプとの二重を疑う。
 差分ではなく「直前の scrollY + d」への scrollTo か、スクロールイベントで覚えた値を使う形かを確認する。

@@ -7,7 +7,7 @@ import { describe, it, expect } from "vitest";
 // 「直したはずの変更が返ってこない」という無症状の不具合になるため、機械的に縛る。
 // (1個の定数にまとめられないのは、sw.jsがモジュールを持てない素のスクリプトで、
 //  index.html側はBabel前のJSXテキストとして存在するため。ただしindex.html内部では
-//  ヘッダーバッジとバックアップのappVersionが同じAPP_VERSION定数を参照するようにしてあるので、
+//  設定タブの版の表示とバックアップのappVersionが同じAPP_VERSION定数を参照するようにしてあるので、
 //  「3箇所目」が増えることは防いである。)
 
 const repoRoot = process.cwd();
@@ -23,7 +23,7 @@ describe("バージョン文字列の同期", () => {
     expect(indexHtml).toMatch(/const APP_VERSION = "v\d+";/);
   });
 
-  it("ヘッダーバッジはAPP_VERSION定数を参照している(数字がハードコードされ直していない)", () => {
+  it("設定タブの版の表示はAPP_VERSION定数を参照している(数字がハードコードされ直していない)", () => {
     expect(indexHtml).toMatch(/>\{APP_VERSION\}<\/span>/);
   });
 
