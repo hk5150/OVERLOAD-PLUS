@@ -877,7 +877,7 @@ function useModalA11y(active, onClose, containerRef) {
     const container = containerRef.current;
     const prevFocused = document.activeElement;
     const focusables = () => container
-      ? Array.from(container.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')).filter(el => !el.disabled)
+      ? Array.from(container.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')).filter(el => !el.disabled && el.tabIndex >= 0) // 隠したボタン(ガイド最後のスキップ)を端にしない
       : [];
     const first = focusables()[0];
     (first || container)?.focus?.();
@@ -3137,6 +3137,8 @@ function App() {
     setStartAt(null); setElapsed(0); stopRest();
     setDraftRestored(false);
     try { await store.del(DRAFT_KEY); localStorage.removeItem(DRAFT_KEY); } catch { /* noop */ }
+    // 中身が替わるので、記録タブ・履歴タブで覚えていた位置は捨てて上から出す(履歴は新しい記録のカレンダーから)
+    delete tabScrollRef.current.log; delete tabScrollRef.current.history;
     setView("history");
     // iPhone にも「お疲れ様でした」を出す(北村さん、2026-10-10。Watch の完了画面と同じ中身)。
     // 「メニューとして保存しますか」は、この画面を閉じた後ろに残っている(zIndex がこちらの方が上)
@@ -5496,7 +5498,7 @@ function App() {
                 const isNext = i === split.cursor % split.days.length; const editing = editDay === i;
                 const goToLog = isNext && !editing;
                 return (
-                  <div key={i} id={`split-day-${i}`} onClick={goToLog ? () => setView("log") : undefined}
+                  <div key={i} id={`split-day-${i}`} onClick={goToLog ? () => { delete tabScrollRef.current.log; setView("log"); } : undefined}
                     style={{ background: C.surface, borderRadius: 14, padding: 14, marginBottom: 8, border: `1px solid ${isNext ? C.yellow : C.border}`, cursor: goToLog ? "pointer" : "default" }}>
                     {/* 320px 幅では ▲▼・今日はこれ・編集で名前の場所が無くなり、「Pull」が「Pu」で切れてボタンの下に隠れていた。
                         名前の側に最低幅(120px)を持たせ、足りなければボタンを次の行へ回す。それでも長い名前は省略記号で切る */}
@@ -5747,7 +5749,7 @@ function App() {
                             // 幅が 2,000 より狭いときは丸めずに出す
                             const vs = dayVolumeTrend.map(d => d["ボリューム"]);
                             const narrow = Math.max(...vs) - Math.min(...vs) < 2000;
-                            return <YAxis stroke={C.muted} fontSize={11} tickLine={false} width={narrow ? 46 : 40} domain={["auto", "auto"]}
+                            return <YAxis stroke={C.muted} fontSize={11} tickLine={false} width={narrow ? 46 : 40} domain={["auto", "auto"]} allowDecimals={false}
                               tickFormatter={narrow ? (v => Math.round(v).toLocaleString()) : compactTick} />;
                           })()}
                           <Tooltip contentStyle={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 13, color: C.text }} formatter={v => [`${v.toLocaleString()}${uLabel()}`, dayName(volDay)]} />
