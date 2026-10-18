@@ -474,7 +474,7 @@ const STRINGS = {
   // ---- 自己ベスト ----
   "pr.title":          { ja: "PR(自己ベスト)",      en: "Personal bests" },
   "pr.aboutTitle":     { ja: "PRと推定1RMについて",   en: "About PRs and estimated 1RM" },
-  "pr.noteDef":        { ja: "PR=実際に挙げた最大重量。推定1RMは重量×(1+回数/30)による参考値で、12回以下のセットから求めます(回数が多いと高めに出るため)。", en: "PR is the heaviest weight you actually lifted. Estimated 1RM is a reference figure: weight × (1 + reps/30), from sets of 12 reps or fewer (higher reps overestimate it)." },
+  "pr.noteDef":        { ja: "PR=実際に挙げた最大重量。推定1RMは重量×(1+回数/30)による参考値で、12回以下のセットから求めます(回数が多いと高めに出るため。腹筋の種目は回数を問わず求めます)。", en: "PR is the heaviest weight you actually lifted. Estimated 1RM is a reference figure: weight × (1 + reps/30), from sets of 12 reps or fewer (higher reps overestimate it; ab exercises count at any rep range)." },
   "pr.note":           { ja: "ダンベル種目は両手合計、自重種目は体重を含む実効重量で表示します。", en: "Dumbbell lifts are shown as both hands combined; bodyweight lifts include your bodyweight." },
   "pr.achievedOn":     { ja: " ({date}に達成)",        en: " (set {date})" },
   "pr.exercise":       { ja: "種目",                   en: "Exercise" },
