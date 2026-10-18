@@ -1,0 +1,7 @@
+• Training-day reminders: pick days and a time in Settings, and you get a notification with that day's split day and your last numbers. No reminder if you already logged that day. Reminders are made on your device; your log is never sent anywhere.
+• Easier first steps: a shorter 4-page guide, "Fill all days with the basics" for empty days on the Split tab, and a "First" badge with three sets ready for exercises you haven't logged yet.
+• While logging: today's session card folds into one line, and after you tap RIR the screen scrolls so the next set stays in view above the rest timer.
+• The finish screen now shows which day is next.
+• History: Volume opens by day, each day is folded, and personal bests sit above the list, most recent first.
+• Each tab keeps its scroll position when you switch back to it.
+• The version number moved to the bottom of Settings.
