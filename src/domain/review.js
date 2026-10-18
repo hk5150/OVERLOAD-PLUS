@@ -51,11 +51,19 @@ globalThis.shouldRequestReview = shouldRequestReview;
 globalThis.requestAppReview = requestAppReview;
 
 // ---- 意見・不具合の報告(設定タブの「ご意見・不具合の報告」) ----
-// アプリからは何も送らない。メールアプリを開くだけで、送るかどうか・何を書くかは利用者が決める
+// 主な窓口は Instagram の DM(北村さんの判断、2026-10-18)。メールは Instagram を使わない人向けの控え。
+// アプリからは何も送らない。Instagram かメールアプリを開くだけで、送るかどうか・何を書くかは利用者が決める
 // (App Storeの「Data Not Collected」申告と、privacy.html の「記録を外部へ送信しない」を崩さないため)。
 // 本文の末尾に添えるのは、問い合わせの返事に要る環境の情報だけ(support.html の「書いていただけるとスムーズ」と同じ項目)。
 // トレーニング記録・体重は入れない。
 const FEEDBACK_EMAIL = "hajime5150@gmail.com";
+// 表示言語ごとの Instagram アカウント(docs/インスタ運用.md)。ig.me/m/ は DM の画面を直接開くリンクで、
+// Instagram アプリがあればアプリが開く(無ければブラウザ)。DM には文面を差し込めないので、
+// 環境の情報(feedbackEnvText)はクリップボードに入れて貼ってもらう。
+const FEEDBACK_INSTAGRAM = { ja: "kurabell_workout_log_jp", en: "kurabell_workout_log_en" };
+function instagramDmUrl(lang) {
+  return `https://ig.me/m/${FEEDBACK_INSTAGRAM[lang] || FEEDBACK_INSTAGRAM.ja}`;
+}
 // App Storeの「レビューを書く」画面を直接開く(iOSではApp Storeアプリが開く)
 const APP_STORE_REVIEW_URL = "https://apps.apple.com/app/id6816090624?action=write-review";
 
@@ -66,21 +74,28 @@ function iosVersionFromUa(ua) {
   return m[3] ? `${m[1]}.${m[2]}.${m[3]}` : `${m[1]}.${m[2]}`;
 }
 
-// 件名で受信側(Gmail)が振り分けられるよう、件名の頭は言語によらず [KURABELL] で揃える。
-// subject / bodyLead / envLabel は表示言語の文言(i18n.js の feedback.mailSubject / mailLead / mailEnv)を呼び出し側から渡す。
-// iOS の行は platform が "Web" のときは出さない。
-function buildFeedbackMailUrl({ subject, bodyLead, envLabel, appVersion, platform, userAgent, lang, unit }) {
+// 返事に要る環境の情報(版・iOS の版・言語・単位)を1行ずつ。iOS の行は platform が "Web" のときは出さない。
+// 記録・体重はここに足さない(テストで完全一致に縛ってある)。
+function feedbackEnvText({ appVersion, platform, userAgent, lang, unit }) {
   const ios = iosVersionFromUa(userAgent);
-  const env = [
+  return [
     `App: ${appVersion || "?"}${platform ? ` (${platform})` : ""}`,
     ...(platform === "Web" ? [] : [`iOS: ${ios || "?"}`]),
     `Lang: ${lang || "?"} / Unit: ${unit || "?"}`,
-  ];
-  const body = `${bodyLead}\n\n\n\n-- ${envLabel} --\n${env.join("\n")}\n`;
+  ].join("\n");
+}
+
+// 件名で受信側(Gmail)が振り分けられるよう、件名の頭は言語によらず [KURABELL] で揃える。
+// subject / bodyLead / envLabel は表示言語の文言(i18n.js の feedback.mailSubject / mailLead / mailEnv)を呼び出し側から渡す。
+function buildFeedbackMailUrl({ subject, bodyLead, envLabel, ...env }) {
+  const body = `${bodyLead}\n\n\n\n-- ${envLabel} --\n${feedbackEnvText(env)}\n`;
   return `mailto:${FEEDBACK_EMAIL}?subject=${encodeURIComponent(`[KURABELL] ${subject}`)}&body=${encodeURIComponent(body)}`;
 }
 
 globalThis.FEEDBACK_EMAIL = FEEDBACK_EMAIL;
 globalThis.APP_STORE_REVIEW_URL = APP_STORE_REVIEW_URL;
+globalThis.FEEDBACK_INSTAGRAM = FEEDBACK_INSTAGRAM;
+globalThis.instagramDmUrl = instagramDmUrl;
+globalThis.feedbackEnvText = feedbackEnvText;
 globalThis.iosVersionFromUa = iosVersionFromUa;
 globalThis.buildFeedbackMailUrl = buildFeedbackMailUrl;

@@ -189,6 +189,19 @@ describe("意見・不具合の報告のメール", () => {
     expect(body).toBe("b\n\n\n\n-- Env --\nApp: v1 (Web)\nLang: en / Unit: lb\n");
   });
 
+  it("Instagram の DM は表示言語のアカウントを開く(知らない言語は日本語のアカウント)", () => {
+    const { instagramDmUrl } = load();
+    expect(instagramDmUrl("ja")).toBe("https://ig.me/m/kurabell_workout_log_jp");
+    expect(instagramDmUrl("en")).toBe("https://ig.me/m/kurabell_workout_log_en");
+    expect(instagramDmUrl("fr")).toBe("https://ig.me/m/kurabell_workout_log_jp");
+  });
+
+  it("DM 用にコピーする環境の情報は、版・iOS・言語・単位だけ(完全一致)", () => {
+    const { feedbackEnvText } = load();
+    expect(feedbackEnvText({ appVersion: "v166", platform: "iOS", userAgent: IPHONE_UA, lang: "en", unit: "lb" }))
+      .toBe("App: v166 (iOS)\niOS: 18.1.1\nLang: en / Unit: lb");
+  });
+
   it("App Store のレビューを書く画面のURL", () => {
     expect(APP_STORE_REVIEW_URL).toBe("https://apps.apple.com/app/id6816090624?action=write-review");
   });
