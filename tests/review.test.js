@@ -144,3 +144,65 @@ describe("requestAppReview(例外が漏れると保存処理を巻き込む)", (
     await expect(requestAppReview()).resolves.toBe(false);
   });
 });
+
+// 設定タブの「ご意見・不具合の報告」が開くメール。アプリからは何も送らず、メールアプリに下書きを渡すだけ。
+// 本文に記録や体重が混ざるとプライバシーの申告(Data Not Collected)と食い違うので、入れてよい項目を縛る。
+// 件名の頭の [KURABELL] は Gmail の振り分けに使うので、言語によらず固定。
+describe("意見・不具合の報告のメール", () => {
+  const { buildFeedbackMailUrl, iosVersionFromUa, FEEDBACK_EMAIL, APP_STORE_REVIEW_URL } = load();
+  const IPHONE_UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_1_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148";
+
+  function parse(url) {
+    const m = /^mailto:([^?]+)\?subject=([^&]*)&body=(.*)$/.exec(url);
+    return { to: m[1], subject: decodeURIComponent(m[2]), body: decodeURIComponent(m[3]) };
+  }
+
+  it("iOS の版を userAgent から読む(読めなければ null)", () => {
+    expect(iosVersionFromUa(IPHONE_UA)).toBe("18.1.1");
+    expect(iosVersionFromUa("Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X)")).toBe("26.0");
+    expect(iosVersionFromUa("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)")).toBe(null);
+    expect(iosVersionFromUa(undefined)).toBe(null);
+  });
+
+  it("宛先・件名・本文の環境情報を組み立てる", () => {
+    const { to, subject, body } = parse(buildFeedbackMailUrl({
+      subject: "ご意見・不具合の報告", bodyLead: "(ここに書いてください)", envLabel: "お使いの環境",
+      appVersion: "v166", platform: "iOS", userAgent: IPHONE_UA, lang: "ja", unit: "kg",
+    }));
+    expect(to).toBe(FEEDBACK_EMAIL);
+    expect(subject).toBe("[KURABELL] ご意見・不具合の報告");
+    // 完全一致で縛る(環境欄に記録・体重などが足されたら落ちる)
+    expect(body).toBe("(ここに書いてください)\n\n\n\n-- お使いの環境 --\nApp: v166 (iOS)\niOS: 18.1.1\nLang: ja / Unit: kg\n");
+  });
+
+  it("& や改行を含む文言でもURLが壊れない", () => {
+    const url = buildFeedbackMailUrl({ subject: "Bugs & ideas", bodyLead: "a&b=c\nd", envLabel: "Env", appVersion: "v1" });
+    expect(url.split("&").length).toBe(2); // subject と body の区切りだけ
+    const { subject, body } = parse(url);
+    expect(subject).toBe("[KURABELL] Bugs & ideas");
+    expect(body.startsWith("a&b=c\nd")).toBe(true);
+    expect(body).toContain("iOS: ?\nLang: ? / Unit: ?");
+  });
+
+  it("Web 版では iOS の行を出さない", () => {
+    const { body } = parse(buildFeedbackMailUrl({ subject: "s", bodyLead: "b", envLabel: "Env", appVersion: "v1", platform: "Web", userAgent: "Mozilla/5.0 (Macintosh)", lang: "en", unit: "lb" }));
+    expect(body).toBe("b\n\n\n\n-- Env --\nApp: v1 (Web)\nLang: en / Unit: lb\n");
+  });
+
+  it("Instagram の DM は表示言語のアカウントを開く(知らない言語は日本語のアカウント)", () => {
+    const { instagramDmUrl } = load();
+    expect(instagramDmUrl("ja")).toBe("https://ig.me/m/kurabell_workout_log_jp");
+    expect(instagramDmUrl("en")).toBe("https://ig.me/m/kurabell_workout_log_en");
+    expect(instagramDmUrl("fr")).toBe("https://ig.me/m/kurabell_workout_log_jp");
+  });
+
+  it("DM 用にコピーする環境の情報は、版・iOS・言語・単位だけ(完全一致)", () => {
+    const { feedbackEnvText } = load();
+    expect(feedbackEnvText({ appVersion: "v166", platform: "iOS", userAgent: IPHONE_UA, lang: "en", unit: "lb" }))
+      .toBe("App: v166 (iOS)\niOS: 18.1.1\nLang: en / Unit: lb");
+  });
+
+  it("App Store のレビューを書く画面のURL", () => {
+    expect(APP_STORE_REVIEW_URL).toBe("https://apps.apple.com/app/id6816090624?action=write-review");
+  });
+});

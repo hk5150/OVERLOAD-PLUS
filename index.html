@@ -221,7 +221,7 @@
     { key:'fileExport', urls:['src/domain/fileExport.js'],
       globals:['fileExportAvailable','shareTextFile','shareImageFile'] },
     { key:'review',     urls:['src/domain/review.js'],
-      globals:['REVIEW_REQUESTED_KEY','shouldRequestReview','requestAppReview'] },
+      globals:['REVIEW_REQUESTED_KEY','shouldRequestReview','requestAppReview','FEEDBACK_EMAIL','APP_STORE_REVIEW_URL','FEEDBACK_INSTAGRAM','instagramDmUrl','iosVersionFromUa','feedbackEnvText','buildFeedbackMailUrl'] },
     { key:'superset',   urls:['src/domain/superset.js'],
       globals:['normalizeSupersets'] },
     { key:'aiCoach',    urls:['src/domain/aiCoach.js'],
@@ -1049,6 +1049,10 @@ function App() {
   const scrollToDayRef = useRef(null); // 「＋ Dayを追加」の直後だけ、そのカードまでスクロールする
   const [pickingSplit, setPickingSplit] = useState(false); // trueで分割選択(プリセット/新規作成)画面を表示
   const [backupMsg, setBackupMsg] = useState("");
+  const [feedbackCopied, setFeedbackCopied] = useState(false); // 「ご意見・不具合の報告」でアドレスをコピーした直後
+  const feedbackCopiedTimer = useRef(null);
+  const [feedbackDmCopied, setFeedbackDmCopied] = useState(false); // DM を開く前に環境の情報をコピーした直後
+  const feedbackDmTimer = useRef(null);
   const [lastBackupAt, setLastBackupAt] = useState(null); // 最後にバックアップした日時(ISO)
   const [hasPreImportSnapshot, setHasPreImportSnapshot] = useState(false); // バックアップ復元前のデータ退避が残っているか
   const [hideBackupNag, setHideBackupNag] = useState(false); // このセッション中は非表示
@@ -3598,6 +3602,33 @@ function App() {
   const musicApp = musicAppOf(profile.musicApp);
   const showMusicButton = isNativeApp() && musicApp != null;
   const openMusicApp = () => { if (musicApp) window.open(musicApp.url, "_blank"); };
+
+  // ご意見・不具合の報告(設定タブ)。主な窓口は Instagram の DM、メールは控え。
+  // どちらも相手のアプリを開くだけで、アプリからは何も送らない(src/domain/review.js)。
+  const feedbackEnv = () => ({ appVersion: APP_VERSION, platform: isNativeApp() ? "iOS" : "Web", userAgent: navigator.userAgent, lang, unit });
+  // DM には文面を差し込めないので、環境の情報をコピーしてから開く(貼るかは利用者次第)。
+  // window.open はコピーと同じ同期の流れで呼ぶ(consultAi と同じ。await を挟むと開かない)
+  const sendFeedbackDm = () => {
+    if (copyToClipboard(feedbackEnvText(feedbackEnv()))) {
+      setFeedbackDmCopied(true);
+      clearTimeout(feedbackDmTimer.current);
+      // Instagram から戻ったときにまだ読めるよう長めに出す
+      feedbackDmTimer.current = setTimeout(() => setFeedbackDmCopied(false), 15000);
+    }
+    window.open(instagramDmUrl(lang), "_blank", "noopener,noreferrer");
+  };
+  // 既定のメールアプリが無い(Mail を消した)と「メールを復元」の確認が出るだけで、PC から送りたい人もいるので、アドレスのコピーも並べる。
+  const sendFeedback = () => {
+    window.open(buildFeedbackMailUrl({
+      subject: t("feedback.mailSubject"), bodyLead: t("feedback.mailLead"), envLabel: t("feedback.mailEnv"), ...feedbackEnv(),
+    }), "_blank");
+  };
+  const copyFeedbackEmail = () => {
+    if (!copyToClipboard(FEEDBACK_EMAIL)) { window.prompt(t("err.copyFailed"), FEEDBACK_EMAIL); return; }
+    setFeedbackCopied(true);
+    clearTimeout(feedbackCopiedTimer.current);
+    feedbackCopiedTimer.current = setTimeout(() => setFeedbackCopied(false), 4000);
+  };
   const canExportFile = () => !isNativeApp() || fileExportAvailable();
   // Webはダウンロード、iOSは共有シート。戻り値: 渡し終えたら true、キャンセルは false、失敗は null。
   // 共有シートが出ている間の2回目(連打や、JSONの後にCSV)は受け付けない(キャンセル扱い)。
@@ -6407,6 +6438,36 @@ function App() {
             <p style={{ color: C.muted, fontSize: 12, margin: "10px 0 0", lineHeight: 1.6 }}>
               {t("backup.warn")}
             </p>
+          </div>
+
+          {/* ご意見・不具合の報告。App Storeのレビューはネイティブ版だけ(Web版の人はアプリを入れていないことがある) */}
+          <div style={{ background: C.surface, borderRadius: 14, padding: 16, border: `1px solid ${C.border}`, marginBottom: 12 }}>
+            <div style={{ fontSize: 14, fontWeight: 900, marginBottom: 4 }}>{t("feedback.title")}</div>
+            <p style={{ color: C.muted, fontSize: 13, margin: "0 0 12px", lineHeight: 1.6 }}>{t("feedback.desc")}</p>
+            <button onClick={sendFeedbackDm}
+              style={{ ...btn(C.yellow, C.bg), width: "100%", padding: 14, fontSize: 14, marginBottom: 8, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+              <Icon name="chat" size={16} />{t("feedback.dm")}
+            </button>
+            {feedbackDmCopied && <div role="status" style={{ fontSize: 12, color: C.green, margin: "-2px 0 8px", lineHeight: 1.5 }}>{t("feedback.dmCopied")}</div>}
+            {isNativeApp() && (
+              <button onClick={() => window.open(APP_STORE_REVIEW_URL, "_blank", "noopener,noreferrer")}
+                style={{ ...btn(C.surface2, C.text), width: "100%", padding: 14, fontSize: 14, marginBottom: 8, border: `1px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+                <Icon name="trophy" size={16} />{t("feedback.review")}
+              </button>
+            )}
+            {/* Instagram を使わない人向けの控え */}
+            <div style={{ color: C.muted, fontSize: 12, lineHeight: 1.6, marginTop: 4 }}>{t("feedback.mailAlt")}</div>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginTop: 4 }}>
+              <span style={{ color: C.muted, fontSize: 12, lineHeight: 1.6, overflowWrap: "anywhere" }}>{FEEDBACK_EMAIL}</span>
+              <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                <button onClick={sendFeedback} style={{ ...btn("transparent", C.muted), padding: "4px 10px", fontSize: 12, border: `1px solid ${C.border}` }}>
+                  {t("feedback.mail")}
+                </button>
+                <button onClick={copyFeedbackEmail} style={{ ...btn("transparent", feedbackCopied ? C.green : C.muted), padding: "4px 10px", fontSize: 12, border: `1px solid ${C.border}` }}>
+                  {feedbackCopied ? t("feedback.copied") : t("feedback.copy")}
+                </button>
+              </div>
+            </div>
           </div>
 
           <p style={{ color: C.muted, fontSize: 12, lineHeight: 1.6 }}>
