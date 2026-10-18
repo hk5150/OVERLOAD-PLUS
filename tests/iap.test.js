@@ -364,3 +364,27 @@ describe("購入の復元(ネイティブ)", () => {
     expect([...order].sort((a, b) => a - b)).toEqual(order);
   });
 });
+
+// 購入画面に出す、試用の間にできたこと(UI レビュー B3)
+describe("trialProgress", () => {
+  const best = (ex) => Math.max(0, ...ex.sets.map((s) => s.rm));
+  const vol = (ex) => ex.sets.reduce((a, s) => a + s.v, 0);
+  const w = (...exs) => ({ exercises: exs.map(([name, rm, v]) => ({ name, sets: [{ rm, v }] })) });
+
+  it("自己ベストの更新は、前の最高を超えた回だけ数える(初めての種目・同じ値・下がった回は数えない)", () => {
+    const { trialProgress } = load();
+    const r = trialProgress([
+      w(["ベンチ", 80, 100], ["スクワット", 100, 200]),
+      w(["ベンチ", 82, 100]),          // 更新 1
+      w(["ベンチ", 82, 100], ["デッド", 120, 50]), // 同じ値・初めて → 数えない
+      w(["ベンチ", 79, 100], ["スクワット", 105, 200]), // 下がった / 更新 2
+      w(["ベンチ", 81, 100]),          // 最高(82)より下 → 数えない
+    ], best, vol);
+    expect(r).toEqual({ sessions: 5, prUpdates: 2, totalVolume: 950 });
+  });
+
+  it("記録が無ければ0", () => {
+    const { trialProgress } = load();
+    expect(trialProgress([], best, vol)).toEqual({ sessions: 0, prUpdates: 0, totalVolume: 0 });
+  });
+});

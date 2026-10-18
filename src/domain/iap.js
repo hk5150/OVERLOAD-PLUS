@@ -47,6 +47,24 @@ function isTrialLimitReached(workoutsCount, purchased, isNative) {
   return workoutsCount >= TRIAL_WORKOUT_LIMIT;
 }
 
+// 試用の間にできたこと(購入画面に出す。UI レビュー B3)。純粋関数(テスト対象)。
+// best1RMOf(ex): その記録の種目の、自己ベストに数えるセットの最高推定1RM(index.html が est1RM・実効重量で計算して渡す)。
+// 自己ベストの更新は「その種目の前までの最高を超えた回」の数。初めての種目は数えない(比べる相手がいないので)。
+function trialProgress(workouts, best1RMOf, volumeOf) {
+  const best = new Map();
+  let prUpdates = 0, totalVolume = 0;
+  (workouts || []).forEach((w) => {
+    (w.exercises || []).forEach((ex) => {
+      const v = best1RMOf(ex) || 0;
+      const prev = best.get(ex.name);
+      if (prev != null && prev > 0 && v > prev + 0.01) prUpdates++;
+      if (prev == null || v > prev) best.set(ex.name, v);
+      totalVolume += volumeOf(ex) || 0;
+    });
+  });
+  return { sessions: (workouts || []).length, prUpdates, totalVolume };
+}
+
 // 起動時の権利再確認。Transaction.currentEntitlementsのみを見る(AppStore.syncは呼ばない)。
 // AppStore.syncを起動時に自動で呼ぶとApple IDパスワード確認が入りUXを損なうため、
 // それは restorePurchase() 経由(ユーザーが「購入を復元」を押したとき)専用にしてある。
@@ -118,6 +136,7 @@ globalThis.TRIAL_WORKOUT_LIMIT = TRIAL_WORKOUT_LIMIT;
 globalThis.IAP_PRODUCT_ID = IAP_PRODUCT_ID;
 globalThis.iapAvailable = iapAvailable;
 globalThis.isTrialLimitReached = isTrialLimitReached;
+globalThis.trialProgress = trialProgress;
 globalThis.refreshPurchaseState = refreshPurchaseState;
 globalThis.readCachedPurchaseFlag = readCachedPurchaseFlag;
 globalThis.fetchUnlockProduct = fetchUnlockProduct;
