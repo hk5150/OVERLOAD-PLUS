@@ -37,3 +37,4 @@
 - [バー出入りのスクロール補正](kurabell-scroll-compensation-clamp.md) — 下端では文書の縮みでscrollYが先にクランプされ差分scrollByが二重(実測)/上端でheaderがバー裏(2026-10-14)
 - [Watch休憩の自前振動](kurabell-watch-rest-self-haptic.md) — 2026-10-15: play()後に予備通知を消す/willPresentで抑止。play無効・タイマー遅延で無音に。(23)の1分16秒
 - [window.openとネイティブ](kurabell-window-open-native.md) — Capacitor 6.2.1でwindow.openはcreateWebViewWith→UIApplication.open(確認済)。iOSのmailtoは既定メールアプリ
+- [下書きkeepと保存時刻](kurabell-draft-keep-stale-times.md) — 下書きの寿命を延ばすと、保存時に date/duration/kcal が保存時刻基準で壊れる(d5c1d38 B3)

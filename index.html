@@ -613,13 +613,14 @@ const dbLookup = (name) => {
   return { ...(base || { n: name }), ...(ov || {}) };
 };
 
-// 「片手=ダンベル」判定: 種目マスターに登録があればそれを最優先(保存済みの誤フラグを上書き)
 // 初めての種目のセット数(今日のメニュー・手で足した種目の両方)。以前は1行だけで、ふつう3セットやるのに毎回「＋セットを追加」を
 // 2回押していた。入力しなかった行は RIR が無いので未実施として保存されない(2026-10-18、UI レビュー A1)
 const FIRST_TIME_SETS = 3;
+// 履歴タブの自己ベストを畳んだときに出す種目数(UI レビュー B2)
 const PR_ROWS_FOLDED = 5;
-// 試用の残り回数を分割タブに出し始める残り回数。以前は3回で、保存の瞬間に初めて止められたと感じやすかった(UI レビュー B3)
+// 試用の残り回数を分割タブに出し始める残り回数(=4回目の記録から)。以前は3回で、保存の瞬間に初めて止められたと感じやすかった(UI レビュー B3)
 const TRIAL_NOTICE_FROM = 7;
+// 「片手=ダンベル」判定: 種目マスターに登録があればそれを最優先(保存済みの誤フラグを上書き)
 const resolveIsDb = (name, storedIsDb) => {
   const k = dbLookup(name);
   return k ? !!k.db : !!storedIsDb;
@@ -1031,7 +1032,7 @@ function App() {
   const [volModePicked, setVolMode] = useState(null); // day | total | weekly | muscle(null は自動。下の volMode)
   const [volDayPicked, setVolDay] = useState(null);
   const [showAllPr, setShowAllPr] = useState(false); // 自己ベストの一覧を全部出すか(最初は最近の PR_ROWS_FOLDED 件)
-  const [histOpen, setHistOpen] = useState({}); // 履歴の各日を開いたか(idx → bool)。触っていない日は最新だけ開く
+  const [histOpen, setHistOpen] = useState({}); // 履歴の各日を開いたか(記録の date → bool)。添字だと前の日を消したときにずれる。触っていない日は最新だけ開く
   const [volMuscle, setVolMuscle] = useState("");
   const [openCfg, setOpenCfg] = useState({});
   const [openNote, setOpenNote] = useState({}); // 種目メモの開閉
@@ -1094,9 +1095,10 @@ function App() {
 
   // AIモーダル
   const [draftRestored, setDraftRestored] = useState(false); // 復元した旨の通知
-  // 試用の上限で保存を止めた記録。下書きを24時間で消さない印(UI レビュー B3)。記録が空になったら外す
-  const [draftKeep, setDraftKeep] = useState(false);
-  useEffect(() => { if (today.length === 0) setDraftKeep(false); }, [today.length]);
+  // 試用の上限で保存を止めた記録。下書きを24時間で消さない印(UI レビュー B3)。記録が空になったら外す。
+  // 値は保存を止めた時刻(ms)。何日か後に購入して保存したとき、日付・時間・kcal をこの時刻で締める
+  const [draftKeep, setDraftKeep] = useState(null);
+  useEffect(() => { if (today.length === 0) setDraftKeep(null); }, [today.length]);
   // Apple Watchから合流させた操作のid(src/domain/watch.js)。下書きと一緒に保存し、
   // 保存できてからネイティブのキューを消す(ack)。アプリが落ちても二重に適用しないため。
   const [watchApplied, setWatchApplied] = useState([]);
@@ -1142,7 +1144,7 @@ function App() {
             await store.set(DRAFT_KEY, JSON.stringify({
               today, startAt, restStartAt, watchApplied, restFromWatch: restFromWatchRef.current,
               watchWorkoutFor: watchWorkoutForRef.current, watchRestFor: watchRestForRef.current, savedAt: Date.now(),
-              ...(draftKeep ? { keep: true } : {}),
+              ...(draftKeep ? { keep: draftKeep } : {}),
             }));
           }
           // 合流させたWatchの操作は、下書きに残せてから(または記録が無く捨てた後に)キューから消す
@@ -1228,12 +1230,14 @@ function App() {
         if (d?.value) {
           const draft = JSON.parse(d.value);
           // 試用の上限で保存を止めた記録(keep)は、24時間を過ぎても残す(購入するか消すまで。UI レビュー B3)
-          const fresh = draft.keep === true || (draft.savedAt && (Date.now() - draft.savedAt) < 24 * 3600 * 1000);
+          const keepAt = draft.keep ? (typeof draft.keep === "number" ? draft.keep : draft.savedAt || Date.now()) : null;
+          const fresh = keepAt != null || (draft.savedAt && (Date.now() - draft.savedAt) < 24 * 3600 * 1000);
           if (fresh && Array.isArray(draft.today) && draft.today.length > 0) {
             setToday(draft.today);
             if (draft.startAt) setStartAt(draft.startAt);
-            if (draft.keep === true) setDraftKeep(true);
-            if (draft.restStartAt) setRestStartAt(draft.restStartAt);
+            if (keepAt != null) setDraftKeep(keepAt);
+            // 保存を止めた記録はもう終わったトレーニングなので、休憩の時計は戻さない
+            else if (draft.restStartAt) setRestStartAt(draft.restStartAt);
             if (draft.restFromWatch) restFromWatchRef.current = draft.restFromWatch;
             if (draft.watchWorkoutFor) { watchWorkoutForRef.current = draft.watchWorkoutFor; setWatchLiveFor(draft.watchWorkoutFor); }
             if (draft.watchRestFor) { watchRestForRef.current = draft.watchRestFor; setWatchRestFor(draft.watchRestFor); }
@@ -1466,13 +1470,18 @@ function App() {
   const setReminder = async (patch) => {
     const next = { ...reminder, ...patch };
     if (patch.on && !reminder.on) {
-      // オンにした最初だけ、直近の記録から曜日と時刻を決める(後から変えられる)
-      Object.assign(next, suggestWorkoutReminder(workouts, Date.now()));
+      // 曜日と時刻が既定のまま(一度も選んでいない)なら、直近の記録から決める。
+      // 選び直した後にオフ→オンしても、その選択は上書きしない
+      const def = DEFAULT_PROFILE.workoutReminder;
+      if (reminder.time === def.time && reminder.days.join() === def.days.join()) {
+        Object.assign(next, suggestWorkoutReminder(workouts, Date.now()));
+      }
       const ok = await ensureRestNotificationPermission();
       setRemindPermDenied(!ok);
       if (!ok) return;
     }
-    persist({ profile: { ...profile, workoutReminder: next } });
+    // 許可ダイアログを待つ間に profile が変わっていることがあるので、最新の値に重ねる(toggleHealth と同じ)
+    persistRef.current({ profile: { ...profileRef.current, workoutReminder: next } });
   };
 
   // 使える状態のAudioContextを返す(壊れていれば再生成)
@@ -2986,8 +2995,9 @@ function App() {
   const saveWorkout = async () => {
     if (today.length === 0) return;
     setSaving(true);
-    const end = Date.now();
-    const start = startAt ?? end;
+    // 試用の上限で止めた記録(draftKeep)は、止めた時刻で締める(何日か後に購入して保存しても、その日の記録として残す)
+    const end = draftKeep != null ? Math.min(draftKeep, Date.now()) : Date.now();
+    const start = Math.min(startAt ?? end, end);
     const durationMin = Math.max(1, Math.round((end - start) / 60000));
     const exercises = today.map(ex => ({
       name: ex.name, muscle: ex.muscle || "", bwFactor: ex.bwFactor || 0, isDb: resolveIsDb(ex.name, ex.isDb), rom: resolveRom(ex.name, ex.rom), bwAtLog: profile.bodyweight,
@@ -3020,7 +3030,7 @@ function App() {
     // Web版はpurchasedが常にtrueなのでここには来ない。
     if (isTrialLimitReached(workouts.length, purchased, iapAvailable())) {
       setIapError(""); // 前回開いたときのエラーを持ち越さない
-      setDraftKeep(true); // この記録は下書きの24時間の期限で消さない
+      setDraftKeep(k => k ?? Date.now()); // この記録は下書きの24時間の期限で消さない。2回目以降は最初に止めた時刻のまま
       setShowPaywall(true);
       setSaving(false);
       return;
@@ -3865,7 +3875,7 @@ function App() {
   const volumeTrend = useMemo(() => workouts.map(w => {
     const d = new Date(w.date);
     return { date: `${d.getMonth() + 1}/${d.getDate()}`, 総ボリューム: Math.round(toU(w.exercises.reduce((a, ex) => a + exVolume(ex), 0))) };
-  }), [workouts, profile.bodyweight]);
+  }), [workouts, profile.bodyweight, unit]);
   // 週単位(月曜始まり)の合計ボリューム推移
   const weeklyVolumeTrend = useMemo(() => {
     const buckets = {};
@@ -3899,7 +3909,7 @@ function App() {
   const dayVolumeTrend = useMemo(() => workouts.filter(w => w.session === volDay).map(w => {
     const d = new Date(w.date);
     return { date: `${d.getMonth() + 1}/${d.getDate()}`, ボリューム: Math.round(toU(w.exercises.reduce((a, ex) => a + exVolume(ex), 0))) };
-  }), [workouts, volDay, profile.bodyweight]);
+  }), [workouts, volDay, profile.bodyweight, unit]);
   const muscleVolumeTrend = useMemo(() => {
     if (!volMuscle) return [];
     return workouts.map(w => {
@@ -4664,7 +4674,7 @@ function App() {
                 </>}
               </div>
               {(() => {
-                // 行ごとの「N日前」は、メニューで一番多い日数と違う種目にだけ出す(全部同じなら上の部位の行に1回出ている。UI レビュー A4)
+                // 行ごとの「N日前」は、メニューで一番多い日数と違う種目にだけ出す(上の部位の行に1回出ているので。UI レビュー A4)
                 const daysOf = (it) => {
                   if ((it.baseType ?? it.type) === "new_start") return null;
                   const last = exerciseInsight(it.prescription.name)?.date;
@@ -4672,7 +4682,9 @@ function App() {
                 };
                 const counts = new Map();
                 menuItems.forEach(it => { const d = daysOf(it); if (d != null) counts.set(d, (counts.get(d) || 0) + 1); });
-                const commonDays = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+                const mode = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+                // 上の部位の行にも同じ日数が出ているときだけ省く(部位の日数は種目の日数と別物なので、出ていなければ省かない)
+                const commonDays = todayDay?.muscles?.some(m => lastTrained(m) === mode) ? mode : undefined;
                 return menuItems.map((it, i) => {
                 const p = it.prescription;
                 const rowDays = daysOf(it);
@@ -4711,7 +4723,7 @@ function App() {
                     ) : (
                       // 前回の記録が無い種目。以前は「0kg × 0回 × 1セット」と出て、壊れて見えた(UI レビュー A1)
                       <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.6 }}>
-                        {t("menu.reasonNew")}<span style={{ marginLeft: 6 }}>{t("menu.setCount", { n: p.sets })}</span>
+                        {t("menu.firstTime")}<span style={{ marginLeft: 6 }}>{t("menu.setCount", { n: p.sets })}</span>
                       </div>
                     )}
                     {/* 初めての種目は、まずフォームを見てから始められるように(改善要望 10b) */}
@@ -5837,7 +5849,7 @@ function App() {
               })}
               {rows.length > PR_ROWS_FOLDED && (
                 <button onClick={() => setShowAllPr(v => !v)} style={{ ...btn("transparent", C.text), padding: "4px 0", fontSize: 13 }}>
-                  {showAllPr ? t("pr.showLess") : t("pr.showAll", { n: rows.length })}</button>
+                  {showAllPr ? t("pr.showLess", { n: PR_ROWS_FOLDED }) : t("pr.showAll", { n: rows.length })}</button>
               )}
             </div>
             );
@@ -5972,7 +5984,7 @@ function App() {
             const d = editing ? editWorkout.draft : w;
             // 開いた日だけ人体図・画像ボタン・全セットを出す(UI レビュー B2)。以前は全部の日を広げて並べ、12回で縦に約 9,500px あった。
             // 触っていない日は、最新の日と、カレンダーで選んだ日だけ開く
-            const open = editing || (idx in histOpen ? histOpen[idx] : (selectedDate != null || idx === workouts.length - 1));
+            const open = editing || (w.date in histOpen ? histOpen[w.date] : (selectedDate != null || idx === workouts.length - 1));
             // この日に推定1RMの自己ベストを更新した種目の数(表示モードの ⚡ と同じ条件)
             const prCount = open ? 0 : w.exercises.filter(ex => {
               const best = (sets) => sets.reduce((b, s) => (s.warmup || s.assisted || !s.reps) ? b : Math.max(b, est1RM(setEff(ex, s), s.reps)), 0);
@@ -6032,7 +6044,7 @@ function App() {
 
               {/* 時間・ボリュームの行を押すと開く/たたむ */}
               {!editing && (
-                <button onClick={() => setHistOpen(o => ({ ...o, [idx]: !open }))} aria-expanded={open}
+                <button onClick={() => setHistOpen(o => ({ ...o, [w.date]: !open }))} aria-expanded={open}
                   style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "4px 10px", width: "100%", textAlign: "left", background: "transparent", border: "none", padding: "2px 0", marginBottom: open ? 8 : 0,
                     fontSize: 12, color: C.muted, fontFamily: "inherit", cursor: "pointer" }}>
                   {open && w.startAt && <span>{fmtTime(w.startAt)}〜{w.endAt ? fmtTime(w.endAt) : ""}</span>}
@@ -6567,11 +6579,13 @@ function App() {
                   <div role="group" aria-label={t("settings.remindDays")} style={{ display: "flex", gap: 4 }}>
                     {["cal.sun", "cal.mon", "cal.tue", "cal.wed", "cal.thu", "cal.fri", "cal.sat"].map((k, d) => {
                       const on = reminder.days.includes(d);
+                      // 2026-01-04 は日曜。英語の1文字(S/T が2つずつ)では区別できないので、英語は3文字にし、読み上げは曜日の名前にする
+                      const wd = (style) => new Date(2026, 0, 4 + d).toLocaleDateString(lang === "en" ? "en-US" : "ja-JP", { weekday: style });
                       return (
                         // 最後の1日は外せない(全部外すと、オンのまま何も知らせなくなる)
-                        <button key={k} aria-pressed={on} disabled={on && reminder.days.length === 1}
+                        <button key={k} aria-pressed={on} aria-label={wd("long")} disabled={on && reminder.days.length === 1}
                           onClick={() => setReminder({ days: on ? reminder.days.filter(x => x !== d) : [...reminder.days, d] })}
-                          style={{ ...chip(on), flex: 1, padding: "8px 0", textAlign: "center" }}>{t(k)}</button>
+                          style={{ ...chip(on), flex: 1, padding: "8px 0", textAlign: "center" }}>{lang === "en" ? wd("short") : t(k)}</button>
                       );
                     })}
                   </div>
