@@ -3929,6 +3929,13 @@ function App() {
   }, [workouts, volMuscle, profile.bodyweight]);
   useEffect(() => { if (!volMuscle && trainedMuscles.length) setVolMuscle(trainedMuscles[0]); }, [trainedMuscles, volMuscle]);
   useEffect(() => { if (!chartMuscle && chartMuscles.length) setChartMuscle(chartMuscles[0]); }, [chartMuscles, chartMuscle]);
+  // 記録が増えたら(起動時の読み込み・保存)、種目別グラフは最後の記録の1種目目に合わせる(保存直後に今日の種目の伸びが見えるように)
+  useEffect(() => {
+    const ex = workouts[workouts.length - 1]?.exercises[0];
+    if (!ex) return;
+    setChartMuscle(ex.muscle || "未設定");
+    setChartExercise(ex.name);
+  }, [workouts.length]);
   // 部位を切り替えたら、その部位に無い種目が選ばれたままにならないよう先頭に寄せる
   useEffect(() => {
     if (!chartExerciseChoices.length) return;
@@ -4349,7 +4356,8 @@ function App() {
                 {/* 実際の画面(1.4、北村さん「チュートリアルの画像を実際の画面で説明する」)。guide/ に日英7枚ずつ同梱。
                     縦長の画面の、そのページで見せたいところ(pos)を 4:5 の枠で切り出して見せる */}
                 <div style={{
-                  width: "min(240px, 64vw, 24vh)", aspectRatio: "4 / 5", borderRadius: 20, overflow: "hidden", background: "#000",
+                  // 最後のページ(AIコーチと Watch)は本文が長いので、画像を一回り小さくして iPhone 17 Pro の高さに収める(シミュレータで1行はみ出した)
+                  width: step.img === 7 ? "min(200px, 56vw, 19vh)" : "min(240px, 64vw, 24vh)", aspectRatio: "4 / 5", borderRadius: 20, overflow: "hidden", background: "#000",
                   border: `1px solid ${C.border}`, boxShadow: "0 12px 40px rgba(0,0,0,0.45)",
                 }}>
                   <img src={`guide/${lang === "en" ? "en" : "ja"}-${step.img}.jpg`} alt="" draggable={false}
