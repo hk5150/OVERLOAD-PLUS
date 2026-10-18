@@ -195,7 +195,7 @@
     { key:'units',      urls:['src/domain/units.js'],
       globals:['LB_PER_KG','SUPPORTED_UNITS','resolveUnit','getUnit','setUnit','uLabel','kgToLb','lbToKg','toU','fromU','wU','wStr','convWeightStr','incU'] },
     { key:'oneRm',      urls:['src/domain/oneRm.js'],
-      globals:['est1RM','effWeight','dayBest1RM','SET_1RM_MAX_REPS','showsSet1RM','isNew1RMBest'] },
+      globals:['est1RM','effWeight','dayBest1RM','SET_1RM_MAX_REPS','uncapped1RM','showsSet1RM','isNew1RMBest'] },
     { key:'storage',    urls:['src/domain/storage.js'],
       globals:['store'] },
     { key:'backupValidation', urls:['src/domain/backupValidation.js'],
@@ -1823,6 +1823,17 @@ function App() {
   // ---- PR(自己ベスト)と推定1RM ----
   // 実効重量(ダンベルは両手・自重は体重換算)ベースで比較する
   const setEff = (ex, s) => effWeight(s.weight, resolveIsDb(ex.name, ex.isDb), ex.bwFactor ?? 0, ex.bwAtLog ?? profile.bodyweight);
+  // 腹筋の種目は推定1RMの回数上限(12回)を外す(src/domain/oneRm.js の uncapped1RM)。部位で決めるので、
+  // 部位を腹筋にしたカスタム種目も入る。findExercise はこれより後で作られるので、同じ順(内蔵 → カスタム → 別名)をここで書いている。
+  // 種目マスターで引けない名前(消したカスタム種目の過去の記録)だけ、記録に残る部位(ex.muscle)を使う。
+  // 引けないまま上限ありに戻すと、その種目の13回以上の日の自己ベスト・グラフ・⚡がまとめて消えるため(reviewer 指摘)。
+  // est1RM・showsSet1RM・dayBest1RM を呼ぶところは全部これを渡すこと(渡し忘れた画面だけ腹筋の1RMが消える)
+  const repsUncapped = (ex) => {
+    const name = ex?.name;
+    const base = DB_BY_NAME[name] || customExercises.find(e => e.n === name);
+    const m = base ? { ...base, ...(exerciseOverrides[name] || {}) }.m : (dbLookup(name)?.m ?? ex?.muscle);
+    return uncapped1RM(m);
+  };
   // 種目ごとの自己ベスト: {best1RM, bestWeight, date(1RM達成日), weightDate(重量PR達成日)}
   const prMap = useMemo(() => {
     const m = {};
@@ -1831,7 +1842,7 @@ function App() {
         if (s.assisted) return; // 補助ありは自己ベストに含めない
         if (!s.reps || s.reps < 1) return; // 実際に挙げていないセットは対象外
         const eff = setEff(ex, s);
-        const rm = est1RM(eff, s.reps);
+        const rm = est1RM(eff, s.reps, repsUncapped(ex));
         const cur = m[ex.name] || { best1RM: 0, bestWeight: 0, date: null, weightDate: null, reps: 0, weight: 0 };
         // 片手の重さを添えるため(記録の画面は片手、ここは両手の合計なので、同じ人に別の数字に見えていた。UI レビュー C5)
         cur.perHand = resolveIsDb(ex.name, ex.isDb) && !(ex.bwFactor > 0);
@@ -1841,7 +1852,7 @@ function App() {
       });
     }));
     return m;
-  }, [workouts, profile.bodyweight, exerciseOverrides]);
+  }, [workouts, profile.bodyweight, exerciseOverrides, customExercises]);
 
   // 記録中の種目の現在の最高推定1RM(PR更新判定に使う。補助ありは除外)
   const liveBest1RM = (ex) => {
@@ -1849,7 +1860,7 @@ function App() {
     // 「あと何回できた?」を入力したセットのみ = 実際に行ったセット
     return ex.sets.filter(s => !s.warmup && !s.assisted && s.rir !== "" && s.rir != null).reduce((max, s) => {
       const eff = effWeight(fromU(s.weight), isDb, ex.bwFactor || 0, profile.bodyweight);
-      return Math.max(max, est1RM(eff, Math.round(num(s.reps))));
+      return Math.max(max, est1RM(eff, Math.round(num(s.reps)), repsUncapped(ex)));
     }, 0);
   };
   // 自己ベストを更新した瞬間の「YOU WIN!」(1.4)。1.8秒で消える。タップでも消える。
@@ -2204,7 +2215,7 @@ function App() {
   // 自己ベストの印は、その日より前の記録の最高と比べて付ける(prMap は今日までの全部が入っているので使わない)
   const shareHistoryImage = (w, idx, story) => {
     const t0 = Date.parse(w.date);
-    const bestOf = (ex) => workingSets(ex).reduce((m, s) => (s.assisted || !s.reps || s.reps < 1) ? m : Math.max(m, est1RM(setEff(ex, s), s.reps)), 0);
+    const bestOf = (ex) => workingSets(ex).reduce((m, s) => (s.assisted || !s.reps || s.reps < 1) ? m : Math.max(m, est1RM(setEff(ex, s), s.reps, repsUncapped(ex))), 0);
     const pastBest = {};
     workouts.forEach(x => { if (x === w || !(Date.parse(x.date) < t0)) return; x.exercises.forEach(ex => { pastBest[ex.name] = Math.max(pastBest[ex.name] || 0, bestOf(ex)); }); });
     const prKeys = w.exercises.filter(ex => (pastBest[ex.name] || 0) > 0 && bestOf(ex) > pastBest[ex.name] + 0.01).map(ex => ex.name);
@@ -3868,15 +3879,15 @@ function App() {
       const d = new Date(w.date);
       // workingSetsはウォームアップしか除かないので、ここで直接reduceすると補助ありセットが
       // 混ざり、同じ日についてグラフだけが自己ベスト・履歴と違う値を出していた。
-      const best = dayBest1RM(ex.sets, resolveIsDb(ex.name, ex.isDb), ex.bwFactor ?? 0, ex.bwAtLog ?? profile.bodyweight);
+      const best = dayBest1RM(ex.sets, resolveIsDb(ex.name, ex.isDb), ex.bwFactor ?? 0, ex.bwAtLog ?? profile.bodyweight, repsUncapped(ex));
       return {
         date: `${d.getMonth() + 1}/${d.getDate()}`,
         最大重量: wU(Math.max(...ws.map(s => s.weight))),
-        // 13回以上しかない日は推定しない(est1RM が 0)。0 を描くと線が落ちるので、その日は点を打たない
+        // 13回以上しかない日は推定しない(est1RM が 0。腹筋の種目は除く)。0 を描くと線が落ちるので、その日は点を打たない
         推定1RM: best > 0 ? Math.round(toU(best) * 10) / 10 : null,
       };
     }).filter(Boolean);
-  }, [workouts, chartExercise, profile.bodyweight]);
+  }, [workouts, chartExercise, profile.bodyweight, customExercises, exerciseOverrides]);
   const volumeTrend = useMemo(() => workouts.map(w => {
     const d = new Date(w.date);
     return { date: `${d.getMonth() + 1}/${d.getDate()}`, 総ボリューム: Math.round(toU(w.exercises.reduce((a, ex) => a + exVolume(ex), 0))) };
@@ -4403,7 +4414,7 @@ function App() {
             <h2 style={{ fontSize: 18, fontWeight: 900, margin: "0 0 10px" }}>{t("paywall.title")}</h2>
             {/* 試用の間にできたこと(UI レビュー B3)。以前は「試用は10回までです」と止めるだけで、何が得られていたかを見せていなかった */}
             {(() => {
-              const pg = trialProgress(workouts, ex => workingSets(ex).reduce((m, s) => (s.assisted || !s.reps) ? m : Math.max(m, est1RM(setEff(ex, s), s.reps)), 0), exVolume);
+              const pg = trialProgress(workouts, ex => workingSets(ex).reduce((m, s) => (s.assisted || !s.reps) ? m : Math.max(m, est1RM(setEff(ex, s), s.reps, repsUncapped(ex))), 0), exVolume);
               return (
                 <div style={{ display: "flex", gap: 8, margin: "0 0 12px" }}>
                   {[[t("paywall.statPr"), String(pg.prUpdates), lang === "ja" ? "回" : ""], [t("paywall.statVolume"), Math.round(toU(pg.totalVolume)).toLocaleString(), uLabel()]].map(([label, v, u]) => (
@@ -5027,7 +5038,7 @@ function App() {
                       // ⚡バッジと揃えるため、src/domain/oneRm.jsのdayBest1RMに集約してある。
                       // 体重は記録当時のスナップショット(bwAtLog)を優先する。
                       const histIsDb = resolveIsDb(h.ex.name, h.ex.isDb);
-                      const best1RM = dayBest1RM(h.ex.sets, histIsDb, h.ex.bwFactor ?? 0, h.ex.bwAtLog ?? profile.bodyweight);
+                      const best1RM = dayBest1RM(h.ex.sets, histIsDb, h.ex.bwFactor ?? 0, h.ex.bwAtLog ?? profile.bodyweight, repsUncapped(h.ex));
                       // 下の行に並ぶセットは片手/加重の生値なので、1RM側が両手合計・体重込みで
                       // あることを単位で示す(比較カードと同じ表記に揃えている)。
                       const histUnit = (h.ex.bwFactor ?? 0) > 0 ? t("share.withBw", { unit: uLabel() })
@@ -5145,7 +5156,8 @@ function App() {
                 // このセットの推定1RM(ウォームアップ・補助は対象外)
                 const setW = fromU(s.weight), setR = Math.round(num(s.reps));
                 const setEffW = effWeight(setW, resolveIsDb(ex.name, ex.isDb), ex.bwFactor || 0, profile.bodyweight);
-                const set1RM = (showsSet1RM(s, setEffW, setR) && s.rir !== "" && s.rir != null) ? est1RM(setEffW, setR) : 0;
+                const uncap = repsUncapped(ex); // 腹筋の種目は回数の上限なし
+                const set1RM = (showsSet1RM(s, setEffW, setR, uncap) && s.rir !== "" && s.rir != null) ? est1RM(setEffW, setR, uncap) : 0;
                 const pastBest1RM = prMap[ex.name]?.best1RM || 0;
                 // このセットが自己ベストを更新しているか(同一セッション内では最も高い1セットのみに印を付ける)
                 // 対象は行に 1RM を出すセット(showsSet1RM)に揃える。13回以上を数えると、⚡がどの行にも出ないことがある(reviewer 指摘)
@@ -5154,8 +5166,8 @@ function App() {
                   ex.sets.forEach((x, xi) => {
                     if (x.rir === "" || x.rir == null) return; // 未実施は対象外
                     const w = effWeight(fromU(x.weight), resolveIsDb(ex.name, ex.isDb), ex.bwFactor || 0, profile.bodyweight), r = Math.round(num(x.reps));
-                    if (!showsSet1RM(x, w, r)) return;
-                    const v = est1RM(w, r);
+                    if (!showsSet1RM(x, w, r, uncap)) return;
+                    const v = est1RM(w, r, uncap);
                     if (v > bv) { bv = v; bi = xi; }
                   });
                   return bi;
@@ -5163,8 +5175,8 @@ function App() {
                 const isSetPR = set1RM > 0 && set1RM > pastBest1RM + 0.01 && i === bestIdxInSession;
                 // 行の右端に出す推定1RM。重量と回数が入っていれば RIR の前から出す(未実施の行は行ごと薄くなる)。
                 // 自己ベストを超えたら緑。初めての種目は比べる相手がいないので緑にしない(全部の行が緑になる)
-                const show1RM = showsSet1RM(s, setEffW, setR);
-                const row1RM = show1RM ? est1RM(setEffW, setR) : 0;
+                const show1RM = showsSet1RM(s, setEffW, setR, uncap);
+                const row1RM = show1RM ? est1RM(setEffW, setR, uncap) : 0;
                 const over1RM = pastBest1RM > 0 && row1RM > pastBest1RM + 0.01;
                 // 前回の同じ番手のワーキングセット。同じ重量×回数なら余力の伸びを差分で出す
                 const prevSet = s.warmup ? null : (ins?.sets?.[wsIndex - 1] || null);
@@ -5210,7 +5222,7 @@ function App() {
                           const todayBest = ex.sets.reduce((m, x, xi) => {
                             if (xi === i || x.rir === "" || x.rir == null) return m;
                             const w = effWeight(fromU(x.weight), resolveIsDb(ex.name, ex.isDb), ex.bwFactor || 0, profile.bodyweight), r = Math.round(num(x.reps));
-                            return showsSet1RM(x, w, r) ? Math.max(m, est1RM(w, r)) : m;
+                            return showsSet1RM(x, w, r, uncap) ? Math.max(m, est1RM(w, r, uncap)) : m;
                           }, 0);
                           // 同じセットで余力を外して入れ直しても、2回目は出さない(入れ間違いを直すたびに全画面が出ないように)
                           const winKey = `${startAt}:${ex.id}:${i}`;
@@ -6045,10 +6057,10 @@ function App() {
             const open = editing || (w.date in histOpen ? histOpen[w.date] : (selectedDate != null || idx === workouts.length - 1));
             // この日に推定1RMの自己ベストを更新した種目の数(表示モードの ⚡ と同じ条件)
             const prCount = open ? 0 : w.exercises.filter(ex => {
-              const best = (sets) => sets.reduce((b, s) => (s.warmup || s.assisted || !s.reps) ? b : Math.max(b, est1RM(setEff(ex, s), s.reps)), 0);
+              const best = (sets) => sets.reduce((b, s) => (s.warmup || s.assisted || !s.reps) ? b : Math.max(b, est1RM(setEff(ex, s), s.reps, repsUncapped(ex))), 0);
               const prior = workouts.slice(0, idx).reduce((b, pw) => {
                 const pe = pw.exercises.find(e => e.name === ex.name);
-                return pe ? Math.max(b, pe.sets.reduce((bb, s) => (s.warmup || s.assisted || !s.reps) ? bb : Math.max(bb, est1RM(setEff(pe, s), s.reps)), 0)) : b;
+                return pe ? Math.max(b, pe.sets.reduce((bb, s) => (s.warmup || s.assisted || !s.reps) ? bb : Math.max(bb, est1RM(setEff(pe, s), s.reps, repsUncapped(pe))), 0)) : b;
               }, 0);
               return best(ex.sets) > prior + 0.01;
             }).length;
@@ -6137,13 +6149,13 @@ function App() {
                   if (!pe) return best;
                   return pe.sets.reduce((b, s) => {
                     if (s.warmup || s.assisted || !s.reps) return b;
-                    return Math.max(b, est1RM(setEff(pe, s), s.reps));
+                    return Math.max(b, est1RM(setEff(pe, s), s.reps, repsUncapped(pe)));
                   }, best);
                 }, 0);
                 let prIdx = -1, prVal = 0;
                 ex.sets.forEach((s, si) => {
                   if (s.warmup || s.assisted || !s.reps) return;
-                  const v = est1RM(setEff(ex, s), s.reps);
+                  const v = est1RM(setEff(ex, s), s.reps, repsUncapped(ex));
                   if (v > prVal) { prVal = v; prIdx = si; }
                 });
                 const hasPR = prIdx >= 0 && prVal > priorBest + 0.01;

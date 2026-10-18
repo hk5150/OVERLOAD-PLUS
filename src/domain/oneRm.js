@@ -7,10 +7,16 @@
 // 自己ベストに見えてしまうため(北村さんの判断、2026-10-05。docs/改善要望_2026-10.md の 6)。
 // ここで切るので、自己ベスト(prMap)・比較の行・⚡・グラフ・Watch の完了画面がすべて同じ基準になる
 // (呼び出し側で個別に除くと、条件がずれて「比較は緑なのに ⚡ が無い」が起きた)。
+// 例外: 腹筋の種目は回数を問わず推定する(北村さん、2026-10-19)。腹筋は15〜30回で組むのがふつうで、
+// 上限があると1RMも自己ベストも出ない種目になっていた。対象は種目データの部位(m)が「腹筋」のもの
+// (内蔵7種目と、部位を腹筋にしたカスタム種目)。部位の解決は index.html 側(repsUncapped)。
+// uncapped は呼び出し側がその種目について uncapped1RM(部位) を渡す。渡し忘れると上限ありのまま。
 const SET_1RM_MAX_REPS = 12;
-const est1RM = (weight, reps) => {
+const UNCAPPED_1RM_MUSCLES = ["腹筋"];
+const uncapped1RM = (muscle) => UNCAPPED_1RM_MUSCLES.includes(muscle);
+const est1RM = (weight, reps, uncapped = false) => {
   if (!weight || !reps || reps < 1) return 0;
-  if (reps > SET_1RM_MAX_REPS) return 0;
+  if (!uncapped && reps > SET_1RM_MAX_REPS) return 0;
   if (reps === 1) return weight;
   return weight * (1 + reps / 30);
 };
@@ -29,20 +35,20 @@ function effWeight(weight, isDb, bwFactor, bodyweight) {
 // 値が食い違っていた)、ここに集約してテストで縛る。
 // isDb/bwFactor/bodyweightは呼び出し側で解決して渡す(種目マスターの参照は#appsrc側の責務。
 // bodyweightには記録当時のスナップショット bwAtLog を優先して渡すこと)。
-function dayBest1RM(sets, isDb, bwFactor, bodyweight) {
+function dayBest1RM(sets, isDb, bwFactor, bodyweight, uncapped = false) {
   return (sets || []).reduce((max, s) => {
     if (s.warmup || s.assisted) return max;
-    return Math.max(max, est1RM(effWeight(s.weight, isDb, bwFactor, bodyweight), s.reps));
+    return Math.max(max, est1RM(effWeight(s.weight, isDb, bwFactor, bodyweight), s.reps, uncapped));
   }, 0);
 }
 
 // 記録画面の各セットに推定1RMを出すか。ウォームアップと補助ありは実力を表さないので出さない。
-// 13回以上も出さない(est1RM が 0 を返すのと同じ基準)。
+// 13回以上も出さない(est1RM が 0 を返すのと同じ基準。腹筋の種目は uncapped で上限なし)。
 // RIR の有無は見ない(入る前から薄く出す。濃さは呼び出し側が決める)。
 // effW は effWeight を通した実効重量(ダンベルは両手、自重は体重込み)。入力した重量で判定すると、
 // 加重0の懸垂やディップスに一切出なくなる(reviewer 指摘)。
-function showsSet1RM(s, effW, reps) {
-  return !s.warmup && !s.assisted && effW > 0 && reps >= 1 && reps <= SET_1RM_MAX_REPS;
+function showsSet1RM(s, effW, reps, uncapped = false) {
+  return !s.warmup && !s.assisted && effW > 0 && reps >= 1 && (uncapped || reps <= SET_1RM_MAX_REPS);
 }
 
 // 自己ベストの更新を祝う(YOU WIN!、1.4)かどうか。RIR を入れたその1セットについて判定する。
@@ -66,5 +72,6 @@ globalThis.est1RM = est1RM;
 globalThis.effWeight = effWeight;
 globalThis.dayBest1RM = dayBest1RM;
 globalThis.SET_1RM_MAX_REPS = SET_1RM_MAX_REPS;
+globalThis.uncapped1RM = uncapped1RM;
 globalThis.showsSet1RM = showsSet1RM;
 globalThis.isNew1RMBest = isNew1RMBest;

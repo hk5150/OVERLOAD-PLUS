@@ -345,3 +345,38 @@ describe("isNew1RMBest(自己ベストの更新を祝うか)", () => {
     expect(isNew1RMBest({ set1RM: 0, pastBest: 100 })).toBe(false);
   });
 });
+
+describe("腹筋の種目は回数の上限を外す(uncapped、2026-10-19)", () => {
+  const { uncapped1RM, showsSet1RM } = loadDomainModule("src/domain/oneRm.js");
+
+  it("部位が腹筋のときだけ上限を外す", () => {
+    expect(uncapped1RM("腹筋")).toBe(true);
+    expect(uncapped1RM("胸")).toBe(false);
+    expect(uncapped1RM(undefined)).toBe(false); // 種目データに無い名前
+  });
+
+  it("est1RM: uncapped なら13回以上も推定する。渡さなければ今までどおり0", () => {
+    expect(est1RM(20, 20, true)).toBeCloseTo(20 * (1 + 20 / 30));
+    expect(est1RM(20, 20)).toBe(0);
+    expect(est1RM(20, 20, false)).toBe(0);
+  });
+
+  it("est1RM: uncapped でも回数0・重量0は0のまま", () => {
+    expect(est1RM(20, 0, true)).toBe(0);
+    expect(est1RM(0, 20, true)).toBe(0);
+  });
+
+  it("showsSet1RM: uncapped なら13回以上の行にも出す。ウォームアップ・補助ありは出さないまま", () => {
+    const s = (o = {}) => ({ warmup: false, assisted: false, ...o });
+    expect(showsSet1RM(s(), 20, 25, true)).toBe(true);
+    expect(showsSet1RM(s(), 20, 25)).toBe(false);
+    expect(showsSet1RM(s({ warmup: true }), 20, 25, true)).toBe(false);
+    expect(showsSet1RM(s({ assisted: true }), 20, 25, true)).toBe(false);
+  });
+
+  it("dayBest1RM: uncapped なら13回以上だけの日にも値が出る(自重の腹筋は体重×係数で)", () => {
+    const sets = [workSet({ weight: 0, reps: 20 }), workSet({ weight: 0, reps: 15 })];
+    expect(dayBest1RM(sets, false, 0.35, 70, true)).toBeCloseTo(70 * 0.35 * (1 + 20 / 30));
+    expect(dayBest1RM(sets, false, 0.35, 70)).toBe(0);
+  });
+});
