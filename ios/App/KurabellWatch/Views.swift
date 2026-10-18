@@ -209,7 +209,8 @@ struct RestRow: View {
     }
 }
 
-// 今の心拍(Watch のワークアウトが心拍を取っているときだけ)。一覧の一番上、休憩タイマーの文字の行の右端に出す
+// 今の心拍(Watch のワークアウトが心拍を取っているときだけ)。一覧の一番上、休憩タイマーの文字の行の右端と、
+// 全画面の休憩タイマー(RestTimerView)の文字の右に出す
 // 15秒以上新しい値が来なければ隠す(iPhone の WATCH_HR_FRESH_MS と同じ)。心拍の有無で行の高さが変わらないよう、
 // 置き場所(呼び出し側の HStack)は高さを固定している
 struct HeartRateLabel: View {
@@ -297,9 +298,15 @@ struct RestTimerView: View {
                         let sec = ctx.date.timeIntervalSince(startAt)
                         let color = sec < 60 ? Palette.green : sec < 120 ? Palette.yellow : Palette.red
                         VStack(spacing: 0) {
-                            Text(snap.labels.rest)
-                                .font(.system(size: 13, weight: .bold))
-                                .foregroundStyle(Palette.muted)
+                            // 今の心拍は文字の右に並べる(行を足すと、46mm でスクロールせずに見える「前回」の行が押し出される)
+                            HStack(spacing: 8) {
+                                Text(snap.labels.rest)
+                                    .font(.system(size: 13, weight: .bold))
+                                    .foregroundStyle(Palette.muted)
+                                    .lineLimit(1)
+                                HeartRateLabel()
+                            }
+                            .frame(height: 20) // 心拍の有無で高さが変わらないように
                             Text(timerInterval: startAt...startAt.addingTimeInterval(8 * 3600), countsDown: false)
                                 .numeric(isSmallWatch ? 38 : 46)
                                 .foregroundStyle(color)
