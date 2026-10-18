@@ -3960,6 +3960,18 @@ function App() {
     const el = headerRef.current;
     return el ? el.getBoundingClientRect().bottom + window.scrollY : null;
   };
+  // タブごとにスクロール位置を覚えて、戻ったときに戻す。初めて開くタブは上から(以前は前のタブの位置のまま開き、
+  // 記録タブで下まで送った後に履歴タブを開くとカレンダーの途中から出ていた。シミュレータで確認、2026-10-18)。
+  // 下の補正より先に動かして、補正が覚える scrollY をこの位置にする
+  const tabScrollRef = useRef({});
+  const prevViewRef = useRef(view);
+  useLayoutEffect(() => {
+    const prevView = prevViewRef.current;
+    if (prevView === view) return;
+    tabScrollRef.current[prevView] = contentTopRef.current?.sy ?? window.scrollY;
+    prevViewRef.current = view;
+    window.scrollTo(0, tabScrollRef.current[view] ?? 0);
+  }, [view]);
   useLayoutEffect(() => {
     const y = measureContentTop();
     const prev = contentTopRef.current;
@@ -3983,11 +3995,19 @@ function App() {
   }, []);
   // 案内(「書き出す ›」「購入 ›」)から設定タブの該当の欄へ飛ぶ。購入欄・バックアップ欄は設定の下の方にあるので、
   // タブを切り替えるだけでは見えない。切り替え直後は欄がまだ描画されていないので、次のフレームまで待つ
+  // scrollIntoView + scroll-margin だと、ステータスバー(設定タブではノッチ帯の目隠し)の高さが入らず、
+  // 欄の見出しが画面の上に隠れていた(シミュレータで確認、2026-10-18)。目隠しの高さを実測して引く。
+  // smooth にしないのは、動いている間に上の欄の高さが変わると行き過ぎるため。少し後にもう一度合わせる
+  const notchRef = useRef(null);
   const goToSettings = (anchorId) => {
     setView("settings");
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-      document.getElementById(anchorId)?.scrollIntoView({ block: "start", behavior: "smooth" });
-    }));
+    const align = () => {
+      const el = document.getElementById(anchorId);
+      if (!el) return;
+      const off = Math.round((topBarRef.current || notchRef.current)?.getBoundingClientRect().height ?? 0) + 12; // 休憩中は上部バーが上を塞ぐ
+      window.scrollTo(0, Math.max(0, el.getBoundingClientRect().top + window.scrollY - off));
+    };
+    requestAnimationFrame(() => requestAnimationFrame(() => { align(); setTimeout(align, 300); }));
   };
 
   // 「現在の種目へ」ボタンの飛び先。RIRが入って初めて実施済みなので、まだRIRを入れていない
@@ -4113,7 +4133,7 @@ function App() {
         const copied = copiedIdx === "finish";
         return (
           <div role="dialog" aria-modal="true" aria-label={s.title}
-            style={{ position: "fixed", inset: 0, zIndex: 110, background: "rgba(10,11,12,0.97)", display: "flex", flexDirection: "column",
+            style={{ position: "fixed", inset: 0, zIndex: 110, background: C.bg, /* 半透明だと後ろの文字が本文の裏に透けて読みにくい(シミュレータで確認、2026-10-18) */ display: "flex", flexDirection: "column",
               padding: "calc(28px + env(safe-area-inset-top)) 24px calc(24px + env(safe-area-inset-bottom))", overflowY: "auto" }}>
             <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", maxWidth: 460, width: "100%", margin: "0 auto" }}>
               <div style={{ fontSize: 13, fontWeight: 800, color: C.muted }}>{s.stats.join(" · ")}</div>
@@ -4305,13 +4325,16 @@ function App() {
         const last = guideStep === steps.length - 1;
         return (
           <div ref={guideModalRef} role="dialog" aria-modal="true" aria-label={t("guide.title")} tabIndex={-1}
-            style={{ position: "fixed", inset: 0, zIndex: 100, background: "rgba(10,11,12,0.96)", display: "flex", flexDirection: "column", padding: "calc(24px + env(safe-area-inset-top)) 24px calc(24px + env(safe-area-inset-bottom))", overflowY: "auto" }}>
-            <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", maxWidth: 460, width: "100%", margin: "0 auto" }}>
+            style={{ position: "fixed", inset: 0, zIndex: 100, background: C.bg, /* お疲れ様の画面と同じ理由で不透明 */ display: "flex", flexDirection: "column", padding: "calc(24px + env(safe-area-inset-top)) 24px calc(24px + env(safe-area-inset-bottom))" }}>
+            {/* 本文だけをスクロールさせ、「次へ」はどのページでも同じ位置に置く(本文の長さでボタンが上下に動いていた。シミュレータで確認、2026-10-18)。
+                margin: auto で、収まるときは上下の中央、収まらないときは上から */}
+            <div style={{ flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column" }}>
+            <div style={{ margin: "auto", maxWidth: 460, width: "100%" }}>
               <div style={{ display: "flex", justifyContent: "center", marginBottom: 24 }}>
                 {/* 実際の画面(1.4、北村さん「チュートリアルの画像を実際の画面で説明する」)。guide/ に日英7枚ずつ同梱。
                     縦長の画面の、そのページで見せたいところ(pos)を 4:5 の枠で切り出して見せる */}
                 <div style={{
-                  width: "min(240px, 64vw)", aspectRatio: "4 / 5", borderRadius: 20, overflow: "hidden", background: "#000",
+                  width: "min(240px, 64vw, 28vh)", aspectRatio: "4 / 5", borderRadius: 20, overflow: "hidden", background: "#000",
                   border: `1px solid ${C.border}`, boxShadow: "0 12px 40px rgba(0,0,0,0.45)",
                 }}>
                   <img src={`guide/${lang === "en" ? "en" : "ja"}-${step.img}.jpg`} alt="" draggable={false}
@@ -4324,6 +4347,7 @@ function App() {
               </p>
               <p style={{ fontSize: 14, color: C.muted, lineHeight: 1.9, margin: 0, whiteSpace: "pre-wrap" }}>{step.body}</p>
             </div>
+            </div>
             <div style={{ maxWidth: 460, width: "100%", margin: "0 auto" }}>
               <div style={{ display: "flex", justifyContent: "center", gap: 8, margin: "24px 0" }}>
                 {steps.map((_, i) => (
@@ -4333,8 +4357,10 @@ function App() {
               <button onClick={() => last ? finishGuide() : setGuideStep(guideStep + 1)} style={{ ...btn(C.yellow, C.bg), width: "100%", padding: 16, fontSize: 16 }}>
                 {last ? t("guide.start") : t("guide.next")}
               </button>
-              <button onClick={finishGuide} style={{ ...btn("transparent", C.muted), width: "100%", padding: 12, fontSize: 13, marginTop: 6 }}>
-                {last ? "" : t("guide.skip")}
+              {/* 最後のページは隠すだけにして高さを残す(空にすると「はじめる」だけ下にずれる) */}
+              <button onClick={finishGuide} aria-hidden={last} tabIndex={last ? -1 : 0}
+                style={{ ...btn("transparent", C.muted), width: "100%", padding: 12, fontSize: 13, marginTop: 6, visibility: last ? "hidden" : "visible" }}>
+                {t("guide.skip")}
               </button>
             </div>
           </div>
@@ -4525,7 +4551,7 @@ function App() {
           (以前はstickyバーがtop:0に貼り付いて常に塞いでいた)。
           env()が0のブラウザでは高さ0になり何も起きない。 */}
       {!barVisible && (
-        <div aria-hidden="true" style={{
+        <div ref={notchRef} aria-hidden="true" style={{
           position: "fixed", top: 0, left: 0, right: 0, height: "env(safe-area-inset-top)",
           background: C.bg, zIndex: 30, pointerEvents: "none",
         }} />
@@ -4670,7 +4696,9 @@ function App() {
                 {/* autoMenuの3分岐(分割の登録種目 > 前回同セッション > 部位一致の履歴)と1対1で対応させる。
                     以前は3分岐目(部位一致で複数の過去記録から寄せ集め)もfromLastと表示しており、
                     特定の「前回のセッション」から来たかのように読めて不正確だった。 */}
-                {t("menu.carryover", { src: todayDay.exercises && todayDay.exercises.length ? t("menu.fromSplit") : (lastSameSession ? t("menu.fromLast") : t("menu.fromHistory")) })}
+                {/* 全部が初めての種目なら、引き継ぐ記録はまだ無い(「記録をそのまま引き継いでいます」と出ていた。シミュレータで確認、2026-10-18) */}
+                {menuItems.every(it => (it.baseType ?? it.type) === "new_start") ? t("menu.allFirst")
+                  : t("menu.carryover", { src: todayDay.exercises && todayDay.exercises.length ? t("menu.fromSplit") : (lastSameSession ? t("menu.fromLast") : t("menu.fromHistory")) })}
                 </>}
               </div>
               {(() => {
@@ -5714,7 +5742,14 @@ function App() {
                         <LineChart data={dayVolumeTrend} margin={{ top: 8, right: 10, left: 0, bottom: 0 }}>
                           <CartesianGrid stroke={C.border} strokeDasharray="3 3" />
                           <XAxis dataKey="date" stroke={C.muted} fontSize={11} tickLine={false} />
-                          <YAxis stroke={C.muted} fontSize={11} tickLine={false} width={40} tickFormatter={compactTick} domain={["auto", "auto"]} />
+                          {(() => {
+                            // 縦軸は 0 からではなく値の幅に合わせるので、幅が狭いと「1.1k」が何段も並ぶ(シミュレータで確認、2026-10-18)。
+                            // 幅が 2,000 より狭いときは丸めずに出す
+                            const vs = dayVolumeTrend.map(d => d["ボリューム"]);
+                            const narrow = Math.max(...vs) - Math.min(...vs) < 2000;
+                            return <YAxis stroke={C.muted} fontSize={11} tickLine={false} width={narrow ? 46 : 40} domain={["auto", "auto"]}
+                              tickFormatter={narrow ? (v => Math.round(v).toLocaleString()) : compactTick} />;
+                          })()}
                           <Tooltip contentStyle={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 13, color: C.text }} formatter={v => [`${v.toLocaleString()}${uLabel()}`, dayName(volDay)]} />
                           <Line type="monotone" dataKey="ボリューム" stroke={C.green} strokeWidth={2.5} dot={lastDot(dayVolumeTrend.length, C.green)} />
                         </LineChart>
@@ -6560,7 +6595,7 @@ function App() {
 
           {/* トレーニング日のお知らせ(UI レビュー A3)。端末内の通知なので iOS 版だけ */}
           {restNotificationsAvailable() && (
-            <div id="settings-remind" style={{ background: C.surface, borderRadius: 14, padding: 16, border: `1px solid ${C.border}`, marginBottom: 12, scrollMarginTop: 16 }}>
+            <div id="settings-remind" style={{ background: C.surface, borderRadius: 14, padding: 16, border: `1px solid ${C.border}`, marginBottom: 12 }}>
               <label style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 14, gap: 12 }}>
                 {t("settings.remind")}
                 <button onClick={() => setReminder({ on: !reminder.on })}
@@ -6604,7 +6639,7 @@ function App() {
               Web版には出さない(iapAvailable()が常にfalse)。購入済みでも「購入を復元」は
               常設する(Guideline 3.1.1: 復元可能なIAPには復元手段が必須)。 */}
           {iapAvailable() && (
-            <div id="settings-iap" style={{ background: C.surface, borderRadius: 14, padding: 16, border: `1px solid ${C.border}`, marginBottom: 12, scrollMarginTop: 16 }}>
+            <div id="settings-iap" style={{ background: C.surface, borderRadius: 14, padding: 16, border: `1px solid ${C.border}`, marginBottom: 12 }}>
               <div style={{ fontSize: 14, fontWeight: 900, marginBottom: 10 }}>{t("settings.iap.title")}</div>
               {iapError && <div role="alert" style={{ fontSize: 13, color: C.red, marginBottom: 10 }}>{iapError}</div>}
               {iapPending && !purchased && <div role="status" style={{ fontSize: 13, color: C.yellow, lineHeight: 1.6, marginBottom: 10 }}>{t("paywall.pending")}</div>}
@@ -6646,7 +6681,7 @@ function App() {
           )}
 
           {/* バックアップ */}
-          <div id="settings-backup" style={{ background: C.surface, borderRadius: 14, padding: 16, border: `1px solid ${C.border}`, marginBottom: 12, scrollMarginTop: 16 }}>
+          <div id="settings-backup" style={{ background: C.surface, borderRadius: 14, padding: 16, border: `1px solid ${C.border}`, marginBottom: 12 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, marginBottom: 4 }}>
               <div style={{ fontSize: 14, fontWeight: 900 }}>{t("backup.title")}</div>
               <div style={{ fontSize: 12, color: lastBackupAt ? C.muted : C.yellow }}>
