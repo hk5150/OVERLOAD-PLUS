@@ -2521,6 +2521,9 @@ function App() {
 
   const startAutoMenu = () => {
     ensureStarted();
+    // メニューの下の「記録を開始」から始めると、その位置のまま3種目目あたりが出ていた(シミュレータで確認)。1種目目から見せる。
+    // 上部バーの出入りの補正が先に動くので、2フレーム待つ
+    requestAnimationFrame(() => requestAnimationFrame(() => window.scrollTo(0, 0)));
     if (coachMenuActive) {
       setToday(mergeCoachPlan([], coachMenu.plan, { newExercise: coachNewExercise }));
       setCoachMenu(null);
@@ -3138,7 +3141,7 @@ function App() {
     setDraftRestored(false);
     try { await store.del(DRAFT_KEY); localStorage.removeItem(DRAFT_KEY); } catch { /* noop */ }
     // 中身が替わるので、記録タブ・履歴タブで覚えていた位置は捨てて上から出す(履歴は新しい記録のカレンダーから)
-    delete tabScrollRef.current.log; delete tabScrollRef.current.history;
+    forgetTabScroll("log", "history");
     setView("history");
     // iPhone にも「お疲れ様でした」を出す(北村さん、2026-10-10。Watch の完了画面と同じ中身)。
     // 「メニューとして保存しますか」は、この画面を閉じた後ろに残っている(zIndex がこちらの方が上)
@@ -3906,7 +3909,10 @@ function App() {
     return [...order, ...[...has].filter(n => !order.includes(n))];
   }, [workouts, split]);
   const volMode = volModePicked ?? (volDays.length ? "day" : "total");
+  // 既定は最後に記録した Day(保存した直後に開く履歴で、今やった Day の伸びが見えるように。以前は次の「今日」の Day だった)
+  const lastSession = workouts.length ? workouts[workouts.length - 1].session : null;
   const volDay = volDayPicked && volDays.includes(volDayPicked) ? volDayPicked
+    : volDays.includes(lastSession) ? lastSession
     : (split && volDays.includes(split.days[split.cursor % split.days.length]?.name) ? split.days[split.cursor % split.days.length].name : volDays[0]);
   const dayVolumeTrend = useMemo(() => workouts.filter(w => w.session === volDay).map(w => {
     const d = new Date(w.date);
@@ -3967,10 +3973,17 @@ function App() {
   // 下の補正より先に動かして、補正が覚える scrollY をこの位置にする
   const tabScrollRef = useRef({});
   const prevViewRef = useRef(view);
+  // 中身が丸ごと替わるタブ(保存した後の記録・履歴、Day を選んだ後の記録)は、覚えた位置を捨てて次は上から。
+  // 保存では、捨てた後の描画でまだ記録タブにいて、タブを替えるときに位置を覚え直してしまうので、
+  // 消すだけでなく「次に覚えない」印も付ける(シミュレータで、保存後の記録タブが下端から出た)
+  const forgetTabsRef = useRef(new Set());
+  const forgetTabScroll = (...views) => views.forEach(v => { delete tabScrollRef.current[v]; forgetTabsRef.current.add(v); });
   useLayoutEffect(() => {
     const prevView = prevViewRef.current;
     if (prevView === view) return;
-    tabScrollRef.current[prevView] = contentTopRef.current?.sy ?? window.scrollY;
+    if (forgetTabsRef.current.has(prevView)) forgetTabsRef.current.delete(prevView);
+    else tabScrollRef.current[prevView] = contentTopRef.current?.sy ?? window.scrollY;
+    forgetTabsRef.current.delete(view);
     prevViewRef.current = view;
     window.scrollTo(0, tabScrollRef.current[view] ?? 0);
   }, [view]);
@@ -4332,22 +4345,22 @@ function App() {
                 margin: auto で、収まるときは上下の中央、収まらないときは上から */}
             <div style={{ flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column" }}>
             <div style={{ margin: "auto", maxWidth: 460, width: "100%" }}>
-              <div style={{ display: "flex", justifyContent: "center", marginBottom: 24 }}>
+              <div style={{ display: "flex", justifyContent: "center", marginBottom: 18 }}>
                 {/* 実際の画面(1.4、北村さん「チュートリアルの画像を実際の画面で説明する」)。guide/ に日英7枚ずつ同梱。
                     縦長の画面の、そのページで見せたいところ(pos)を 4:5 の枠で切り出して見せる */}
                 <div style={{
-                  width: "min(240px, 64vw, 28vh)", aspectRatio: "4 / 5", borderRadius: 20, overflow: "hidden", background: "#000",
+                  width: "min(240px, 64vw, 24vh)", aspectRatio: "4 / 5", borderRadius: 20, overflow: "hidden", background: "#000",
                   border: `1px solid ${C.border}`, boxShadow: "0 12px 40px rgba(0,0,0,0.45)",
                 }}>
                   <img src={`guide/${lang === "en" ? "en" : "ja"}-${step.img}.jpg`} alt="" draggable={false}
                     style={{ width: "100%", height: "100%", objectFit: step.img === 7 ? "contain" : "cover", objectPosition: step.pos, display: "block" }} />
                 </div>
               </div>
-              <h2 style={{ fontSize: 24, fontWeight: 900, textAlign: "center", margin: "0 0 14px", lineHeight: 1.35 }}>{withBreaks(step.title)}</h2>
+              <h2 style={{ fontSize: 24, fontWeight: 900, textAlign: "center", margin: "0 0 10px", lineHeight: 1.35 }}>{withBreaks(step.title)}</h2>
               <p style={{ fontSize: 16, color: C.text, textAlign: "center", lineHeight: 1.7, margin: "0 0 14px", fontWeight: 700 }}>
                 {withBreaks(step.lead)}
               </p>
-              <p style={{ fontSize: 14, color: C.muted, lineHeight: 1.9, margin: 0, whiteSpace: "pre-wrap" }}>{step.body}</p>
+              <p style={{ fontSize: 14, color: C.muted, lineHeight: 1.8, margin: 0, whiteSpace: "pre-wrap" }}>{step.body}</p>
             </div>
             </div>
             <div style={{ maxWidth: 460, width: "100%", margin: "0 auto" }}>
@@ -5498,7 +5511,7 @@ function App() {
                 const isNext = i === split.cursor % split.days.length; const editing = editDay === i;
                 const goToLog = isNext && !editing;
                 return (
-                  <div key={i} id={`split-day-${i}`} onClick={goToLog ? () => { delete tabScrollRef.current.log; setView("log"); } : undefined}
+                  <div key={i} id={`split-day-${i}`} onClick={goToLog ? () => { forgetTabScroll("log"); setView("log"); } : undefined}
                     style={{ background: C.surface, borderRadius: 14, padding: 14, marginBottom: 8, border: `1px solid ${isNext ? C.yellow : C.border}`, cursor: goToLog ? "pointer" : "default" }}>
                     {/* 320px 幅では ▲▼・今日はこれ・編集で名前の場所が無くなり、「Pull」が「Pu」で切れてボタンの下に隠れていた。
                         名前の側に最低幅(120px)を持たせ、足りなければボタンを次の行へ回す。それでも長い名前は省略記号で切る */}
