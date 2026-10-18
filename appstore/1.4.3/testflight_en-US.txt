@@ -1,0 +1,12 @@
+What to check in 1.4.3 (45):
+1. The first-run guide now has 4 pages (Welcome / Split / Beat last time / AI Coach and Apple Watch). The text fits and the Next button stays in place
+2. Split tab: with two or more empty days, "Fill all N days with the basics" adds exercises to every day
+3. New exercises show a "First" badge and "Pick a weight and log (3 sets)". Starting a workout gives three 0 kg × 0 rows, and rows you leave empty are not saved
+4. Once you start, the session card at the top folds into one line. Starting from the lower "Start with this menu" button still shows the first exercise
+5. After you tap RIR and the rest panel appears, the next set row is visible above it
+6. The finish screen shows "Next up: Pull" (or similar). "Get a reminder on training days" jumps to Settings without hiding the heading
+7. Settings > Training-day reminders: turn it on, pick days and a time, and a "Today: Push. Last time: …" notification arrives at that time. No reminder if you already saved that day
+8. History: Volume opens on "By day" with the day you last logged selected. Days are folded (only the latest is open), and personal bests sit above the history list
+9. Switching tabs brings each tab back to where you left it. After saving, Log and History open at the top
+10. After the 10 free workouts, the unlock screen shows what those 10 achieved (personal bests, total volume). The draft from the day it stopped is kept, and saving after purchase dates the workout to that day
+11. The version label moved to the bottom of Settings (v167)
