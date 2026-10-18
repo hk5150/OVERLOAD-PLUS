@@ -60,4 +60,14 @@ SNS のコンセプトは他と同じ「エビデンスをもとに有益な情�
 4. 設定: 子ども向けではない / 「改変または合成されたコンテンツ」=はい / 公開は「スケジュールを設定」で、TikTok と同じ日の 12:30
 5. `published/` に、YouTube の URL と公開日時を書く
 
+2026-10-18 に 03〜12 をこの手順で予約した(`published/2026-10-18-03-12.md`)。そのとき分かったこと:
+
+- 動画は Mac の `127.0.0.1:8800` から配る。CORS と `Access-Control-Allow-Private-Network: true` を返す小さな Python サーバを
+  `KURABELL-TikTok/` で動かす。Chrome は初回だけ「ローカルネットワークへのアクセス」の許可を聞く
+- アップロード画面は `…/videos/upload?d=ud` を開けば出る。`input[type=file]`(`ytcp-uploads-dialog` の中)に `File` を渡す
+- タイトルと説明文は `#textbox[contenteditable]` の1つ目と2つ目に `execCommand('insertText')` で入る。ラジオボタンは `name` で選べる
+  (`VIDEO_MADE_FOR_KIDS_NOT_MFK`、「さらに表示」を開いてから `VIDEO_HAS_ALTERED_CONTENT_YES`)
+- 「次へ」と「スケジュールを設定」は画面上で押す。時刻欄は文字を打っても入らないので、開いた一覧から `12:30` を選ぶ
+- 終わったら「ショート」の一覧で、全本が「公開予約」と予定日になっているかを見る
+
 予約は YouTube 側で動くので、Mac が止まっていても予約済みの分は出る。ストックが切れたら、TikTok と同じく新しい動画を作るまで止まる。
