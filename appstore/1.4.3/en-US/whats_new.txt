@@ -1,0 +1,10 @@
+• Training-day reminders (Settings): on the days and time you pick, you get "Today: Push. Last time: Bench Press 77.5×9". No reminder if you've already logged that day. Reminders are scheduled on your iPhone; your workouts are never sent anywhere.
+• A new exercise starts with three rows to fill in with weight and reps. Rows you leave empty aren't saved.
+• Once you start logging, the "Today's session" card folds to one line. When the rest panel appears after you tap RIR, the next set's row scrolls into view.
+• The finish screen shows the day you're doing next (e.g. "Next: Pull").
+• History: the volume chart opens by day. Each day is folded except the latest, and personal bests are above the history, most recently beaten first (top 5).
+• Split: if two or more days have no exercises, fill them all with one tap.
+• Switching tabs brings you back to where you were in each tab.
+• When the 10 free workouts are used up, the screen shows what they added up to (PRs and total volume). Your 11th workout is kept as a draft.
+• New in Settings: "Feedback & bug reports" (Instagram DM or email).
+• The first-run guide is now 4 pages, and the version number has moved to the bottom of Settings.
