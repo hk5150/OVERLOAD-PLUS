@@ -21,11 +21,15 @@
 
 ## プロフィール
 
+2026-10-18 時点の実物(149文字)。最後の行はご意見の窓口を DM にしたときに足し、150文字に収めるため
+3・4行目を詰めた(元は「Beat your last session, set by set」「iPhone + Apple Watch · 10 workouts free」)。
+
 ```
-Beat your last session.
-Evidence-based lifting tips
-Last weight × reps × RIR on every set
-iPhone + Apple Watch · No subscription · 10 free workouts
+Evidence-based lifting tips daily
+KURABELL = Japanese for "compare" + bell
+Beat last time, set by set
+iPhone/Watch · 10 workouts free
+Feedback? DM us
 ```
 
 リンクは英語版用のキャンペーンリンク(`ct=instagram_en`):
