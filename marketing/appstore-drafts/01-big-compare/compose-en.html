@@ -1,0 +1,54 @@
+<!doctype html>
+<!-- App Store の1枚目の案・英語(2026-10-20)。検索結果の小さい表示でも「前回→今日」が読めるように、数字を大きく見せる。
+     数字は v7 の 01 と同じ記録画面(hero-en.png)にあるものだけを使う(Guideline 2.3)。
+     書き出し: Chrome ヘッドレスで 440x956・倍率3 → 1320x2868 -->
+<html lang="en"><head><meta charset="utf-8">
+<style>
+@font-face { font-family: "Barlow Condensed"; font-weight: 800; src: url(../../../fonts/barlow-condensed-800-latin.woff2) format("woff2"); }
+@font-face { font-family: "Barlow Condensed"; font-weight: 600; src: url(../../../fonts/barlow-condensed-600-latin.woff2) format("woff2"); }
+:root { --bg: #141517; --surface: #1E2023; --border: #2E3237; --text: #F2F0EB; --muted: #A3A8B0; --yellow: #E8B33C; --green: #4CAF6E; }
+* { box-sizing: border-box; margin: 0; }
+html, body { width: 440px; height: 956px; overflow: hidden; background: var(--bg); color: var(--text);
+  font-family: -apple-system, "Hiragino Sans", "Hiragino Kaku Gothic ProN", sans-serif; -webkit-font-smoothing: antialiased; }
+.copy { position: absolute; left: 28px; right: 28px; top: 64px; }
+.kicker { font-family: "Barlow Condensed", sans-serif; font-weight: 600; font-size: 15px; letter-spacing: .12em; color: var(--yellow); }
+.kicker b { color: var(--muted); font-weight: 600; margin-right: 8px; }
+h1 { margin-top: 12px; font-family: "Barlow Condensed", sans-serif; font-weight: 800; font-size: 52px; line-height: 1.0; }
+h1 em { font-style: normal; color: var(--yellow); }
+.cmp { position: absolute; left: 28px; right: 28px; top: 226px; }
+.line { display: grid; grid-template-columns: 84px 1fr; align-items: baseline; padding: 18px 0; border-bottom: 1px solid var(--border); }
+.line .k { font-size: 20px; font-weight: 700; color: var(--muted); }
+.num { font-family: "Barlow Condensed", sans-serif; font-weight: 800; font-size: 86px; line-height: 1; letter-spacing: -.01em; white-space: nowrap; }
+.num small { font-family: -apple-system, "Hiragino Sans", sans-serif; font-size: 22px; font-weight: 700; margin: 0 6px 0 3px; }
+.num i { font-style: normal; font-size: 46px; color: var(--muted); margin: 0 6px; }
+.prev .num { color: var(--muted); }
+.now .k { color: var(--text); }
+.now .num { color: var(--yellow); }
+.chips { display: flex; gap: 10px; margin-top: 20px; flex-wrap: wrap; }
+.chip { font-size: 17px; font-weight: 800; color: #0E1A12; background: var(--green); border-radius: 999px; padding: 8px 16px; }
+.chip.o { background: transparent; color: var(--green); box-shadow: inset 0 0 0 2px var(--green); }
+.real { position: absolute; left: 14px; right: 14px; top: 618px; }
+.real p { font-size: 13px; color: var(--muted); margin: 0 14px 10px; }
+.zoom { height: 154px; border-radius: 18px; overflow: hidden; box-shadow: 0 0 0 2px var(--yellow), 0 18px 50px rgba(0,0,0,.7);
+  background: url(hero-en.png) no-repeat; background-size: 440px auto; background-position: -16px -494px; }
+.brand { position: absolute; left: 28px; bottom: 40px; display: flex; align-items: center; gap: 12px; }
+.brand img { width: 48px; height: 48px; border-radius: 11px; }
+.brand .n { font-family: "Barlow Condensed", sans-serif; font-weight: 800; font-size: 26px; line-height: 1; }
+.brand .n small { font-weight: 600; font-size: 17px; color: var(--muted); margin-left: 4px; }
+</style></head>
+<body>
+<div class="copy">
+  <div class="kicker"><b>01</b>LAST SESSION</div>
+  <h1>Beat last time?<br><em>See it at a glance.</em></h1>
+</div>
+<div class="cmp">
+  <div class="line prev"><div class="k">Last</div><div class="num">155<small>lb</small><i>×</i>10<small>reps</small></div></div>
+  <div class="line now"><div class="k">Today</div><div class="num">160<small>lb</small><i>×</i>10<small>reps</small></div></div>
+  <div class="chips"><span class="chip">+5lb</span><span class="chip o">Est. 1RM +6.7lb vs best</span></div>
+</div>
+<div class="real">
+  <p>The real log screen: last time&#39;s set under each one.</p>
+  <div class="zoom"></div>
+</div>
+<div class="brand"><img src="../../../icon-192.png"><div class="n">KURABELL<small>Workout Log</small></div></div>
+</body></html>
