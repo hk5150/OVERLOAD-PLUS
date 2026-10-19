@@ -1,0 +1,3 @@
+What to check in 1.4.4 (46):
+1. Apple Watch full-screen rest timer: your current heart rate appears next to "Rest" (on 46mm, the "Last" row is still visible without scrolling).
+2. Ab exercises (e.g. crunches) logged at 13+ reps get an estimated 1RM and personal bests. Other exercises still cap at 12 reps.

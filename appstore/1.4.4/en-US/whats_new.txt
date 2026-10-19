@@ -1,0 +1,2 @@
+• Apple Watch: the full-screen rest timer now shows your current heart rate (next to "Rest").
+• Ab exercises now get an estimated 1RM and personal bests at any rep count (previously none above 12 reps).
