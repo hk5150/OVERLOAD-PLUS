@@ -134,6 +134,23 @@ function stalestDayIndex(days, workouts, fromIdx, opts) {
   return best;
 }
 
+// 今日のメニューに出す種目名(2026-10-20、北村さん「今回行う種目が多すぎる。前回行ったメニューをそのまま表示して」)。
+// 前回の同じ Day の記録があれば、その種目だけを出す。登録(registered)は記録中に足すたびに増え、
+// 今日やらなかった種目も残るので、登録を足すと前回より多く出た(2026-10-05 からの「登録 + 前回」の並べ方)。
+// 並びは前回の順。ただし登録にもある種目どうしは登録の順に入れ替える(分割タブの ▲▼ が次回に効くように。
+// 保存のときの登録の並べ替え(index.html の saveWorkout)と同じ「占めていた位置に入れ直す」形)。
+// 前回の記録が無い Day は登録の順。どちらも無ければ null(呼び出し側で部位一致の履歴から組む)。
+function dayMenuNames(registered, lastNames) {
+  const last = [...new Set(lastNames || [])];
+  const reg = registered || [];
+  if (last.length) {
+    const inReg = reg.filter(n => last.includes(n));
+    let k = 0;
+    return last.map(n => reg.includes(n) ? inReg[k++] : n);
+  }
+  return reg.length ? reg.slice() : null;
+}
+
 // 内転筋(2026-10 に部位を追加)を、保存済みの分割の脚の Day に1回だけ足す。
 // 足さないと、脚の Day でアダクションを入れたときに「今日の部位外」のバッジが出る。
 // adductorV1 は「もう足した」の印。これが無いと、利用者が外した後も読み込みのたびに足し直してしまう。
@@ -160,3 +177,4 @@ globalThis.nextDayName = nextDayName;
 globalThis.uniqueDayName = uniqueDayName;
 globalThis.stalestDayIndex = stalestDayIndex;
 globalThis.addAdductorDays = addAdductorDays;
+globalThis.dayMenuNames = dayMenuNames;

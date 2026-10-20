@@ -407,7 +407,7 @@ const STRINGS = {
   "split.dayNameAria": { ja: "Day名",                  en: "Day name" },
   "split.isToday":     { ja: "今日はこれ",             en: "Today" },
   "split.muscleUnset": { ja: "部位未設定(「編集」から選択)", en: "No muscles set (choose via Edit)" },
-  "split.dayExercises": { ja: "この日にやる種目(登録すると自動メニューになります)", en: "Exercises for this day (they become the auto menu)" },
+  "split.dayExercises": { ja: "この日にやる種目(初回のメニューになります。2回目からは前回やった種目が出ます)", en: "Exercises for this day (your first menu; after that, your last session's exercises appear)" },
   "split.noBuiltIn":   { ja: "この部位の内蔵種目がありません。", en: "No built-in exercises for this muscle." },
   "split.exerciseList": { ja: "種目: {list}",          en: "Exercises: {list}" },
   "split.tapToLog":    { ja: "タップして記録を始める →", en: "Tap to start logging →" },

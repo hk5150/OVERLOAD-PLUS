@@ -389,3 +389,33 @@ describe("#appsrc の配線(新しく作る分割は移行を通さない)", () 
     expect(appsrc).toMatch(/const migrateSplit = [^\n]*addAdductorDays\(/);
   });
 });
+
+describe("dayMenuNames(今日のメニューの種目)", () => {
+  const { dayMenuNames } = loadDomainModule("src/domain/dayPlan.js");
+
+  it("前回の記録があれば、登録に残っていても前回やらなかった種目は出さない(2026-10-20、多すぎた)", () => {
+    expect(dayMenuNames(["A", "B", "C", "D", "E"], ["A", "C"])).toEqual(["A", "C"]);
+  });
+
+  it("前回やって登録に無い種目も、前回の位置で出す", () => {
+    expect(dayMenuNames(["A", "B"], ["X", "A", "Y"])).toEqual(["X", "A", "Y"]);
+  });
+
+  it("登録にもある種目どうしは登録の順(分割タブの ▲▼)に入れ替え、ほかの種目の位置は動かさない", () => {
+    expect(dayMenuNames(["C", "B", "A"], ["A", "X", "B", "C"])).toEqual(["C", "X", "B", "A"]);
+  });
+
+  it("前回の同じ種目が2回あっても1回だけ", () => {
+    expect(dayMenuNames([], ["A", "B", "A"])).toEqual(["A", "B"]);
+  });
+
+  it("前回の記録が無い Day は登録の順", () => {
+    expect(dayMenuNames(["B", "A"], [])).toEqual(["B", "A"]);
+    expect(dayMenuNames(["B", "A"], undefined)).toEqual(["B", "A"]);
+  });
+
+  it("どちらも無ければ null(呼び出し側で部位一致の履歴から組む)", () => {
+    expect(dayMenuNames([], [])).toBeNull();
+    expect(dayMenuNames(undefined, undefined)).toBeNull();
+  });
+});

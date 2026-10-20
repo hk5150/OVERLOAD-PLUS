@@ -203,7 +203,7 @@
     { key:'volume',     urls:['src/domain/volume.js'],
       globals:['workingSets','setVolume','exVolume','nextSetType','volumeGoalKey'] },
     { key:'dayPlan',    urls:['src/domain/dayPlan.js'],
-      globals:['STARTER_PICKS','STARTER_FULL_BODY','STARTER_MAX','starterPicks','DAY_GROUP_OF','autoDayName','nextDayName','uniqueDayName','stalestDayIndex','addAdductorDays'] },
+      globals:['STARTER_PICKS','STARTER_FULL_BODY','STARTER_MAX','starterPicks','DAY_GROUP_OF','autoDayName','nextDayName','uniqueDayName','stalestDayIndex','addAdductorDays','dayMenuNames'] },
     { key:'bodyMap',    urls:['src/domain/bodyMap.js'],
       globals:['mirrorBodyPath','BODY_SILHOUETTE','BODY_HEAD','BODY_REGIONS','BODY_DETAILS','bodyHitMuscles'] },
     { key:'coefficients', urls:['src/domain/coefficients.js'],
@@ -2481,24 +2481,16 @@ function App() {
     return [...workouts].reverse().find(w => w.session === todayDay.name) || null;
   }, [workouts, todayDay]);
 
-  // 今日のセッションのメニュー(分割に登録した種目 > 前回同セッションの実際の記録 > 部位一致の履歴)。
-  // 経緯: 以前は登録種目を最優先にしていたが、登録の一覧は手で直さない限り変わらず、やめた種目が出続けた。
-  // そこで前回の記録を優先にしたが、今度は登録の順を ▲▼ で並べ替えても効かなくなった。1.3 では登録の一覧を
-  // 分割タブで並べ替え・外せるようにし、記録中に足した種目は登録に入り、カードの ✕ で消すと登録からも外れる
-  // ので、登録を最優先に戻した(北村さんの判断、2026-10-05)。セットの中身は種目ごとに前回の同じ Day から引く(buildMenuItem)。
-  // 登録が0件の Day(プリセットのまま記録している Day)は、今までどおり前回の記録の順。
-  // 記録中にカードを並べ替えたら、保存のときに登録の順も合わせる(saveWorkout。1.2 まではそれで次回の順が変わっていた)。
+  // 今日のセッションのメニュー(前回同セッションの実際の記録 > 分割に登録した種目 > 部位一致の履歴)。
+  // 経緯: 2026-10-05 から「登録 + 前回やっていて登録に無い種目」にしていたが、登録は記録中に足すたびに増え、
+  // 今日やらなかった種目も残るので、前回より多くの種目が出た。北村さん「前回行ったメニューをそのまま表示して」
+  // (2026-10-20)で、前回の記録があれば前回の種目だけにした。登録の順(▲▼)は、前回の種目どうしの並びにだけ効く
+  // (dayMenuNames、src/domain/dayPlan.js)。登録は、まだ記録の無い Day の最初のメニューになる。
+  // セットの中身は種目ごとに前回の同じ Day から引く(buildMenuItem)。
   const autoMenu = useMemo(() => {
     if (!todayDay) return [];
-    let names = [];
-    if (todayDay.exercises && todayDay.exercises.length) {
-      // 登録の順のあとに、前回やっていて登録に無い種目を前回の順で足す(記録のある Day に1件だけ登録したときに、
-      // メニューがその1件だけにならないように。reviewer 指摘)。やめた種目は前回に無いので出ない
-      names = [...todayDay.exercises,
-        ...(lastSameSession ? lastSameSession.exercises.map(e => e.name).filter(n => !todayDay.exercises.includes(n)) : [])];
-    } else if (lastSameSession) {
-      names = lastSameSession.exercises.map(e => e.name);
-    } else {
+    let names = dayMenuNames(todayDay.exercises, lastSameSession ? lastSameSession.exercises.map(e => e.name) : []);
+    if (!names) {
       const seen = new Set();
       [...workouts].reverse().forEach(w => w.exercises.forEach(ex => {
         if (!seen.has(ex.name) && muscleMatchesDay(ex.muscle, todayDay)) seen.add(ex.name);
@@ -2783,8 +2775,8 @@ function App() {
     const day = split.days[dayIdx];
     if (!day.exercises || !day.exercises.length) return; // 登録0件の Day は登録しない(addExercise と同じ)
     if (!day.exercises.includes(oldName)) {
-      // 登録に無い種目を差し替えた: 差し替え先を登録に足す(addExercise と同じ。足さないと、今日のメニューは
-      // 登録を優先するので次回に出ない。reviewer 指摘)
+      // 登録に無い種目を差し替えた: 差し替え先を登録に足す(addExercise と同じ。2026-10-20 から今日のメニューは
+      // 前回の記録から出るが、登録は並びと、記録の無い Day の最初のメニューに使う)
       if (newName && !day.exercises.includes(newName)) {
         persist({ split: { ...split, days: split.days.map((d, i) => i === dayIdx ? { ...d, exercises: [...d.exercises, newName] } : d) } });
       }
@@ -3080,7 +3072,7 @@ function App() {
       startAt: new Date(start).toISOString(), endAt: new Date(end).toISOString(),
       durationMin, totalVolume, kcal: estimateKcal(durationMin), exercises,
     };
-    // 記録中にカードを並べ替えたら、今日の Day の登録の順も合わせる(今日のメニューは登録の順を優先するので、
+    // 記録中にカードを並べ替えたら、今日の Day の登録の順も合わせる(今日のメニューは前回の種目どうしを登録の順に並べるので、
     // 合わせないと並べ替えが次回に残らない。reviewer 指摘)。今日やらなかった登録種目は元の位置のまま、
     // 今日やった登録種目が占めていた位置に、今日の順で入れ直す
     const reorderedDays = (() => {
@@ -3212,7 +3204,7 @@ function App() {
   // 「最初の種目設定」(おまかせ・選ぶための AI 相談・保存時の登録の申し出)は、まだ記録が無い Day にだけ出す
   // (プリセットの Day は登録種目を持たないまま記録を重ねるので、登録0件だけで判断すると出続けた。reviewer 指摘)
   const dayHasRecords = (name) => workouts.some(w => w.session === name);
-  // 登録種目の並べ替え(改善要望 3c)。この順が今日のメニューの並びになる(autoMenu は登録を最優先にする)
+  // 登録種目の並べ替え(改善要望 3c)。この順が今日のメニューの並びになる(前回の記録がある Day では、前回の種目どうしの並びにだけ効く。dayMenuNames)
   const moveDayExercise = (i, name, dir) => {
     const ex = [...(split.days[i].exercises || [])];
     const a = ex.indexOf(name), b = a + dir;
@@ -4727,12 +4719,12 @@ function App() {
               <div style={{ fontSize: 13, fontWeight: 900, marginBottom: 2 }}>{t("menu.title")}</div>
               <div style={{ fontSize: 12, color: coachMenuActive ? C.yellow : C.muted, marginBottom: 10, lineHeight: 1.6 }}>
                 {coachMenuActive ? t("coach.menuFrom") : <>
-                {/* autoMenuの3分岐(分割の登録種目 > 前回同セッション > 部位一致の履歴)と1対1で対応させる。
+                {/* autoMenuの3分岐(前回同セッション > 分割の登録種目 > 部位一致の履歴)と1対1で対応させる。
                     以前は3分岐目(部位一致で複数の過去記録から寄せ集め)もfromLastと表示しており、
                     特定の「前回のセッション」から来たかのように読めて不正確だった。 */}
                 {/* 全部が初めての種目なら、引き継ぐ記録はまだ無い(「記録をそのまま引き継いでいます」と出ていた。シミュレータで確認、2026-10-18) */}
                 {menuItems.every(it => (it.baseType ?? it.type) === "new_start") ? t("menu.allFirst")
-                  : t("menu.carryover", { src: todayDay.exercises && todayDay.exercises.length ? t("menu.fromSplit") : (lastSameSession ? t("menu.fromLast") : t("menu.fromHistory")) })}
+                  : t("menu.carryover", { src: lastSameSession ? t("menu.fromLast") : (todayDay.exercises && todayDay.exercises.length ? t("menu.fromSplit") : t("menu.fromHistory")) })}
                 </>}
               </div>
               {(() => {
