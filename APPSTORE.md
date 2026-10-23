@@ -680,6 +680,17 @@ English:
   Playwright MCP のブラウザが使用中だったので、scratchpad の `playwright-core@1.63.0` から `~/Library/Caches/ms-playwright/chromium-1234` を直接起動した。
   シートが画面の下まで届くよう、`compose.html` の `shift`(ja 112 / en 154)で表示を上にずらしている
 
+### 1.4.4 (ビルド47) — 提出の準備(2026-10-24)
+
+北村さんの「はい」(10-20、10-24)で、審査に出す手前まで進めた。**審査にはまだ出していない**(提出は北村さんの最終確認の後。`submit 1.4.4 --apply --yes-submit`)。
+
+- 目的は App Store の新しい1枚目(施策 P023): 「前回 70kg×10 → 今日 72.5kg×10」(英語は 155lb → 160lb)を大きく見せる。元の HTML は `marketing/appstore-drafts/01-big-compare/`。数字は v7 の 01 と同じ記録画面にあるものだけ
+- `metadata.mjs push 1.4.4 --apply` で版を作った(PREPARE_FOR_SUBMISSION、承認後に自動公開)。読み戻して全部一致。説明文・キーワード・プロモーション用テキストは配信中の 1.4.3 と同じ(直前に `pull 1.4.3` で一致を確認)
+- `screenshots.mjs 1.4.4 --dir ~/Desktop/KURABELL-appstore-screenshots/v9 --exclude 09 --apply` で日英 8枚を入れ替えた。v9 は v7 の 01 だけを新しい画像にしたもの。Watch の3枚は引き継ぎ
+- `build 1.4.4 47 --apply`。(46) は (45) に Watch の全画面の休憩タイマーの心拍(`53e96ea`)と腹筋の推定1RM(`b7936b8`)、(47) はさらに今日のメニューを前回の同じ Day の種目だけにする修正(`1eca817`、別スレッド)。What's New は3点
+- `check 1.4.4` は「提出できる状態」
+- 名前・キーワードの判定(P005・P019、10/23)の前に画像を変えることは、北村さんが機会損失を考えて決めた(10-20)
+
 ### 1.4.3 (ビルド45) — 2026-10-19 5:12 に審査へ提出
 
 北村さんの「審査に出して」(10-19 5:07)で `submit 1.4.3 --apply --yes-submit`。WAITING_FOR_REVIEW(`status.mjs` で「審査待ち」を読み戻した)。承認後に自動公開。直前に `push 1.4.3` の dry-run で文面が main(`ee81a58`)の `appstore/1.4.3/` と全部一致、プロモーション用テキストも配信中の 1.4.2 と同じことを確かめた。スクリーンショットは 1.4.1 の画面の v7 のまま
