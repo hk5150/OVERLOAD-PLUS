@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>KURABELL Pinned EN</title>
+<!--
+  プロフィールの最上段にピン留めする3投稿(4:5、1080×1350 を3枚)を、1枚の横長の絵から切り出す。
+  一覧(グリッド)は 3:4 で、4:5 の画像は左右が 33.75px ずつ隠れる。隣り合う投稿の切り出しを 67.5px 重ねると、
+  一覧で継ぎ目がつながる。全体の幅は 1012.5 × 3 + 33.75 × 2 = 3105px。切り出しは shoot.sh。
+  文字は各 .panel(一覧で見える 1012.5px)の内側に置く。
+-->
+<style>
+@font-face { font-family: "Barlow C"; font-weight: 800; src: url("../assets/barlow-condensed-800-latin.woff2") format("woff2"); }
+:root { --bg: #141517; --line: #2E3237; --text: #F2F0EB; --muted: #A3A8B0; --yellow: #E8B33C; --green: #4CAF6E; }
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { width: 3105px; height: 1350px; background: var(--bg); overflow: hidden; }
+body { position: relative; color: var(--text); font-family: "Hiragino Sans", "Hiragino Kaku Gothic ProN", sans-serif; }
+.num { font-family: "Barlow C"; font-weight: 800; }
+.panel { position: absolute; top: 0; height: 1350px; width: 1012.5px; padding: 0 64px; }
+#p0 { left: 33.75px; } #p1 { left: 1046.25px; } #p2 { left: 2058.75px; }
+.tag { position: absolute; top: 104px; left: 64px; font-size: 32px; font-weight: 700; color: var(--yellow); letter-spacing: .04em; }
+h1 { position: absolute; left: 64px; right: 40px; top: 170px; font-weight: 800; font-size: 84px; line-height: 1.25; letter-spacing: -.01em; }
+h1 em { font-style: normal; color: var(--yellow); }
+.lead { position: absolute; left: 64px; right: 64px; font-size: 36px; line-height: 1.65; color: var(--muted); font-weight: 600; }
+.lead b { color: var(--text); }
+
+/* 0: 原則 */
+#p0 .big { position: absolute; left: 64px; top: 420px; font-size: 120px; font-weight: 800; line-height: 1.15; color: var(--yellow); letter-spacing: -.02em; }
+#p0 .lead { top: 750px; }
+#p0 .term { position: absolute; left: 64px; top: 900px; font-size: 30px; font-weight: 700; color: var(--muted); }
+
+/* 1: 研究 */
+.cmp { position: absolute; left: 64px; right: 64px; top: 520px; }
+.cmp .row { display: grid; grid-template-columns: 250px 1fr; align-items: baseline; padding: 14px 0; border-bottom: 2px solid var(--line); }
+.cmp .lbl { font-size: 34px; color: var(--muted); font-weight: 700; }
+.cmp .val { font-size: 92px; line-height: 1; }
+.cmp .val small { font-family: "Hiragino Sans", sans-serif; font-size: 34px; font-weight: 700; color: var(--muted); margin: 0 8px 0 4px; }
+.cmp .val i { font-style: normal; color: var(--green); }
+.cmp .up .lbl { color: var(--text); }
+#p1 .src { position: absolute; left: 64px; right: 64px; top: 940px; font-size: 26px; color: var(--muted); font-weight: 600; line-height: 1.5; }
+
+/* 2: アプリ */
+#p2 h1 { font-size: 76px; }
+.app { position: absolute; left: 64px; top: 388px; display: flex; align-items: center; gap: 24px; }
+.app img { width: 96px; height: 96px; border-radius: 22px; }
+.app .name { font-family: "Barlow C"; font-weight: 800; font-size: 50px; letter-spacing: .03em; line-height: 1; }
+.app .where { font-size: 26px; color: var(--muted); margin-top: 8px; font-weight: 600; }
+.phone { position: absolute; left: 190px; top: 540px; width: 640px; height: 900px; padding: 18px 18px 0;
+  border-radius: 92px 92px 0 0; background: #0B0B0C; border: 10px solid #2A2C30; border-bottom: 0; box-shadow: 0 30px 80px rgba(0,0,0,.55); overflow: hidden; }
+.phone .screen { width: 100%; height: 100%; border-radius: 74px 74px 0 0; overflow: hidden; background: #1A1B1E; }
+/* 記録画面の上(経過・ボリューム)を落として、種目カードと前回の行を大きく見せる */
+.phone .screen img { width: 100%; display: block; margin-top: -146px; }
+
+/* 3枚をまたぐ階段(記録の例) */
+svg.steps { position: absolute; left: 0; top: 0; width: 3105px; height: 1350px; }
+.steps path { fill: none; stroke: var(--yellow); stroke-width: 6; stroke-linejoin: round; }
+.steps .dot { fill: var(--bg); stroke: var(--yellow); stroke-width: 6; }
+.steps .dot.last { fill: var(--green); stroke: var(--green); }
+.steps text { font-family: "Barlow C"; font-weight: 800; font-size: 44px; fill: var(--text); }
+.steps text.lbl { font-family: "Hiragino Sans", sans-serif; font-weight: 600; font-size: 26px; fill: var(--muted); }
+.steps text.g { fill: var(--green); }
+#p0 .big { font-size: 104px; }
+</style>
+</head>
+<body>
+
+<svg class="steps" viewBox="0 0 3105 1350">
+  <path d="M0 1250 H560 V1180 H1150 V1110 H1700 V1040 H2110 V960 H2260" />
+  <circle class="dot" cx="300" cy="1250" r="13"/>
+  <circle class="dot" cx="760" cy="1180" r="13"/>
+  <circle class="dot" cx="1330" cy="1110" r="13"/>
+  <circle class="dot" cx="1880" cy="1040" r="13"/>
+  <circle class="dot last" cx="2180" cy="960" r="13"/>
+  <text x="270" y="1220" text-anchor="middle">150×10</text>
+  <text x="760" y="1150" text-anchor="middle">155×8</text>
+  <text x="1330" y="1080" text-anchor="middle">155×9</text>
+  <text x="1880" y="1010" text-anchor="middle">155×10</text>
+  <text class="g" x="2180" y="930" text-anchor="middle">160×10</text>
+  <text class="lbl" x="98" y="1310">Example: bench press (lb × reps)</text>
+</svg>
+
+<section class="panel" id="p0">
+  <p class="tag">THE PRINCIPLE</p>
+  <h1>One principle<br>behind every gain.</h1>
+  <p class="big">A little more<br>than last time.</p>
+  <p class="lead">More weight or more reps.<br><b>Just beat last time, a little.</b></p>
+  <p class="term">Progressive overload</p>
+</section>
+
+<section class="panel" id="p1">
+  <p class="tag">WHAT THE RESEARCH SAYS</p>
+  <h1>Add weight,<br>or add reps:<br><em>similar gains.</em></h1>
+  <div class="cmp">
+    <div class="row"><span class="lbl">Last time</span><span class="val num">155<small>lb ×</small>10</span></div>
+    <div class="row up"><span class="lbl">Add weight</span><span class="val num"><i>160</i><small>lb ×</small>10</span></div>
+    <div class="row up"><span class="lbl">Add reps</span><span class="val num">155<small>lb ×</small><i>11</i></span></div>
+  </div>
+  <p class="src">Muscle and strength, trained lifters, 8 weeks<br>Plotkin D et al. PeerJ. 2022</p>
+</section>
+
+<section class="panel" id="p2">
+  <p class="tag">IN KURABELL</p>
+  <h1>Your last session,<br>next to every set.</h1>
+  <div class="app">
+    <img src="../assets/icon.png" alt="">
+    <div>
+      <div class="name">KURABELL</div>
+      <div class="where">On the App Store · First 10 workouts free</div>
+    </div>
+  </div>
+  <div class="phone"><div class="screen"><img src="../assets-en/hero-en.png" alt=""></div></div>
+</section>
+
+</body>
+</html>
