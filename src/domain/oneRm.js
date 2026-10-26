@@ -21,10 +21,13 @@ const est1RM = (weight, reps, uncapped = false) => {
   return weight * (1 + reps / 30);
 };
 
+// 2倍するのは入力した重量(片手のダンベル)だけで、体重は2倍しない。
+// 2026-10-26 にブルガリアンスクワット・ランジ・ステップアップ(db: true)へ体重係数を入れたときに順序を直した。
+// それまでは「体重を足してから2倍」で、db と bw を両方持つ種目では体重まで2倍になっていた
+// (記録画面の⚙で、ダンベルシュラッグなどに「自重種目」を付けたときにも起きていた)。docs/係数の根拠.md「片脚種目の推定1RM」
 function effWeight(weight, isDb, bwFactor, bodyweight) {
-  let w = weight;
-  if (bwFactor > 0) w = bodyweight * bwFactor + weight; // 自重+加重
-  if (isDb) w = w * 2; // ダンベルは片手入力→両手
+  let w = isDb ? weight * 2 : weight; // ダンベルは片手入力→両手
+  if (bwFactor > 0) w = bodyweight * bwFactor + w; // 自重+加重
   return w;
 }
 

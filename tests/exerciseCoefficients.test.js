@@ -11,9 +11,9 @@ import { describe, it, expect } from "vitest";
 //
 //   1. 器具違いだけで動きが同じ系列(シュラッグ3種など)で値が割れた。
 //      推定元のcmが 10/12/14 とブレたのが原因で、これはAI推定の精度より細かい差。
-//   2. db:true の種目に bw を足すと effWeight が「体重まで2倍」してしまう
-//      (src/domain/oneRm.js の `if (isDb) w = w * 2`)。マスター値の変更だけで
-//      壊れる経路なので、ここで止める。
+//   2. db:true の種目に bw を足すと effWeight が「体重まで2倍」してしまっていた
+//      (src/domain/oneRm.js の `if (isDb) w = w * 2`)。2026-10-26 に effWeight を
+//      「ダンベルだけ2倍」に直し、片脚の3種目にだけ db と bw の併用を許した。
 //
 // 導出の根拠と各種目のcmは docs/係数の根拠.md にある。
 //
@@ -143,10 +143,23 @@ describe("種目マスターの係数", () => {
     }
   });
 
-  it("片手入力(db:true)の種目に体重係数を付けていない", () => {
-    // effWeight は自重を足した後に isDb で2倍するため、両方持つと体重まで2倍になる。
-    const broken = EXERCISE_DB.filter(e => e.db && e.bw > 0).map(e => e.n);
-    expect(broken, `db:true と bw の併用は effWeight で体重が2倍になる: ${broken.join(", ")}`).toEqual([]);
+  // 片脚の3種目(docs/係数の根拠.md「片脚種目の推定1RM」)。古い記録を揃える backfillBwFactor の対象と同じ並び
+  const SINGLE_LEG = ["ブルガリアンスクワット", "ランジ", "ステップアップ"];
+
+  it("片手入力(db:true)で体重係数を持つのは片脚の3種目だけ", () => {
+    // db と bw の両方を持つ種目は、古い記録を backfillBwFactor で揃えないと、切り替えた日に推定1RMが倍以上に跳ねる。
+    // 片脚以外に広げるときは、src/domain/coefficients.js の BW_BACKFILL_NAMES にも足すこと
+    const both = EXERCISE_DB.filter(e => e.db && e.bw > 0).map(e => e.n).sort();
+    expect(both).toEqual([...SINGLE_LEG].sort());
+  });
+
+  it("片脚の3種目は体重係数を揃え、古い記録を揃える対象と一致している", () => {
+    const vals = SINGLE_LEG.map(n => EXERCISE_DB.find(e => e.n === n)?.bw);
+    expect(new Set(vals).size, `片脚の3種目で bw が割れている: ${vals.join(", ")}`).toBe(1);
+    expect(vals[0]).toBeGreaterThan(0);
+    const coef = fs.readFileSync(path.join(process.cwd(), "src/domain/coefficients.js"), "utf-8");
+    const m = coef.match(/const BW_BACKFILL_NAMES = (\[[^\]]*\])/);
+    expect(JSON.parse(m[1]).sort()).toEqual([...SINGLE_LEG].sort());
   });
 
   it("体重係数は0より大きく1.0以下", () => {

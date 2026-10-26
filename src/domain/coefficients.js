@@ -51,5 +51,34 @@ function absorbBuiltinNameClash(customExercises, overrides, master) {
   return changed ? { customExercises: kept, exerciseOverrides: ovs } : { customExercises: customs, exerciseOverrides: overrides || {} };
 }
 
+// 後から体重係数を入れた種目の、それより前の記録を同じ基準で数える(2026-10-26、北村さん)。
+// 片脚種目(ブルガリアンスクワット・ランジ・ステップアップ)は、それまで体重を入れずに数えていて、
+// 記録には bwFactor: 0 が焼き込まれている。そのままだと切り替えた日に推定1RMが倍以上に跳ね、
+// 自己ベスト・グラフ・ボリュームのゲージが不連続になる(ディップスの 0.95→1.0 とは桁が違う)。
+// 保存値が 0(または無い)の記録にだけ、今の係数を入れる。0 より大きい値(⚙で自重種目にしていた日)はそのまま。
+// 読み込み(migrateWorkouts)と下書きの復元で通すので、次に保存したときに記録にも書かれる。何度通しても同じ結果。
+// 「記録側の値は当時のまま」の原則(上の resolveCoefficients)の、名前を限った例外。
+// 種目を足すときは、ここに名前を足してから種目マスターに bw を入れること。
+//   lookup(name): 上書き込みの種目定義(無ければ null)。上書きで bw: 0 にしている人には 0 のまま
+const BW_BACKFILL_NAMES = ["ブルガリアンスクワット", "ランジ", "ステップアップ"];
+function backfillBwFactor(ex, lookup) {
+  if (!ex || !BW_BACKFILL_NAMES.includes(ex.name)) return ex;
+  if (parseFloat(ex.bwFactor) > 0) return ex;
+  const bw = lookup(ex.name)?.bw ?? 0;
+  return bw > 0 ? { ...ex, bwFactor: bw } : ex;
+}
+
+// 記録の日時(ISO文字列)が、この端末で片脚種目の体重係数の版を初めて開いた時刻(since)より前か。
+// 前の記録だけ backfillBwFactor を通す。後の記録の保存値 0 は「⚙で自重を外した日」の意味なので触らない
+// (毎回の読み込みで今の係数を当てると、⚙で付け直した日に、外していた日の1RMまで体重の分だけ跳ねる)。
+// since が無い(読み書きに失敗した)ときと、記録の日時が読めないときは「前」とみなす。
+function beforeLegBw(date, since) {
+  if (!since) return true;
+  return !(Date.parse(date) >= Date.parse(since));
+}
+
 globalThis.resolveCoefficients = resolveCoefficients;
+globalThis.beforeLegBw = beforeLegBw;
+globalThis.backfillBwFactor = backfillBwFactor;
+globalThis.BW_BACKFILL_NAMES = BW_BACKFILL_NAMES;
 globalThis.absorbBuiltinNameClash = absorbBuiltinNameClash;

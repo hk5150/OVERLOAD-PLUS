@@ -207,7 +207,7 @@
     { key:'bodyMap',    urls:['src/domain/bodyMap.js'],
       globals:['mirrorBodyPath','BODY_SILHOUETTE','BODY_HEAD','BODY_REGIONS','BODY_DETAILS','bodyHitMuscles'] },
     { key:'coefficients', urls:['src/domain/coefficients.js'],
-      globals:['resolveCoefficients','absorbBuiltinNameClash'] },
+      globals:['resolveCoefficients','absorbBuiltinNameClash','backfillBwFactor','BW_BACKFILL_NAMES','beforeLegBw'] },
     { key:'insight',    urls:['src/domain/insight.js'],
       globals:['exerciseInsight','topSetOf','workoutScore'] },
     { key:'restNotifications', urls:['src/domain/restNotifications.js'],
@@ -331,6 +331,10 @@ const DRAFT_KEY = "workout-draft-v1"; // 入力途中の記録(アプリが落�
 const WATCH_HEALTH_PENDING_KEY = "watch-health-pending-v1";
 const WATCH_LAST_SAVED_KEY = "watch-last-saved-v1";
 const WATCH_FINISHED_KEY = "watch-finished-v1"; // 保存したら Watch に出す完了画面の中身(改善要望 12)
+// 片脚種目に体重係数を入れた版(2026-10-26)を、この端末で初めて開いた時刻。これより前の記録だけ backfillBwFactor を通す。
+// 保存値 0 には「変更前の記録」と「変更後に⚙で自重を外した日の記録」の2つの意味があり、後者まで毎回の読み込みで
+// 今の係数に書き換えると、⚙で付け直したり「元に戻す」を押したりした日に、外していた日の1RMが体重の分だけ跳ねる(reviewer 指摘)
+const LEG_BW_SINCE_KEY = "leg-bw-since-v1";
 const PRE_IMPORT_BACKUP_KEY = "workout-log-v1-pre-import"; // バックアップ復元前のデータ退避(復元に失敗した場合の保険)
 // ヘッダーのバージョンバッジとバックアップのappVersionで共有する単一の定数。
 // sw.js の CACHE 定数とは tests/version.test.js が数字の一致を機械的に縛っている(CLAUDE.md参照)。
@@ -396,9 +400,22 @@ const aiServiceOf = (id) => AI_SERVICES.find(s => s.id === id) || AI_SERVICES[0]
 
 // 保存データの移行処理。通常の起動読み込みとバックアップ復元(importBackup)の両方から使う。
 // 別々に書くと、片方だけ直したときに移行結果が食い違う。
-const migrateWorkouts = (ws) => (ws || []).map(w => ({
-  ...w, exercises: (w.exercises || []).map(ex => ({ ...ex, muscle: normMuscle(ex.muscle) })),
-}));
+// overrides(exerciseOverrides)は、後から体重係数を入れた種目の古い記録を揃えるのに使う(backfillBwFactor)。
+// 上書きで体重係数を 0 にしている人の記録には入れない
+const builtinWithOverrides = (overrides) => (n) => DB_BY_NAME[n] ? { ...DB_BY_NAME[n], ...((overrides || {})[n] || {}) } : null;
+// since(LEG_BW_SINCE_KEY の時刻)より前の記録だけ揃える(beforeLegBw、src/domain/coefficients.js)
+const migrateWorkouts = (ws, overrides, since) => {
+  const lookup = builtinWithOverrides(overrides);
+  return (ws || []).map(w => {
+    const bf = beforeLegBw(w.date, since);
+    return {
+      ...w, exercises: (w.exercises || []).map(ex => {
+        const e = { ...ex, muscle: normMuscle(ex.muscle) };
+        return bf ? backfillBwFactor(e, lookup) : e;
+      }),
+    };
+  });
+};
 // 内転筋(2026-10 追加)を脚の Day に1回だけ足す(addAdductorDays、src/domain/dayPlan.js)
 // 内蔵種目と同じ名前のカスタム種目を上書きに移す(absorbBuiltinNameClash、src/domain/coefficients.js)。
 // 戻り値は { customExercises, exerciseOverrides }
@@ -526,8 +543,10 @@ const EXERCISE_DB = [
   { n: "レッグプレス", m: "大腿四頭筋", eq: "マシン", t: "C" },
   { n: "ハックスクワット", m: "大腿四頭筋", eq: "マシン", t: "C" },
   { n: "レッグエクステンション", m: "大腿四頭筋", eq: "マシン", t: "I" },
-  { n: "ブルガリアンスクワット", m: "大腿四頭筋", eq: "ダンベル", t: "C", db: true },
-  { n: "ランジ", m: "大腿四頭筋", eq: "ダンベル", t: "C", db: true },
+  // 片脚の3種目(ブルガリアン・ランジ・ステップアップ)は体重を負荷に入れる(bw 0.9、2026-10-26)。根拠は docs/係数の根拠.md「片脚種目の推定1RM」。
+  // db と bw を両方持つ。それ以前の記録は backfillBwFactor(src/domain/coefficients.js)で同じ基準に揃える
+  { n: "ブルガリアンスクワット", m: "大腿四頭筋", eq: "ダンベル", t: "C", db: true, bw: 0.9 },
+  { n: "ランジ", m: "大腿四頭筋", eq: "ダンベル", t: "C", db: true, bw: 0.9 },
   { n: "ゴブレットスクワット", m: "大腿四頭筋", eq: "ダンベル", t: "C" },
   { n: "スミスマシンスクワット", m: "大腿四頭筋", eq: "スミス", t: "C" },
   { n: "スミスマシンスプリットスクワット", m: "大腿四頭筋", eq: "スミス", t: "C" },
@@ -535,7 +554,7 @@ const EXERCISE_DB = [
   { n: "ペンデュラムスクワット", m: "大腿四頭筋", eq: "マシン", t: "C" },
   { n: "ベルトスクワット", m: "大腿四頭筋", eq: "マシン", t: "C" },
   // ステップアップは2026-10に臀部から移した(ランジ・ブルガリアンと同じ片脚系に揃えた)
-  { n: "ステップアップ", m: "大腿四頭筋", eq: "ダンベル", t: "C", db: true },
+  { n: "ステップアップ", m: "大腿四頭筋", eq: "ダンベル", t: "C", db: true, bw: 0.9 },
   // ハムストリングス
   { n: "ルーマニアンデッドリフト", m: "ハムストリングス", eq: "バーベル", t: "C" },
   { n: "ダンベルルーマニアンデッドリフト", m: "ハムストリングス", eq: "ダンベル", t: "C", db: true },
@@ -638,7 +657,7 @@ const recommendedIncrement = (name, fallback = 2.5) => {
 // 可動域係数: 集計ボリュームのみに適用(判定・1RM・PRには影響させない)。
 // 値と導出の根拠は docs/係数の根拠.md(ここに書き写すと実装より先に腐る)。
 // 注意: storedRomが無い古い記録は現在のマスター値にフォールバックするため、
-// マスターを変えるとその記録の過去ボリュームは遡って変わる(bwFactorは遡らない)。
+// マスターを変えるとその記録の過去ボリュームは遡って変わる(bwFactorは遡らない。例外は片脚3種目の backfillBwFactor)。
 const resolveRom = (name, storedRom) => {
   const v = parseFloat(storedRom);
   if (!isNaN(v) && v > 0) return v;
@@ -953,6 +972,7 @@ function withBreaks(text) {
 function App() {
   const [view, setView] = useState("split"); // 起動時は分割タブ(今日どのセッションかを確認してから記録へ)
   const [workouts, setWorkouts] = useState([]);
+  const legBwSinceRef = useRef(null); // LEG_BW_SINCE_KEY の値(読み込みで入る。復元でも同じ線で揃える)
   const [split, setSplit] = useState(null);
   const [profile, setProfile] = useState(DEFAULT_PROFILE);
   // 表示言語。LANGはi18n.jsのモジュール変数なので、Reactの状態と手で同期させる必要がある。
@@ -1183,6 +1203,14 @@ function App() {
   // ---- 読み込み ----
   useEffect(() => {
     (async () => {
+      let loadedOverrides = {}; // 下書きの復元で backfillBwFactor に使う
+      // 初めて開いたときに今の時刻を置く。読み書きに失敗したら null(=全部の記録を揃える。変更前とみなす)
+      let legBwSince = null;
+      try {
+        legBwSince = (await store.get(LEG_BW_SINCE_KEY))?.value || null;
+        if (!legBwSince) { const now = new Date().toISOString(); await store.set(LEG_BW_SINCE_KEY, now); legBwSince = now; }
+      } catch { /* null のまま */ }
+      legBwSinceRef.current = legBwSince;
       try {
         const res = await store.get(STORAGE_KEY);
         if (res?.value) {
@@ -1191,17 +1219,18 @@ function App() {
           catch { throw new Error(t("err.jsonBroken")); }
           // 壊れたデータのまま画面に出さない(白紙の記録に見えて実は消えていない、を防ぐ)
           validateWorkoutsShape(extractWorkoutsArray(p));
-          if (Array.isArray(p)) setWorkouts(migrateWorkouts(p));
+          if (Array.isArray(p)) setWorkouts(migrateWorkouts(p, {}, legBwSince));
           else {
-            setWorkouts(migrateWorkouts(p.workouts));
+            const mc = migrateCustoms(p);
+            setCustomExercises(mc.customExercises);
+            setExerciseOverrides(mc.exerciseOverrides);
+            setExerciseOverrides_module(mc.exerciseOverrides);
+            loadedOverrides = mc.exerciseOverrides;
+            setWorkouts(migrateWorkouts(p.workouts, mc.exerciseOverrides, legBwSince));
             setSplit(migrateSplit(p.split));
             setProfile(defaultProfile(p.profile));
             setRecentNames(p.recentNames || []);
-            const mc = migrateCustoms(p);
-            setCustomExercises(mc.customExercises);
             setExerciseNotes(p.exerciseNotes || {});
-            setExerciseOverrides(mc.exerciseOverrides);
-            setExerciseOverrides_module(mc.exerciseOverrides);
             setLastBackupAt(p.lastBackupAt || null);
             if (p.guideSeen) setGuideSeen(true);
           }
@@ -1233,7 +1262,11 @@ function App() {
           const keepAt = draft.keep ? (typeof draft.keep === "number" ? draft.keep : draft.savedAt || Date.now()) : null;
           const fresh = keepAt != null || (draft.savedAt && (Date.now() - draft.savedAt) < 24 * 3600 * 1000);
           if (fresh && Array.isArray(draft.today) && draft.today.length > 0) {
-            setToday(draft.today);
+            // 更新の直前に始めた記録も、保存済みの記録と同じ基準にする(片脚種目の体重係数)
+            const bfLookup = builtinWithOverrides(loadedOverrides);
+            const draftAt = draft.startAt || draft.savedAt;
+            setToday(beforeLegBw(draftAt ? new Date(draftAt).toISOString() : null, legBwSince)
+              ? draft.today.map(ex => backfillBwFactor(ex, bfLookup)) : draft.today);
             if (draft.startAt) setStartAt(draft.startAt);
             if (keepAt != null) setDraftKeep(keepAt);
             // 保存を止めた記録はもう終わったトレーニングなので、休憩の時計は戻さない
@@ -1819,6 +1852,13 @@ function App() {
   const setVolume = (ex, s) => window.setVolume(ex, s, profile.bodyweight, volumeDeps);
   const workingSets = (ex) => window.workingSets(ex);
   const exVolume = (ex) => window.exVolume(ex, profile.bodyweight, volumeDeps);
+
+  // 重量欄の見出し(記録の画面と Watch)。片脚種目は db と bw の両方を持つので「加重 kg/片手」
+  const weightLabelOf = (ex) => {
+    const bwEx = ex.bwFactor > 0, isDb = resolveIsDb(ex.name, ex.isDb);
+    if (bwEx) return t(isDb ? "set.weightAddedPerHand" : "set.weightAdded", { unit: uLabel() });
+    return t(isDb ? "set.weightPerHand" : "set.weight", { unit: uLabel() });
+  };
 
   // ---- PR(自己ベスト)と推定1RM ----
   // 実効重量(ダンベルは両手・自重は体重換算)ベースで比較する
@@ -2607,7 +2647,8 @@ function App() {
     names.forEach((name, k) => {
       const cfg = today.find(e => e.name === name) || lastConfig(name);
       const isDb = resolveIsDb(name, cfg.isDb);
-      lines.push(`${k + 1}. ${exName(name)}${isDb ? t("coach.p.perHand") : (cfg.bwFactor || 0) > 0 ? t("coach.p.added") : ""}`);
+      const bwEx = (cfg.bwFactor || 0) > 0;
+      lines.push(`${k + 1}. ${exName(name)}${isDb && bwEx ? t("coach.p.addedPerHand") : isDb ? t("coach.p.perHand") : bwEx ? t("coach.p.added") : ""}`);
       // 重量はアプリ全体で 1kg 刻み(Watch の −/+ も 1kg)。種目ごとの「刻み」(2.5kg など)は渡さない(北村さん、2026-10-10)
       lines.push(`   ${t("coach.p.target", { lo: cfg.repLow, hi: cfg.repHigh })}`);
       const past = workouts
@@ -2950,8 +2991,7 @@ function App() {
         exercises: today.map((ex, i) => ({
           id: ex.id,
           name: exName(ex.name),
-          weightLabel: ex.bwFactor > 0 ? t("set.weightAdded", { unit: uLabel() })
-            : resolveIsDb(ex.name, ex.isDb) ? t("set.weightPerHand", { unit: uLabel() }) : t("set.weight", { unit: uLabel() }),
+          weightLabel: weightLabelOf(ex),
           unit: uLabel(),
           step: watchWeightStep(uLabel()),
           restAfter: isLastInGroup(i),
@@ -3484,7 +3524,8 @@ function App() {
       const prefix = ssStart ? t("share.supersetTag") : (ss ? "  ┗ " : "");
       const isDb = resolveIsDb(ex.name, ex.isDb);
       const bwF = ex.bwFactor || 0;
-      const unit = isDb ? t("share.perHand", { unit: uLabel() }) : bwF > 0 ? t("share.withBw", { unit: uLabel() }) : uLabel();
+      // 自重の分を先に見る。片脚種目(db と bw の両方)は体重込み・左右計の実効重量で書く
+      const unit = bwF > 0 ? t("share.withBw", { unit: uLabel() }) : isDb ? t("share.perHand", { unit: uLabel() }) : uLabel();
       const notes = [];
       if (ex.repLow != null && ex.repHigh != null) notes.push(t("share.targetReps", { lo: ex.repLow, hi: ex.repHigh }));
       if (ex.pain) notes.push(t("share.flagPain"));
@@ -3493,7 +3534,7 @@ function App() {
       let n = 0;
       (ex.sets || []).forEach(s => {
         const wt = bwF > 0
-          ? Math.round(toU(effWeight(s.weight, false, bwF, ex.bwAtLog ?? profile.bodyweight)) * 10) / 10
+          ? Math.round(toU(effWeight(s.weight, isDb, bwF, ex.bwAtLog ?? profile.bodyweight)) * 10) / 10
           : wU(s.weight);
         // 番号はワーキングセットだけで数える(ウォームアップは W)。W の印は番号の側に出すので、行の中には付けない
         lines.push(`  ${s.warmup ? "W" : ++n}. ${shareSetLine({ ...s, warmup: false }, wt, unit)}`);
@@ -3559,11 +3600,12 @@ function App() {
           // 体重を別に渡しても復元をAIに任せることになるので、数値の側を実効重量にする。
           const isDb = resolveIsDb(ex.name, ex.isDb);
           const bwF = ex.bwFactor || 0;
-          const unit = isDb ? t("share.perHand", { unit: uLabel() })
-            : bwF > 0 ? t("share.withBw", { unit: uLabel() }) : uLabel();
+          // 自重の分を先に見る(片脚種目は db と bw の両方を持つ)
+          const unit = bwF > 0 ? t("share.withBw", { unit: uLabel() })
+            : isDb ? t("share.perHand", { unit: uLabel() }) : uLabel();
           const sets = (ex.sets || []).map(s => {
             const w = bwF > 0
-              ? Math.round(toU(effWeight(s.weight, false, bwF, ex.bwAtLog ?? profile.bodyweight)) * 10) / 10
+              ? Math.round(toU(effWeight(s.weight, isDb, bwF, ex.bwAtLog ?? profile.bodyweight)) * 10) / 10
               : wU(s.weight);
             return shareSetLine(s, w, unit);
           }).join(" / ");
@@ -3783,7 +3825,7 @@ function App() {
       if (!snapped) { try { await store.del(PRE_IMPORT_BACKUP_KEY); } catch { /* noop */ } }
 
       const next = {
-        workouts: migrateWorkouts(ws),
+        workouts: migrateWorkouts(ws, migrateCustoms(p).exerciseOverrides, legBwSinceRef.current),
         split: migrateSplit(p.split),
         profile: keepDeviceHealth(defaultProfile(p.profile)),
         recentNames: p.recentNames || [],
@@ -3823,7 +3865,7 @@ function App() {
       const clearedNote = cleared > 0 ? t("backup.willClear", { c: cleared }) + "\n\n" : "";
       if (!window.confirm(clearedNote + t("backup.confirmUndo", { n: ws.length }))) return;
       const next = {
-        workouts: migrateWorkouts(ws),
+        workouts: migrateWorkouts(ws, migrateCustoms(p).exerciseOverrides, legBwSinceRef.current),
         split: migrateSplit(p.split),
         profile: keepDeviceHealth(defaultProfile(p.profile)),
         recentNames: p.recentNames || [],
@@ -5073,7 +5115,8 @@ function App() {
                     <label style={{ fontSize: 13, color: C.muted, display: "flex", alignItems: "center", gap: 4 }}>
                       <input type="checkbox" checked={ex.bwFactor > 0}
                         onChange={e => {
-                          const v = e.target.checked ? 0.7 : 0;
+                          // 付け直すときは内蔵の既定(片脚種目なら0.9)に戻す。無ければ0.7
+                          const v = e.target.checked ? (DB_BY_NAME[ex.name]?.bw || 0.7) : 0;
                           updEx(ex.id, { bwFactor: v });
                           // 下のNumInputと同じく、マスターと違うときだけ上書きを作る。
                           // onChangeなので「今日の記録」側は必ず変わるが、書き込み先は種目マスター側。
@@ -5135,7 +5178,7 @@ function App() {
 
               <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 4 }}>
                 <span style={{ width: 20 }} />
-                <span style={{ flex: 1.3, ...fieldLabel }}>{ex.bwFactor > 0 ? t("set.weightAdded", { unit: uLabel() }) : resolveIsDb(ex.name, ex.isDb) ? t("set.weightPerHand", { unit: uLabel() }) : t("set.weight", { unit: uLabel() })}</span>
+                <span style={{ flex: 1.3, ...fieldLabel }}>{weightLabelOf(ex)}</span>
                 <span style={{ flex: 1, ...fieldLabel }}>{t("set.reps")}</span>
                 <span style={{ width: 26 }} />
                 <span style={{ flex: 2.4, ...fieldLabel }}>{t("rir.question")}{" "}<span style={{ opacity: 0.7 }}>(RIR)</span></span>
@@ -6426,7 +6469,7 @@ function App() {
                         {t("settings.equipment")}{" "}
                         <select value={e.eq || ""} onChange={ev => {
                           const eq = ev.target.value;
-                          updateCustomExercise(e.n, { eq, db: eq === "ダンベル", bw: eq === "自重" ? (e.bw || 0.7) : 0 });
+                          updateCustomExercise(e.n, { eq, db: eq === "ダンベル", bw: eq === "自重" ? (e.bw || 0.7) : eq === "ダンベル" ? (DB_BY_NAME[e.n]?.bw || 0) : 0 });
                         }}
                           style={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: "5px 6px", fontSize: 16, fontFamily: "inherit" }}>
                           <option value="">{t("settings.other")}</option>

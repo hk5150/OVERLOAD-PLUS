@@ -107,10 +107,11 @@ describe("effWeight (実効重量)", () => {
     expect(effWeight(10, false, 0.95, 80)).toBeCloseTo(80 * 0.95 + 10);
   });
 
-  it("自重かつダンベル(理論上は起きない組み合わせだが、現状の実装順序を固定)", () => {
-    // 実装は bwFactor>0 を先に適用し、その後 isDb で2倍する順序。
-    const w = effWeight(10, true, 0.95, 80);
-    expect(w).toBeCloseTo((80 * 0.95 + 10) * 2);
+  it("自重かつダンベル(ブルガリアンスクワットなど)は、ダンベルだけ2倍して体重は2倍しない", () => {
+    // 2026-10-26 まで実装は「体重を足してから2倍」で、体重まで2倍になっていた
+    expect(effWeight(10, true, 0.9, 70)).toBeCloseTo(70 * 0.9 + 10 * 2);
+    // ダンベルを持たない日も体重の分が残る(以前は db の片脚種目で重量0だと実効重量0だった)
+    expect(effWeight(0, true, 0.9, 70)).toBeCloseTo(63);
   });
 
   it("bwFactorが0または未指定なら加重のみ", () => {
