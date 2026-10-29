@@ -387,15 +387,6 @@ const AI_SERVICES = [
   { id: "grok",       label: "Grok",       url: "https://grok.com/" },
 ];
 const DEFAULT_AI_SERVICE = "chatgpt";
-// 音楽アプリを開くボタン(1.4、北村さん)。iOS の制約で、ほかのアプリの音楽はこちらから操作できない
-// (MPMusicPlayerController で触れるのは「ミュージック」アプリだけで、Spotify などは不可)ので、開くだけにする。
-// URL スキームで開く。入っていなければ何も起きない
-const MUSIC_APPS = [
-  { id: "apple",   label: "Apple Music",   url: "music://" },
-  { id: "spotify", label: "Spotify",       url: "spotify://" },
-  { id: "ytmusic", label: "YouTube Music", url: "youtubemusic://" },
-];
-const musicAppOf = (id) => MUSIC_APPS.find(m => m.id === id) || null;
 const aiServiceOf = (id) => AI_SERVICES.find(s => s.id === id) || AI_SERVICES[0];
 
 // 保存データの移行処理。通常の起動読み込みとバックアップ復元(importBackup)の両方から使う。
@@ -440,8 +431,6 @@ const defaultProfile = (p) => ({
   // 休憩の Live Activity(ロック画面・Dynamic Island)。既定はオフ(北村さん、2026-10-09)。1.3 まで常にオンだった利用者も、
   // 保存していない項目なので更新後はオフになる
   restLiveActivity: p?.restLiveActivity === true,
-  // 音楽アプリ(MUSIC_APPS の id。"none" ならボタンを出さない)。既定は全員の iPhone にある Apple Music
-  musicApp: typeof p?.musicApp === "string" ? p.musicApp : "apple",
   // トレーニング日のお知らせ(UI レビュー A3)。{ on, days: 0=日〜6=土, time: "HH:MM" }。既定はオフ
   workoutReminder: normalizeWorkoutReminder(p?.workoutReminder),
 });
@@ -790,7 +779,6 @@ const ICON_PATHS = {
   share:   <><path d="M12 3v12M7.5 7.5 12 3l4.5 4.5"/><path d="M5 12v7a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-7"/></>,
   // 貼り付け(クリップボード)。AIコーチの「AIの答えを貼り付けて読み込む」
   paste: <><rect x="8" y="3" width="8" height="4" rx="1" /><path d="M8 5H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2" /></>,
-  music:   <><path d="M9 18V6l11-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/></>,
   // トレーニング日のお知らせ(UI レビュー A3)
   bell:    <><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/></>,
   settings:<><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></>,
@@ -953,7 +941,7 @@ class ErrorBoundary extends React.Component {
 // 新規インストール時、および全データ削除後の既定値(clearAllで再利用し、削除直後に古いprofileが復活しないようにする)
 // defaultProfile() と同じフィールドを持たせる。ここに書き忘れると、初回起動と
 // 「全データ削除」直後だけ値がundefinedになり、設定タブの選択状態が消える。
-const DEFAULT_PROFILE = { bodyweight: 70, soundOn: true, defTargetReps: 10, defIncrement: 2.5, lang: null, unit: null, aiService: DEFAULT_AI_SERVICE, healthOn: false, healthBwAt: 0, restNotifyMinutes: [1, 2, 3], restLiveActivity: false, musicApp: "apple", workoutReminder: { on: false, days: [1, 3, 5], time: "19:00" } };
+const DEFAULT_PROFILE = { bodyweight: 70, soundOn: true, defTargetReps: 10, defIncrement: 2.5, lang: null, unit: null, aiService: DEFAULT_AI_SERVICE, healthOn: false, healthBwAt: 0, restNotifyMinutes: [1, 2, 3], restLiveActivity: false, workoutReminder: { on: false, days: [1, 3, 5], time: "19:00" } };
 
 // ================= アプリ本体 =================
 // 文言中の「|」の位置だけで折り返す(日本語は語の途中でも折り返されるため、意味の切れ目を指定する)。
@@ -3715,10 +3703,6 @@ function App() {
   // (2026-09-29、「書き出しました」と出ていたのに、書き出したつもりのバックアップが残っていなかった)。
   // iOSでは共有シート(src/domain/fileExport.js)で渡す。プラグインの無い古いネイティブでは、できないことを伝える。
   const isNativeApp = () => !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
-  // 音楽アプリを開く(iOS 版だけ。Web からは URL スキームを開けない)
-  const musicApp = musicAppOf(profile.musicApp);
-  const showMusicButton = isNativeApp() && musicApp != null;
-  const openMusicApp = () => { if (musicApp) window.open(musicApp.url, "_blank"); };
 
   // ご意見・不具合の報告(設定タブ)。主な窓口は Instagram の DM、メールは控え。
   // どちらも相手のアプリを開くだけで、アプリからは何も送らない(src/domain/review.js)。
@@ -4305,12 +4289,6 @@ function App() {
               占め、ゲージ側に110pxしか残らなかった。縦積みにして数字とゲージの両方に幅を与えている。
               このパネルだけ中央揃えなのは、時計として読ませるため(アプリの他の面は左揃え)。
               数字だけを中央にするとラベルとの軸がずれて見えたので、文字要素は揃えてある。 */}
-          {/* 休憩の間に曲を替えたいことが多いので、ここに音楽アプリを開くボタンを置く(北村さん、2026-10-10) */}
-          {showMusicButton && (
-            <button onClick={openMusicApp} aria-label={t("music.open", { app: musicApp.label })} title={t("music.open", { app: musicApp.label })}
-              style={{ ...btn(C.surface2, C.text), position: "absolute", top: 12, right: 14, width: 40, height: 40, borderRadius: 999, padding: 0, display: "grid", placeItems: "center", border: `1px solid ${C.border}` }}>
-              <Icon name="music" size={18} /></button>
-          )}
           <div style={{ fontSize: 11, color: C.muted, letterSpacing: 1, textAlign: "center" }}>{t("rest.title")}</div>
           <div style={{
             fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800,
@@ -4841,14 +4819,7 @@ function App() {
             </div>
           )}
 
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, margin: "8px 0 12px" }}>
-            <h2 style={{ fontSize: 16, fontWeight: 900, margin: 0 }}>{t("log.title")}</h2>
-            {showMusicButton && (
-              <button onClick={openMusicApp} className="tapArea"
-                style={{ ...btn("transparent", C.muted), padding: "4px 0", fontSize: 13, fontWeight: 700, display: "inline-flex", alignItems: "center", gap: 5, flexShrink: 0 }}>
-                <Icon name="music" size={14} />{musicApp.label}</button>
-            )}
-          </div>
+          <h2 style={{ fontSize: 16, fontWeight: 900, margin: "8px 0 12px" }}>{t("log.title")}</h2>
 
           {today.length === 0 && (
             <div style={{ border: `1px dashed ${C.border}`, borderRadius: 14, padding: 20, color: C.muted, fontSize: 14, textAlign: "center", marginBottom: 16 }}>
@@ -6557,25 +6528,6 @@ function App() {
               {t("settings.aiDesc")}
             </p>
           </div>
-
-          {isNativeApp() && (
-            <div style={{ background: C.surface, borderRadius: 14, padding: 16, border: `1px solid ${C.border}`, marginBottom: 12 }}>
-              <div style={{ fontSize: 14, fontWeight: 900, marginBottom: 10 }}>{t("settings.music")}</div>
-              <div role="radiogroup" aria-label={t("settings.music")} style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                {[...MUSIC_APPS, { id: "none", label: t("settings.musicNone") }].map(m => {
-                  const on = (profile.musicApp || "apple") === m.id;
-                  return (
-                    <button key={m.id} role="radio" aria-checked={on}
-                      onClick={() => persist({ profile: { ...profile, musicApp: m.id } })}
-                      style={{ ...btn(on ? C.text : C.surface2, on ? C.bg : C.text), fontSize: 14, padding: "10px 14px" }}>
-                      {m.label}
-                    </button>
-                  );
-                })}
-              </div>
-              <p style={{ color: C.muted, fontSize: 13, margin: "10px 0 0", lineHeight: 1.6 }}>{t("settings.musicDesc")}</p>
-            </div>
-          )}
 
           <div style={{ background: C.surface, borderRadius: 14, padding: 16, border: `1px solid ${C.border}`, marginBottom: 12 }}>
             <div style={{ fontSize: 14, fontWeight: 900, marginBottom: 10 }}>{t("settings.language")}</div>
