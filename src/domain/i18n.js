@@ -471,6 +471,7 @@ const STRINGS = {
   "history.confirmDelete": { ja: "{date}の記録を削除します。よろしいですか?", en: "Delete your {date} workout?" },
   "history.confirmDeleteAll": { ja: "すべての履歴を削除します。よろしいですか?", en: "Delete all history?" },
   "history.deleteAll": { ja: "すべての履歴を削除",     en: "Delete all history" },
+  "history.rirMissing": { ja: "余力が空欄のセットがあります。余力を入れるか、✕でセットを消すと保存できます。", en: "Some sets have no RIR. Enter it, or remove the set with ✕, to save." },
   "history.emptyAfterEdit": { ja: "有効なセットがありません。この記録を削除しますか?", en: "No valid sets left. Delete this workout?" },
 
   // ---- 自己ベスト ----
