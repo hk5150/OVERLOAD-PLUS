@@ -1,4 +1,4 @@
 What to check in 1.4.5 (48):
 1. In History, tap Edit, add a forgotten exercise, and enter only weight and reps. Saving should stop, the RIR field should turn red, and a note about sets with no RIR should appear (before, the exercise silently disappeared).
 2. Fill in the red RIR field and save. The added exercise should stay in History, also after quitting and reopening the app.
-3. Removing that set with ✕ instead of entering RIR should also let you save.
+3. Removing that set with the delete button at the right end of the row, instead of entering RIR, should also let you save.
