@@ -3447,8 +3447,16 @@ function App() {
     setEditAddSearch("");
   };
 
+  // 回数は入っているのに余力が空欄のワーキングセット。下の保存では「まだやっていない」として捨てるので、
+  // 後から足した種目に余力を入れ忘れると、保存を押しても種目ごと黙って消えていた(北村さん「保存できない」、2026-10-31)。
+  // 捨てずに止めて、空欄の欄を示す。余力を自動で埋めることはしない(RIR が入って初めて実施済み)
+  const editRirMissing = (s) => !s.warmup && Math.round(num(s.reps)) > 0 && (s.rir === "" || s.rir == null);
   const saveEditWorkout = async () => {
     const { index, draft } = editWorkout;
+    if (draft.exercises.some(ex => ex.sets.some(editRirMissing))) {
+      setEditWorkout(ew => ({ ...ew, rirMissing: true }));
+      return;
+    }
     // 数値化し、回数0のセット・余力(RIR)未入力のワーキングセット・空の種目は除去
     const exercises = draft.exercises.map(ex => ({
       ...ex,
@@ -6209,6 +6217,9 @@ function App() {
                   <div style={{ fontSize: 12, color: C.muted, marginBottom: 10 }}>
                     {t("history.editHint")}
                   </div>
+                  {editWorkout.rirMissing && d.exercises.some(ex => ex.sets.some(editRirMissing)) && (
+                    <div role="alert" style={{ fontSize: 13, color: C.red, fontWeight: 700, marginBottom: 10 }}>{t("history.rirMissing")}</div>
+                  )}
                   {d.exercises.map((ex, exIdx) => (
                     <div key={exIdx} style={{ background: C.bg, borderRadius: 10, padding: 10, marginBottom: 10 }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, gap: 8 }}>
@@ -6248,7 +6259,9 @@ function App() {
                             style={{ ...numInput, flex: 1, fontSize: 18, padding: "7px 2px" }} />
                           <NumInput inputMode="numeric" value={s.rir} placeholder="–"
                             onChange={e => editSet(exIdx, setIdx, "rir", e.target.value)} aria-label={t("rir.short")}
-                            style={{ ...numInput, flex: 1, fontSize: 18, padding: "7px 2px", color: C.yellow }} />
+                            aria-invalid={editWorkout.rirMissing && editRirMissing(s) ? true : undefined}
+                            style={{ ...numInput, flex: 1, fontSize: 18, padding: "7px 2px", color: C.yellow,
+                              ...(editWorkout.rirMissing && editRirMissing(s) ? { border: `1px solid ${C.red}` } : {}) }} />
                           <button onClick={() => editRemoveSet(exIdx, setIdx)} aria-label={t("set.removeSet")} className="tapArea"
                             style={{ width: 24, height: 24, borderRadius: 6, border: `1px solid ${C.border}`, background: C.surface2, color: C.muted, fontSize: 12, cursor: "pointer", flexShrink: 0 }}>✕</button>
                         </div>
