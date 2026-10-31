@@ -1,0 +1,2 @@
+• Fixed a bug where an exercise added later while editing History disappeared on save if you left its RIR empty. Sets with no RIR are now marked in red, and you're told before saving.
+• Bulgarian split squats, lunges and step-ups now include your bodyweight in the estimated 1RM and volume (bodyweight-only days are counted too).
