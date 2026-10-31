@@ -241,3 +241,34 @@ describe("重量は 1kg 刻み(2026-10-10)", () => {
     expect(r.rounded).toBe(0);
   });
 });
+
+// 実物の答え。2026-10-31 に Gemini(Google AI Plus、3.6 Flash)へ実際の相談文を投げて返ってきたもの。
+// 説明文は途中を縮めたが、見出し・太字・インラインコード・区切り線・ブロック前後の空行はそのまま
+describe("実物の AI の答え", () => {
+  const GEMINI_JSON = '{"kurabell":1,"exercises":[\n' +
+    ' {"name":"バーベルベンチプレス","sets":[{"w":40,"r":10,"wu":true},{"w":62,"r":8},{"w":62,"r":8},{"w":62,"r":8}]},\n' +
+    ' {"name":"インクラインダンベルプレス","sets":[{"w":22,"r":8},{"w":20,"r":10},{"w":20,"r":9}]},\n' +
+    ' {"name":"ダンベルショルダープレス","sets":[{"w":14,"r":10},{"w":14,"r":10},{"w":14,"r":10}]},\n' +
+    ' {"name":"サイドレイズ","sets":[{"w":7,"r":10},{"w":7,"r":10},{"w":7,"r":10}]},\n' +
+    ' {"name":"トライセッププレスダウン","sets":[{"w":15,"r":10},{"w":15,"r":10},{"w":15,"r":10}]}\n' +
+    "]}";
+  const expectGemini = (r) => {
+    expect(r.ok).toBe(true);
+    expect(r.plan.exercises.map(e => e.sets.length)).toEqual([4, 3, 3, 3, 3]);
+    expect(r.plan.exercises[0].sets[0]).toEqual({ w: 40, r: 10, wu: true });
+  };
+
+  it("Gemini: 答えの「コピー」ボタンで写した形(Markdown、```kurabell のブロック)", () => {
+    const text = "本日のメニュー提案です。\n\n### 提案の理由\n\n1. **種目順の調整（疲労管理）**\n" +
+      "* **バーベルベンチプレス**: 10/29に62kgで`8, 8, 7回`と安定して伸ばせています。\n\n\n\n---\n\n" +
+      "```kurabell\n" + GEMINI_JSON + "\n\n```";
+    expectGemini(extractCoachPlan(text));
+  });
+
+  it("Gemini: 画面を選択して写した形(ブロックの囲みが消え、「コード スニペット」の見出しが残る)", () => {
+    const text = "本日のメニュー提案です。\n\n提案の理由\n\n種目順の調整（疲労管理）\n\n" +
+      "バーベルベンチプレス: 10/29に62kgで8, 8, 7回と安定して伸ばせています。\n\n" +
+      "コード スニペット\n" + GEMINI_JSON + "\n";
+    expectGemini(extractCoachPlan(text));
+  });
+});
