@@ -16,6 +16,11 @@
 
 `carousel.html` を Playwright で 1080×1350 で撮る(`?s=番号`)。素材は `assets/`(ストーリー版 `~/Desktop/KURABELL-instagram-story/v3/` から取り込んだもの)。
 
+## 動きのあるリール(コードで作る)
+
+`/motion-reel <題材> <秒数>` で作る(スキル `.claude/skills/motion-reel/`、道具と見本は `../motion-reel/`)。
+指示書 → ショットリスト → 静止画 → 書き出し → 自己採点 の関門ごとに確認を取る。できた mp4 は上の drafts の流れに乗せる。
+
 ## Web版の制約
 
 - プロフィールのリンク欄は Web版では編集できない(モバイルのみ)
