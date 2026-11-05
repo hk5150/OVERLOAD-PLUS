@@ -1,0 +1,71 @@
+<!doctype html><html lang="ja"><head><meta charset="utf-8"><style>
+@font-face{font-family:"Barlow C";font-weight:800;src:url("/Users/hajimekitamura/OVERLOAD-PLUS/fonts/barlow-condensed-800-latin.woff2") format("woff2")}
+:root{--bg:#141517;--panel:#1E2023;--line:#2E3237;--text:#F2F0EB;--muted:#A3A8B0;--yellow:#E8B33C;--green:#4CAF6E}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:1920px;height:1080px;background:var(--bg);overflow:hidden;color:var(--text);font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN",sans-serif}
+.s{display:none;position:relative;width:1920px;height:1080px}.s.on{display:block}
+.num{font-family:"Barlow C";font-weight:800}
+.brand{position:absolute;right:48px;bottom:30px;display:flex;align-items:center;gap:14px;z-index:5}
+.brand img{width:48px;height:48px;border-radius:11px}
+.brand span{font-family:"Barlow C";font-weight:800;font-size:34px;letter-spacing:.03em}
+.big{position:absolute;left:96px;top:330px;right:96px;font-size:104px;font-weight:800;line-height:1.28;letter-spacing:-.01em}
+.big em,.h em{font-style:normal;color:var(--yellow)}
+.med{position:absolute;left:96px;top:330px;right:200px;font-size:72px;font-weight:800;line-height:1.42}
+.med em{font-style:normal;color:var(--yellow)}
+.kick{position:absolute;left:96px;top:96px;font-size:32px;font-weight:700;color:var(--yellow)}
+.h{position:absolute;left:96px;top:150px;right:96px;font-size:66px;font-weight:800;line-height:1.3}
+.src{position:absolute;left:96px;bottom:36px;font-size:24px;color:var(--muted);line-height:1.5}
+.note{position:absolute;left:96px;font-size:40px;font-weight:700;line-height:1.55;right:96px}
+.cmp{position:absolute;left:96px;right:96px;top:400px;display:grid;grid-template-columns:1fr 1fr;gap:32px}
+.card{background:var(--panel);border:2px solid var(--line);border-radius:10px;padding:40px 44px;height:300px}
+.card h3{font-size:38px;font-weight:800;margin-bottom:22px}
+.card p{font-size:36px;color:var(--muted);line-height:1.5}
+.card .v{font-family:"Barlow C";font-weight:800;font-size:92px;line-height:1}
+.card .v small{font-size:40px;margin-left:6px}
+/* アプリ画面の場面: 右に画面 */
+.win{position:absolute;left:960px;top:40px;width:900px;height:910px;background:#000;border:2px solid var(--line)}
+.lk{position:absolute;left:96px;top:96px;font-size:32px;font-weight:700;color:var(--yellow)}
+.lt{position:absolute;left:96px;top:160px;width:780px;font-size:64px;font-weight:800;line-height:1.34}
+.lt em{font-style:normal;color:var(--yellow)}
+.lt em.g{color:var(--green)}
+.keyv{position:absolute;left:96px;top:560px;width:780px;background:var(--panel);border:2px solid var(--line);border-radius:10px;padding:30px 36px}
+.keyv small{display:block;font-size:30px;color:var(--muted);font-weight:700;margin-bottom:10px}
+.keyv b{font-family:"Barlow C";font-weight:800;font-size:92px;line-height:1.05}
+.keyv b.g{color:var(--green)}
+.refs{position:absolute;left:96px;top:150px;right:120px;font-size:32px;line-height:1.5}
+.refs li{list-style:none;margin-bottom:26px}
+.refs b{font-weight:800}.refs span{color:var(--muted);font-size:27px}
+.end{position:absolute;left:96px;top:720px;display:flex;align-items:center;gap:28px}
+.end img{width:128px;height:128px;border-radius:28px}
+.end div b{display:block;font-family:"Barlow C";font-weight:800;font-size:72px;line-height:1}
+.end div span{font-size:36px;font-weight:700;color:var(--muted)}
+</style></head><body>
+<section class="s" id="s01"><div class="big">今日のベンチプレス、<br><em>何キロ</em>にしますか。</div></section>
+<section class="s" id="s02"><div class="big">前回の記録を見て、<br><em>決める。</em></div><p class="note" style="top:680px;color:var(--muted)">その決め方の根拠と、そのために作ったアプリを紹介します。</p></section>
+<section class="s" id="s03"><div class="big">前回より、<br><em>少しずつ増やす。</em></div><p class="note" style="top:680px;color:var(--muted)">漸進性過負荷(ぜんしんせいかふか)</p></section>
+<section class="s" id="s04"><div class="kick">研究 1: トレーニング経験者 43人・8週間・脚</div><div class="h">重さを増やす群と、回数を増やす群</div>
+ <div class="cmp"><div class="card"><h3>重さを増やす</h3><p>回数はそのままで、<br>重さを上げていく</p></div><div class="card"><h3>回数を増やす</h3><p>重さはそのままで、<br>回数を増やしていく</p></div></div>
+ <p class="note" style="top:760px">筋肉の厚さの伸びに、<em style="font-style:normal;color:var(--yellow)">目立った差はなかった</em><br><span style="color:var(--muted);font-size:30px">大腿直筋は回数の群、筋力は重さの群がややよかったが、差は小さい</span></p>
+ <div class="src">Plotkin D, et al. PeerJ. 2022;10:e14142.</div></section>
+<section class="s" id="s05"><div class="kick">研究 1: トレーニング経験者 43人・8週間・脚</div><div class="big" style="top:300px">増やすのは、<br><em>重さでも回数でも</em><br>よさそう。</div><div class="src">Plotkin D, et al. PeerJ. 2022;10:e14142.</div></section>
+<section class="s" id="s06"><div class="big">どこで止めるか。</div><p class="note" style="top:540px;font-size:48px">あと何回できたか = <em style="font-style:normal;color:var(--yellow)">余力(RIR)</em></p></section>
+<section class="s" id="s07"><div class="kick">研究 2: トレーニング経験者 18人・8週間・脚の2種目</div><div class="h">太ももの筋肉の厚さの増え方</div>
+ <div class="cmp"><div class="card"><h3>限界まで</h3><div class="v">+0.181<small>cm</small></div></div><div class="card"><h3>余力 1〜2回で止める</h3><div class="v">+0.182<small>cm</small></div></div></div>
+ <p class="note" style="top:760px">ほぼ同じ。<br><span style="color:var(--muted);font-size:30px">脚の研究なので、ほかの部位に同じように当てはまるとは限りません</span></p>
+ <div class="src">Refalo MC, et al. J Sports Sci. 2024;42(1):85-101.</div></section>
+<section class="s" id="s08"><div class="kick">研究 3: 15研究のまとめ</div><div class="med" style="top:280px;right:96px">上がらなくなるまで追い込むほうが<br>筋肉が増える、という根拠は<br><em>見つかっていない。</em></div><div class="src">Refalo MC, et al. Sports Med. 2023;53(3):649-665.</div></section>
+<section class="s" id="s09"><div class="med" style="top:210px">今日の重さの目安になるのは、</div><div class="cmp" style="grid-template-columns:1fr 1fr 1fr;top:400px"><div class="card" style="height:230px"><h3 style="color:var(--yellow)">前回の重さ</h3><div class="v">62.5<small>kg</small></div></div><div class="card" style="height:230px"><h3 style="color:var(--yellow)">前回の回数</h3><div class="v">10<small>回</small></div></div><div class="card" style="height:230px"><h3 style="color:var(--yellow)">前回の余力</h3><div class="v">2<small>回</small></div></div></div></section>
+<section class="s" id="s10"><div class="win"></div><div class="lk">KURABELL の使い方 1</div><div class="lt">分割法を作っておくと、<br>今日のメニューに<br><em>前回の内容</em>が並ぶ。</div></section>
+<section class="s" id="s11"><div class="win"></div><div class="lk">KURABELL の使い方 2</div><div class="lt">各セットの下に、<br>前回の同じセット。</div><div class="keyv"><small>1セット目の下の行</small><b>前回 62.5×10 RIR2</b></div></section>
+<section class="s" id="s12"><div class="win"></div><div class="lk">KURABELL の使い方 3</div><div class="lt">入力すると、<br><em>前回との差</em>がその場で。</div><div class="keyv"><small>余力の差(前回 RIR2 → 今日 RIR1)</small><b>RIR-1</b></div></section>
+<section class="s" id="s13"><div class="win"></div><div class="lk">KURABELL の使い方 4</div><div class="lt">推定1RMがベストを<br>超えると、<em class="g">緑</em>に変わる。</div><div class="keyv"><small>推定1RM(65kg × 9回)</small><b>83.3 → <span style="color:var(--green)">84.5</span> kg</b></div></section>
+<section class="s" id="s14"><div class="win"></div><div class="lk">KURABELL の使い方 5</div><div class="lt">重さを自動で<br>決める機能はありません。<br><em>決めるのは、あなた。</em></div><div class="keyv"><small>3セット目は自分で入力</small><b>65 kg × 8 回</b></div></section>
+<section class="s" id="s15"><div class="win"></div><div class="lk">料金</div><div class="lt">記録は <em>10回まで無料</em>。<br>その先は買い切り。</div><div class="keyv"><small>月額の課金</small><b>なし</b></div></section>
+<section class="s" id="s16"><div class="kick">参考文献</div><ul class="refs">
+ <li><b>Plotkin D, et al.</b> Progressive overload without progressing load? The effects of load or repetition progression on muscular adaptations. <span>PeerJ. 2022;10:e14142.</span></li>
+ <li><b>Refalo MC, et al.</b> Similar muscle hypertrophy following eight weeks of resistance training to momentary muscular failure or with repetitions-in-reserve in resistance-trained individuals. <span>J Sports Sci. 2024;42(1):85-101.</span></li>
+ <li><b>Refalo MC, et al.</b> Influence of Resistance Training Proximity-to-Failure on Skeletal Muscle Hypertrophy: A Systematic Review with Meta-analysis. <span>Sports Med. 2023;53(3):649-665.</span></li></ul>
+ <div class="end"><img src="/Users/hajimekitamura/Desktop/KURABELL-reels/icon.png"><div><b>KURABELL Workout Log</b><span>リンクは説明欄にあります</span></div></div></section>
+<div class="brand" id="brand"><img src="/Users/hajimekitamura/Desktop/KURABELL-reels/icon.png"><span>KURABELL Workout Log</span></div>
+<script>const id=new URLSearchParams(location.search).get('s');document.getElementById('s'+id).classList.add('on');if(id==='16')document.getElementById('brand').style.display='none';</script>
+</body></html>
