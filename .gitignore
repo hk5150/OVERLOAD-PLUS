@@ -15,3 +15,6 @@ www/
 # App Store Connect の API キー(リポジトリに入れない。置き場所は ~/.appstoreconnect/private_keys/)
 *.p8
 __pycache__/
+
+# YouTube の長い紹介動画の出来上がり(動画の置き場は marketing/youtube-long/、git には入れない)
+marketing/youtube-long/*.mp4
