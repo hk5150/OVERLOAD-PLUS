@@ -5,7 +5,7 @@ import { loadDomainModule } from "./helpers/loadDomain.js";
 // 条件がゆるむと記録の保存のたびに評価シートを求めることになり、iOSの年3回枠を早々に使い切るうえ、
 // 記録中の利用者の邪魔をする。逆に日付の扱いを誤ると(読めない値をNaNのまま比較するなど)一度も頼まなくなるが、
 // どちらもアプリ側には表示結果が返らないので無症状で壊れる。
-// 前回比較を体験した人(記録3件以上)が前回を超えたときだけ、前回依頼から120日以上空けて頼む。
+// 前回比較を体験した人(記録2件以上)が前回を超えたときだけ、前回依頼から120日以上空けて頼む。
 // requestAppReview はネイティブの Review プラグインを叩く部分で、例外を保存処理に漏らさないことが要る。
 // 実際にiOSがシートを出すか(TestFlightでは出ない)と、ios/App/App/Review/ のネイティブ実装は対象外。
 
@@ -51,12 +51,12 @@ describe("shouldRequestReview(条件がゆるむと保存のたびに評価を�
     expect(shouldRequestReview(sampleInput({ beatPrevious: false }))).toBe(false);
   });
 
-  it("記録が2件では頼まない", () => {
-    expect(shouldRequestReview(sampleInput({ workoutsCount: 2 }))).toBe(false);
+  it("記録が1件では頼まない", () => {
+    expect(shouldRequestReview(sampleInput({ workoutsCount: 1 }))).toBe(false);
   });
 
-  it("記録が3件になると頼む", () => {
-    expect(shouldRequestReview(sampleInput({ workoutsCount: 3 }))).toBe(true);
+  it("記録が2件になると頼む", () => {
+    expect(shouldRequestReview(sampleInput({ workoutsCount: 2 }))).toBe(true);
   });
 
   it("記録件数が未指定なら頼まない", () => {
