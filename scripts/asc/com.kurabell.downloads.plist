@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- downloads-morning.sh を毎朝 06:00 に動かす。
+     入れ方: ~/Library/LaunchAgents/ にコピーして launchctl bootstrap gui/$(id -u) <plist>
+     Mac が寝ていた日は、起きたときに1回動く。 -->
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.kurabell.downloads</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/zsh</string>
+    <string>/Users/hajimekitamura/OVERLOAD-PLUS/scripts/asc/downloads-morning.sh</string>
+  </array>
+  <key>WorkingDirectory</key><string>/Users/hajimekitamura/OVERLOAD-PLUS</string>
+  <key>StartCalendarInterval</key>
+  <dict><key>Hour</key><integer>6</integer><key>Minute</key><integer>0</integer></dict>
+  <key>StandardOutPath</key><string>/Users/hajimekitamura/OVERLOAD-PLUS/reports/downloads/launchd.log</string>
+  <key>StandardErrorPath</key><string>/Users/hajimekitamura/OVERLOAD-PLUS/reports/downloads/launchd.log</string>
+</dict>
+</plist>

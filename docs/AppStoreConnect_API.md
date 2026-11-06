@@ -61,4 +61,8 @@
 - `scripts/asc/downloads.mjs` を足した。初回DL(1系)と再DL(3系)をアプリごとに日次で出す。数字は `kurabell-metrics.mjs` の sales と一致を確認済み。
 - 罠: 日次の売上レポートは太平洋時間の1日ぶんで、出るのは日本時間で翌日の昼以降。**06:00 の時点では2日前までしか出ていないことが多い**(11/6 12時台で最新は 11/3)。
   DLが0件の日もレポート自体が無く 404 になるので、「-」を0と読まない。
-- 残り: 06:00 の報告をこの Mac の定時タスクに移すか(北村さんの判断待ち)。
+- 11/6 北村さんの判断で、ミューズ側の報告は残したまま、この Mac にも 06:00 の報告を作った。
+  launchd の `com.kurabell.downloads`(`scripts/asc/com.kurabell.downloads.plist` → `downloads-morning.sh`)が
+  Obsidian の `Projects/app-downloads-daily.md` を書き直し、Mac に通知を出す。Claude を使わないので許可の確認で止まらない。
+  Mac が寝ていた日は起きたときに1回動く。ログは `reports/downloads/`(gitに入れない)。11/6 に手動で1回動かして確認済み。
+- 残り: ミューズ側の報告は、ブラウザのサインインのままなら引き続き止まる。直すなら、ミューズの報告を上のノートを読む形に変えるのが安全(キーは渡さない)。

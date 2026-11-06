@@ -43,7 +43,20 @@ const days = [];
 for (let i = DAYS - 1; i >= 0; i--) { const d = addDays(end, -i); days.push({ date: d, apps: await day(d) }); }
 const latest = [...days].reverse().find((d) => d.apps)?.date || null;
 
-if (has("--json")) {
+if (has("--md")) {
+  // 毎朝 06:00 の launchd(scripts/asc/downloads-morning.sh)が Obsidian に書き出す形
+  const now = new Date().toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" });
+  const lines = [
+    "---", `date: ${ymd(new Date())}`, "tags: [appstore, downloads, kurabell, heart-hiit]", "project: overload-plus", "related: [[kurabell-metrics]]", "---", "",
+    "# アプリの日次ダウンロード(KURABELL・HEART HIIT)", "",
+    `毎朝 06:00 に Mac の launchd が App Store Connect API(売上レポート)から書き直す。最終更新: ${now}`, "",
+    `最新のデータ: **${latest || "なし"}**(太平洋時間の日付。朝の時点では2日前までのことが多い)。数は「初回DL / 再DL」、「-」はレポートが無い日(0件か未公開)`, "",
+    `| 日付 | ${Object.values(APPS).join(" | ")} |`, `|---|${Object.keys(APPS).map(() => "--:").join("|")}|`,
+    ...days.map((d) => `| ${d.date} | ${Object.keys(APPS).map((id) => (d.apps ? `${d.apps[id].firstDL} / ${d.apps[id].reDL}` : "-")).join(" | ")} |`),
+    "",
+  ];
+  console.log(lines.join("\n"));
+} else if (has("--json")) {
   console.log(JSON.stringify({ apps: APPS, latestDateWithData: latest, days }, null, 2));
 } else {
   console.log(`日次ダウンロード(初回DL / 再DL)。最新のデータ: ${latest || "なし"}(太平洋時間の日付)`);
