@@ -23,6 +23,7 @@
 | 審査を取り下げる(**確認を取ってから**。版は DEVELOPER_REJECTED に戻り、ビルドを付け替えて出し直せる) | `node scripts/asc/metadata.mjs cancel 1.4.1 --apply --yes-cancel` |
 | TestFlight の処理を待って「テスト内容」を入れる | `node scripts/asc/testflight.mjs 17 --wait --apply`(`ios:upload` の最後で自動) |
 | スクリーンショットを丸ごと入れ替える | `node scripts/asc/screenshots.mjs 1.4 --dir ~/Desktop/KURABELL-appstore-screenshots/v5 --exclude 08 --apply` |
+| 毎朝 Gmail に送る詳しい報告の本文(国・端末・アップデート・KURABELL の表示/閲覧/CVR/流入元) | `node scripts/asc/daily-detail.mjs --days 14` |
 | アプリごとの日次ダウンロード(KURABELL・HEART HIIT、読むだけ) | `node scripts/asc/downloads.mjs --days 7`(`--json` もある) |
 | カスタマーレビューを読む / 返信(**確認を取ってから**) | `node scripts/asc/reviews.mjs` / `reviews.mjs reply <id> --text "…" --apply` |
 
@@ -67,5 +68,6 @@
   Mac が寝ていた日は起きたときに1回動く。ログは `reports/downloads/`(gitに入れない)。11/6 に手動で1回動かして確認済み。
 - 11/6 北村さんの判断で、ミューズにも API で確認させる。ミューズ用のキーは Mac のキーと分け、役割は「Sales」(売上とトレンドのレポートが読める最小の役割)で新しく発行する。Mac のキー(Admin)は渡さない。分けておけば、片方だけ失効できる。
 - 11/6 北村さんの依頼で、毎朝 06:10 の定時タスク「【毎朝6時】KURABELL・HEART HIIT のDLをGmailへ」(`kurabell-downloads-gmail`)が `downloads.mjs` の結果を北村さんの Gmail に送る。ミューズは Gmail で読む。宛先は本人のアドレスだけ。11/6 に同じ形の試しのメールを1通送った。定時タスクとしてはまだ一度も動いていない(初回に Gmail の許可の確認で止まるかもしれない。12時のルーティンが点検する)。
-- `downloads.mjs` は Apple の 500 を3回まで取り直す(11/6 に1回出た)。
+- `downloads.mjs` は Apple の 500 を3回まで取り直す(11/6 に1回出た)。11/6 の昼は 500 が続けて出て、`~/.appstoreconnect/kurabell-metrics.mjs`(取り直しが無い)も2回続けて落ちた。12時のルーティンが止まったら、まずこれを疑う。
+- 11/6 北村さんの「もうちょっと詳細データ」で、Gmail の本文を `daily-detail.mjs` の出力に替えた(試しの詳細版を1通送信済み)。HEART HIIT の表示・閲覧は分析レポートの依頼が無いので出ない(依頼の作成は App Store Connect への書き込みなので、まだしていない)。
 - 残り(参考): ミューズ側の報告は、ブラウザのサインインのままなら引き続き止まる。直すなら、ミューズの報告を上のノートを読む形に変えるのが安全(キーは渡さない)。
