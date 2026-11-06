@@ -4,7 +4,8 @@
 // 2026-11-06 北村さんの「もうちょっと詳細データ送れる?」から。ミューズ(Meta AI)が Gmail で読む前提なので、
 // Markdown を使わず、表は「|」区切りの素の文字にする。
 // - 売上レポート(両アプリ): 初回DL・再DL・アップデート・課金、国別・端末別。太平洋時間の日付
-// - 分析レポート(KURABELL のみ。HEART HIIT は分析レポートの依頼を出していない): 表示・閲覧・初回DL・閲覧率・CVR、流入元別
+// - 分析レポート(アプリごと): 表示・閲覧・初回DL・閲覧率・CVR、流入元別。依頼はアプリから API でたどる
+//   (HEART HIIT の依頼は 2026-11-06 に出した。最初のデータが出るまで1〜2日かかる)
 //   分析は数え方の閾値で少ない行が落ちるので、空でも0とは限らない
 import { gunzipSync } from "node:zlib";
 import { cfg, token, all, opt } from "./client.mjs";
@@ -62,9 +63,10 @@ async function salesDay(date) {
 }
 
 // ---- 分析(KURABELL) ----
-async function dailyRows(reportName) {
+async function dailyRows(appId, reportName) {
   const instances = [];
-  for (const reqId of Object.values(cfg.analyticsRequests || {})) {
+  for (const req of await all(`/v1/apps/${appId}/analyticsReportRequests`)) {
+    const reqId = req.id;
     const reports = await all(`/v1/analyticsReportRequests/${reqId}/reports?filter[name]=${encodeURIComponent(reportName)}`);
     for (const rep of reports) instances.push(...await all(`/v1/analyticsReports/${rep.id}/instances?filter[granularity]=DAILY&limit=200`));
   }
@@ -83,9 +85,9 @@ async function dailyRows(reportName) {
   return byDate;
 }
 
-async function analytics() {
-  const eng = await dailyRows("App Store Discovery and Engagement Standard");
-  const dl = await dailyRows("App Downloads Standard");
+async function analytics(appId) {
+  const eng = await dailyRows(appId, "App Store Discovery and Engagement Standard");
+  const dl = await dailyRows(appId, "App Downloads Standard");
   const dates = [...new Set([...eng.keys(), ...dl.keys()])].sort();
   if (!dates.length) return null;
   const last = dates.at(-1);
@@ -155,26 +157,29 @@ for (const s of sales) {
 L.push("「-」はレポートが無い日(0件か、まだ出ていない)");
 L.push("");
 
-L.push(`■ 2. KURABELL の App Store 入口(分析レポート)`);
-try {
-  const a = await analytics();
-  if (!a) L.push("まだデータがありません");
-  else {
-    let ti = 0, tv = 0, td = 0;
-    L.push(`期間: ${a.start} 〜 ${a.last}`);
-    L.push("日付 | 表示 | 閲覧 | 初回DL | 閲覧率 | CVR");
-    for (const [d, v] of Object.entries(a.daily)) {
-      ti += v.imp; tv += v.view; td += v.dl;
-      L.push(`${d} | ${v.imp} | ${v.view} | ${v.dl} | ${pct(v.view, v.imp)} | ${pct(v.dl, v.view)}`);
+let n = 2;
+for (const [id, name] of Object.entries(APPS)) {
+  L.push(`■ ${n++}. ${name} の App Store 入口(分析レポート)`);
+  try {
+    const a = await analytics(id);
+    if (!a) L.push("まだデータがありません(依頼から最初のデータまで1〜2日かかる)");
+    else {
+      let ti = 0, tv = 0, td = 0;
+      L.push(`期間: ${a.start} 〜 ${a.last}`);
+      L.push("日付 | 表示 | 閲覧 | 初回DL | 閲覧率 | CVR");
+      for (const [d, v] of Object.entries(a.daily)) {
+        ti += v.imp; tv += v.view; td += v.dl;
+        L.push(`${d} | ${v.imp} | ${v.view} | ${v.dl} | ${pct(v.view, v.imp)} | ${pct(v.dl, v.view)}`);
+      }
+      L.push(`合計 | ${ti} | ${tv} | ${td} | ${pct(tv, ti)} | ${pct(td, tv)}`);
+      L.push(`閲覧の流入元: ${top(a.src.view)}`);
+      L.push(`初回DLの流入元: ${top(a.src.dl)}`);
     }
-    L.push(`合計 | ${ti} | ${tv} | ${td} | ${pct(tv, ti)} | ${pct(td, tv)}`);
-    L.push(`閲覧の流入元: ${top(a.src.view)}`);
-    L.push(`初回DLの流入元: ${top(a.src.dl)}`);
-    L.push("閲覧率 = 閲覧 ÷ 表示、CVR = 初回DL ÷ 閲覧。分析レポートは少ない行が落ちることがあり、売上レポートとは日付が1日ずれることがある");
+  } catch (e) {
+    L.push(`取得に失敗: ${String(e.message || e).split("\n")[0].slice(0, 150)}`);
   }
-} catch (e) {
-  L.push(`取得に失敗: ${String(e.message || e).split("\n")[0].slice(0, 150)}`);
+  L.push("");
 }
-L.push("HEART HIIT は分析レポートの依頼を出していないので、入口の数字はまだありません");
+L.push("閲覧率 = 閲覧 ÷ 表示、CVR = 初回DL ÷ 閲覧。分析レポートは少ない行が落ちることがあり、売上レポートとは日付が1日ずれることがある");
 
 console.log(L.join("\n"));
