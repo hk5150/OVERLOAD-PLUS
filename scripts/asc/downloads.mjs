@@ -24,7 +24,13 @@ function parseTsv(text) {
 
 async function day(date) {
   const url = `https://api.appstoreconnect.apple.com/v1/salesReports?filter[frequency]=DAILY&filter[reportType]=SALES&filter[reportSubType]=SUMMARY&filter[vendorNumber]=${cfg.vendorNumber}&filter[reportDate]=${date}`;
-  const res = await fetch(url, { headers: { Authorization: `Bearer ${token()}` } });
+  // Apple 側の 500 がときどき出る(2026-11-06 に1回)。5xx は間をあけて3回まで取り直す
+  let res;
+  for (let i = 0; i < 3; i++) {
+    res = await fetch(url, { headers: { Authorization: `Bearer ${token()}` } });
+    if (res.status < 500) break;
+    await new Promise((r) => setTimeout(r, 3000 * (i + 1)));
+  }
   if (res.status === 404) return null; // DL が0件の日、またはまだ出ていない日
   if (!res.ok) throw new Error(`salesReports ${date}: ${res.status} ${(await res.text()).slice(0, 200)}`);
   const out = Object.fromEntries(Object.keys(APPS).map((id) => [id, { firstDL: 0, reDL: 0 }]));
