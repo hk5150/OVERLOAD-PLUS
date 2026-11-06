@@ -20,7 +20,7 @@ export const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "
 const key = createPrivateKey(readFileSync(`${ASC_DIR}/private_keys/AuthKey_${cfg.keyId}.p8`));
 
 let cached = { token: null, exp: 0 };
-function token() {
+export function token() {
   const now = Math.floor(Date.now() / 1000);
   if (cached.token && cached.exp - now > 60) return cached.token;
   const b64 = (o) => Buffer.from(JSON.stringify(o)).toString("base64url");

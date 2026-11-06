@@ -23,6 +23,7 @@
 | 審査を取り下げる(**確認を取ってから**。版は DEVELOPER_REJECTED に戻り、ビルドを付け替えて出し直せる) | `node scripts/asc/metadata.mjs cancel 1.4.1 --apply --yes-cancel` |
 | TestFlight の処理を待って「テスト内容」を入れる | `node scripts/asc/testflight.mjs 17 --wait --apply`(`ios:upload` の最後で自動) |
 | スクリーンショットを丸ごと入れ替える | `node scripts/asc/screenshots.mjs 1.4 --dir ~/Desktop/KURABELL-appstore-screenshots/v5 --exclude 08 --apply` |
+| アプリごとの日次ダウンロード(KURABELL・HEART HIIT、読むだけ) | `node scripts/asc/downloads.mjs --days 7`(`--json` もある) |
 | カスタマーレビューを読む / 返信(**確認を取ってから**) | `node scripts/asc/reviews.mjs` / `reviews.mjs reply <id> --text "…" --apply` |
 
 ## 掲載情報のファイル(`appstore/<版>/`)
@@ -51,3 +52,13 @@
 - 2026-10-12 に確かめた: `screenshots --apply`(1.4.1 で日英8枚を入れ替え、読み戻しで順番も一致)
 - まだ: なし。
   失敗したら、画面で直してから、このファイルに罠を書き足す
+
+## 毎朝のダウンロード報告を API に移す(2026-11-06)
+- 06:00 のダウンロード報告(KURABELL・HEART HIIT)は、ブラウザのサインインが2段階認証で止まり、11/5・11/6 の朝に数字が取れなかった。
+  この報告は Mac の定時タスクにも claude.ai のルーティンにも無く、Meta のミューズ側で動いている。
+- **新しいキーは発行しない。** HEART HIIT(6821939071)は KURABELL と同じチームで、売上レポートはベンダー番号単位なので、今のキーで両方読める。
+  `.p8` は秘密鍵なので、チャット(ミューズを含む)には渡さない。
+- `scripts/asc/downloads.mjs` を足した。初回DL(1系)と再DL(3系)をアプリごとに日次で出す。数字は `kurabell-metrics.mjs` の sales と一致を確認済み。
+- 罠: 日次の売上レポートは太平洋時間の1日ぶんで、出るのは日本時間で翌日の昼以降。**06:00 の時点では2日前までしか出ていないことが多い**(11/6 12時台で最新は 11/3)。
+  DLが0件の日もレポート自体が無く 404 になるので、「-」を0と読まない。
+- 残り: 06:00 の報告をこの Mac の定時タスクに移すか(北村さんの判断待ち)。
