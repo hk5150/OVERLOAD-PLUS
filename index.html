@@ -203,7 +203,7 @@
     { key:'volume',     urls:['src/domain/volume.js'],
       globals:['workingSets','setVolume','exVolume','nextSetType','volumeGoalKey'] },
     { key:'dayPlan',    urls:['src/domain/dayPlan.js'],
-      globals:['STARTER_PICKS','STARTER_FULL_BODY','STARTER_MAX','starterPicks','DAY_GROUP_OF','autoDayName','nextDayName','uniqueDayName','stalestDayIndex','addAdductorDays','dayMenuNames'] },
+      globals:['STARTER_PICKS','STARTER_FULL_BODY','STARTER_MAX','starterPicks','DAY_GROUP_OF','MUSCLE_GROUPS','groupOfMuscle','toggleMuscleGroup','autoDayName','nextDayName','uniqueDayName','stalestDayIndex','addAdductorDays','dayMenuNames'] },
     { key:'bodyMap',    urls:['src/domain/bodyMap.js'],
       globals:['mirrorBodyPath','BODY_SILHOUETTE','BODY_HEAD','BODY_REGIONS','BODY_DETAILS','bodyHitMuscles'] },
     { key:'coefficients', urls:['src/domain/coefficients.js'],
@@ -658,17 +658,17 @@ const resolveRom = (name, storedRom) => {
 
 // ================= 分割プリセット =================
 const SPLIT_PRESETS = [
-  { name: "全身法", days: [{ name: "全身", muscles: ["全身"] }] },
-  { name: "上半身 / 下半身", days: [
+  { id: "full", name: "全身法", days: [{ name: "全身", muscles: ["全身"] }] },
+  { id: "ul", name: "上半身 / 下半身", days: [
     { name: "上半身", muscles: ["大胸筋", "広背筋", "三角筋中部", "上腕二頭筋", "上腕三頭筋"] },
     { name: "下半身", muscles: ["大腿四頭筋", "ハムストリングス", "臀部", "内転筋", "ふくらはぎ"] },
   ]},
-  { name: "Push / Pull / Legs", days: [
+  { id: "ppl", name: "Push / Pull / Legs", days: [
     { name: "Push", muscles: ["大胸筋", "三角筋前部", "三角筋中部", "上腕三頭筋"] },
     { name: "Pull", muscles: ["広背筋", "三角筋後部", "上腕二頭筋"] },
     { name: "Legs", muscles: ["大腿四頭筋", "ハムストリングス", "臀部", "内転筋", "ふくらはぎ"] },
   ]},
-  { name: "5分割(胸/背中/脚/肩/腕)", days: [
+  { id: "five", name: "5分割(胸/背中/脚/肩/腕)", days: [
     { name: "胸", muscles: ["大胸筋"] },
     { name: "背中", muscles: ["広背筋", "僧帽筋"] },
     { name: "脚", muscles: ["大腿四頭筋", "ハムストリングス", "臀部", "内転筋", "ふくらはぎ"] },
@@ -706,6 +706,16 @@ const chip = (active, activeColor = C.text) => ({
   border: `1px solid ${active ? activeColor : C.border}`, background: active ? activeColor : C.surface2,
   color: active ? (activeColor === C.text ? C.bg : "#fff") : C.muted, fontWeight: active ? 800 : 400,
 });
+// 部位の選択肢(<select> の中身)。まとまり(胸・背中…)ごとに区切る。保存する値は今までどおり MUSCLES の部位名
+const muscleOptions = () => MUSCLE_GROUPS.map(g => g.muscles.length > 1
+  ? <optgroup key={g.id} label={t(`mgroup.${g.id}`)}>{g.muscles.map(m => <option key={m} value={m}>{muscleName(m)}</option>)}</optgroup>
+  : <option key={g.id} value={g.muscles[0]}>{muscleName(g.muscles[0])}</option>);
+// 種目一覧の上の部位チップ(記録タブ)。解剖学名の17部位を横1列に並べていたのを、まとまり8つを折り返して全部見せる
+// (UI レビュー 2026-11 の3)。pickerMuscle にはまとまりの id が入る
+// groups を渡すと、その中だけ(種目が1つも無いまとまり、例えば内蔵種目の無い「全身」は出さない)
+const muscleGroupChips = (selected, onPick, groups = MUSCLE_GROUPS) => groups.map(g => (
+  <button key={g.id} onClick={() => onPick(g.id)} style={{ ...chip(selected === g.id), padding: "7px 14px", fontSize: 14 }}>{t(`mgroup.${g.id}`)}</button>
+));
 // タップで全選択(既存文字を消す手間を省く)
 const selectOnFocus = (e) => {
   const el = e.target;
@@ -2375,9 +2385,11 @@ function App() {
     const q = search.trim();
     if (q) return allExercises.filter(e => notAdded(e) && exMatches(e, q));
     if (pickerMuscle) {
-      // 部位で絞り込んだ中でも、最近使った種目を上位に出す(それ以外はDB定義順のまま)
-      const rankInMuscle = (e) => { const r = recentNames.indexOf(e.n); return r >= 0 ? r : 1000; };
-      return allExercises.filter(e => notAdded(e) && e.m === pickerMuscle).sort((a, b) => rankInMuscle(a) - rankInMuscle(b));
+      // まとまり(胸・肩…)で絞り込む。並びはまとまりの中の部位順(見出しで区切るため)→ 最近使った種目 → DB定義順
+      const g = MUSCLE_GROUPS.find(x => x.id === pickerMuscle);
+      if (!g) return [];
+      const rankInMuscle = (e) => { const r = recentNames.indexOf(e.n); return g.muscles.indexOf(e.m) * 10000 + (r >= 0 ? r : 1000); };
+      return allExercises.filter(e => notAdded(e) && g.muscles.includes(e.m)).sort((a, b) => rankInMuscle(a) - rankInMuscle(b));
     }
     // 既定: 最近使った順 → 今日の部位 → 残り
     const rank = (e) => {
@@ -2388,6 +2400,11 @@ function App() {
     };
     return allExercises.filter(notAdded).sort((a, b) => rank(a) - rank(b));
   }, [search, pickerMuscle, todayDay, recentNames, allExercises, today]);
+
+  // まとまりで絞った一覧を、細かい部位の見出しで区切るか(肩・背中など中が分かれるまとまりのときだけ)
+  const pickerHeadings = !!pickerMuscle && !search.trim() && (MUSCLE_GROUPS.find(g => g.id === pickerMuscle) || { muscles: [] }).muscles.length > 1;
+  // 記録タブの部位チップに出すまとまり(種目が1つ以上あるものだけ)
+  const pickerGroups = useMemo(() => MUSCLE_GROUPS.filter(g => allExercises.some(e => g.muscles.includes(e.m))), [allExercises]);
 
   // 分割タブのDay編集の候補。検索語があれば部位に関係なく全種目から、
   // 無ければDayの部位で絞る(部位が未設定なら全種目)。どちらも最近使った順が先。
@@ -3211,8 +3228,15 @@ function App() {
   const applyPreset = (preset) => {
     if (split && !window.confirm(t("split.confirmReplace", { cur: splitName(split.name), next: splitName(preset.name) }))) return;
     // adductorV1: 内転筋はもう部位の選択肢にあるので、読み込み時の移行(migrateSplit)を通さない
-    persist({ split: { name: preset.name, days: preset.days.map(d => ({ name: d.name, muscles: [...d.muscles] })), cursor: 0, adductorV1: true } });
+    // 選んだ時点で各 Day に定番の種目を入れる(UI レビュー 2026-11 の2)。以前は種目0件のままで、
+    // 「N日分をまとめておまかせで入れる」を押さないと記録タブの「今日のメニュー」が空だった。種目は分割タブの ✕ で外せる
+    // ただし、その Day の部位に合う種目を記録したことがある人には入れない。登録0件の Day は、部位が合う自分の過去の種目で
+    // メニューが組まれる(autoMenu)ので、定番を入れるとそれが定番に置き換わってしまう(reviewer 指摘。型を選び直す既存ユーザー)
+    const hasHistoryFor = (d) => workouts.some(w => (w.exercises || []).some(e => muscleMatchesDay(normMuscle(e.muscle), d)));
+    persist({ split: { name: preset.name, days: preset.days.map(d => ({ name: d.name, muscles: [...d.muscles], ...(hasHistoryFor(d) ? {} : { exercises: starterPicks(d.muscles) }) })), cursor: 0, adductorV1: true } });
     setEditDay(null); setPickingSplit(false);
+    // 初めて分割を作ったときは、組んだメニューが見える記録タブへ(UI レビュー 2026-11 の1)
+    if (!split) { forgetTabScroll("log"); setView("log"); }
   };
   const newCustomSplit = () => {
     if (split && !window.confirm(t("split.confirmRebuild", { cur: splitName(split.name) }))) return;
@@ -3222,11 +3246,14 @@ function App() {
   const updSplit = (patch) => persist({ split: { ...split, ...patch } });
   const updDay = (i, patch) => updSplit({ days: split.days.map((d, j) => j === i ? { ...d, ...patch } : d) });
   // 部位を変えたら、まだ手で名前を付けていない Day は名前も付け直す(「胸・肩」、src/domain/dayPlan.js)
-  const toggleDayMuscle = (i, m) => {
+  const setDayMuscles = (i, muscles) => {
     const d = split.days[i];
-    const muscles = d.muscles.includes(m) ? d.muscles.filter(x => x !== m) : [...d.muscles, m];
     const taken = split.days.filter((_, j) => j !== i).map(x => x.name);
     updDay(i, { muscles, name: nextDayName(d, muscles, i, { locked: dayHasRecords(d.name), taken }) });
+  };
+  const toggleDayMuscle = (i, m) => {
+    const d = split.days[i];
+    setDayMuscles(i, d.muscles.includes(m) ? d.muscles.filter(x => x !== m) : [...d.muscles, m]);
   };
   // その名前の Day で記録したことがあるか。Day 名は記録の session に入っていて、前回の同じ Day を名前で引く。
   // 「最初の種目設定」(おまかせ・選ぶための AI 相談・保存時の登録の申し出)は、まだ記録が無い Day にだけ出す
@@ -5086,7 +5113,7 @@ function App() {
                   </div>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center", marginBottom: 10 }}>
                     {!ex.muscle && (
-                      <label style={{ fontSize: 13, color: C.yellow }}>{t("cfg.muscleUnset")} <select value={ex.muscle} onChange={e => updEx(ex.id, { muscle: e.target.value })} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: "5px 6px", fontSize: 16, fontFamily: "inherit" }}><option value="">{t("common.notSet")}</option>{MUSCLES.map(m => <option key={m} value={m}>{muscleName(m)}</option>)}</select></label>
+                      <label style={{ fontSize: 13, color: C.yellow }}>{t("cfg.muscleUnset")} <select value={ex.muscle} onChange={e => updEx(ex.id, { muscle: e.target.value })} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: "5px 6px", fontSize: 16, fontFamily: "inherit" }}><option value="">{t("common.notSet")}</option>{muscleOptions()}</select></label>
                     )}
                     {/* ON/OFFの両方を種目設定にも書く。lastConfigが記録側の値を見なくなったので、
                         ここに書かないとOFFが翌日に残らない(マスターにbwを持つ種目では0.7が復活し、
@@ -5376,12 +5403,12 @@ function App() {
                     <input value={search} onChange={e => setSearch(e.target.value)} onFocus={selectOnFocus}
                       placeholder={t("picker.searchPlaceholder")}
                       style={{ width: "100%", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: "9px 10px", fontSize: 16, fontFamily: "inherit", marginBottom: 8 }} />
-                    <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 8 }}>
-                      <button onClick={() => setPickerMuscle("")} style={{ ...chip(pickerMuscle === ""), flexShrink: 0 }}>{t("picker.recentOrder")}</button>
-                      {MUSCLES.map(m => (
-                        <button key={m} onClick={() => setPickerMuscle(m)} style={{ ...chip(pickerMuscle === m), flexShrink: 0 }}>{muscleName(m)}</button>
-                      ))}
-                    </div>
+                    {!search.trim() && (
+                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", paddingBottom: 8 }}>
+                        <button onClick={() => setPickerMuscle(null)} style={{ ...chip(!pickerMuscle), padding: "7px 14px", fontSize: 14 }}>{t("picker.recentOrder")}</button>
+                        {muscleGroupChips(pickerMuscle, id => setPickerMuscle(pickerMuscle === id ? null : id), pickerGroups)}
+                      </div>
+                    )}
                     {/* こちらも同じ理由で、部分一致でも候補を出す。カスタム追加は候補の下に並べる */}
                     <div style={{ maxHeight: 210, overflowY: "auto" }}>
                       {pickerList.slice(0, 60).map(e => (
@@ -5396,7 +5423,7 @@ function App() {
                       <div style={{ background: C.bg, borderRadius: 10, padding: 10, marginTop: 8 }}>
                         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 10 }}>
                           <select value={customDraft.muscle} onChange={e => setCustomDraft({ ...customDraft, muscle: e.target.value })} style={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: "6px 8px", fontSize: 16, fontFamily: "inherit" }}>
-                            <option value="">{t("picker.selectMuscle")}</option>{MUSCLES.map(m => <option key={m} value={m}>{muscleName(m)}</option>)}
+                            <option value="">{t("picker.selectMuscle")}</option>{muscleOptions()}
                           </select>
                           <select value={customDraft.eq} onChange={e => setCustomDraft({ ...customDraft, eq: e.target.value })} style={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: "6px 8px", fontSize: 16, fontFamily: "inherit" }}>
                             <option value="">{t("settings.other")}</option>{EQUIPMENT.map(q => <option key={q} value={q}>{eqName(q)}</option>)}
@@ -5441,23 +5468,28 @@ function App() {
               style={{ width: "100%", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 12px", color: C.text, fontSize: 16, fontFamily: "inherit", marginBottom: 10 }} />
 
             {!search.trim() && (
-              <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 6, marginBottom: 8 }}>
-                <button onClick={() => setPickerMuscle(null)} style={{ ...chip(!pickerMuscle), flexShrink: 0 }}>{recentNames.length ? t("picker.recentOrder") : todayDay ? t("picker.todayDay", { day: dayName(todayDay.name) }) : t("common.all")}</button>
-                {MUSCLES.filter(m => EXERCISE_DB.some(e => e.m === m)).map(m => (
-                  <button key={m} onClick={() => setPickerMuscle(pickerMuscle === m ? null : m)} style={{ ...chip(pickerMuscle === m), flexShrink: 0 }}>{muscleName(m)}</button>
-                ))}
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
+                <button onClick={() => setPickerMuscle(null)} style={{ ...chip(!pickerMuscle), padding: "7px 14px", fontSize: 14 }}>{recentNames.length ? t("picker.recentOrder") : todayDay ? t("picker.todayDay", { day: dayName(todayDay.name) }) : t("common.all")}</button>
+                {muscleGroupChips(pickerMuscle, id => setPickerMuscle(pickerMuscle === id ? null : id), pickerGroups)}
               </div>
             )}
 
             {/* 候補リストは検索語が完全一致でなくても常に出す。
                 以前は「完全一致でなければカスタム追加パネルに切り替える」出し分けだったため、
                 部分一致(「ベンチ」/"bench")では候補が1件も見えなかった。 */}
-            <div style={{ maxHeight: 240, overflowY: "auto" }}>
-              {pickerList.map(e => (
-                <button key={e.n} onClick={() => addExercise(e.n)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, width: "100%", textAlign: "left", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 12px", marginBottom: 6, cursor: "pointer", color: C.text, fontSize: 13, fontFamily: "inherit" }}>
+            {/* まとまりで絞ったときは枠をやめて画面ごとスクロールし、細かい部位の見出しで区切る(UI レビュー 2026-11 の3・5)。
+                「すべて」「最近使った順」は全種目(150以上)が並ぶので、今までどおり枠の中 */}
+            <div style={pickerMuscle && !search.trim() ? undefined : { maxHeight: 240, overflowY: "auto" }}>
+              {pickerList.map((e, k) => (
+                <React.Fragment key={e.n}>
+                {pickerHeadings && (k === 0 || pickerList[k - 1].m !== e.m) && (
+                  <div style={{ fontSize: 12, fontWeight: 700, color: C.muted, margin: k === 0 ? "0 0 6px" : "12px 0 6px" }}>{muscleName(e.m)}</div>
+                )}
+                <button onClick={() => addExercise(e.n)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, width: "100%", textAlign: "left", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 12px", marginBottom: 6, cursor: "pointer", color: C.text, fontSize: 13, fontFamily: "inherit" }}>
                   <span style={{ minWidth: 0 }}>{exName(e.n)}{recentNames.includes(e.n) && <span style={{ color: C.muted, fontSize: 11, marginLeft: 6 }}>{t("common.recent")}</span>}</span>
-                  <span style={{ color: C.muted, fontSize: 12, flexShrink: 0 }}>{muscleName(e.m)}{t("common.sep")}{eqName(e.eq)}</span>
+                  <span style={{ color: C.muted, fontSize: 12, flexShrink: 0 }}>{pickerHeadings ? eqName(e.eq) : <>{muscleName(e.m)}{t("common.sep")}{eqName(e.eq)}</>}</span>
                 </button>
+                </React.Fragment>
               ))}
               {pickerList.length === 0 && <div style={{ color: C.muted, fontSize: 13, textAlign: "center", padding: 12 }}>{t("picker.noMatch")}</div>}
             </div>
@@ -5469,7 +5501,7 @@ function App() {
                 <div style={{ fontSize: 13, color: C.muted, marginBottom: 8 }}>{t("picker.addCustom", { name: search.trim() })}</div>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 10 }}>
                   <select value={customDraft.muscle} onChange={e => setCustomDraft({ ...customDraft, muscle: e.target.value })} style={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: "6px 8px", fontSize: 16, fontFamily: "inherit" }}>
-                    <option value="">{t("picker.selectMuscle")}</option>{MUSCLES.map(m => <option key={m} value={m}>{muscleName(m)}</option>)}
+                    <option value="">{t("picker.selectMuscle")}</option>{muscleOptions()}
                   </select>
                   <select value={customDraft.eq} onChange={e => setCustomDraft({ ...customDraft, eq: e.target.value })} style={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: "6px 8px", fontSize: 16, fontFamily: "inherit" }}>
                     <option value="">{t("settings.other")}</option>{EQUIPMENT.map(q => <option key={q} value={q}>{eqName(q)}</option>)}
@@ -5508,22 +5540,25 @@ function App() {
               {pickingSplit && split && (
                 <button onClick={() => setPickingSplit(false)} style={{ ...btn(C.surface2, C.muted), fontSize: 13, padding: "8px 12px", marginBottom: 12 }}>{t("split.backToCurrent", { name: splitName(split.name) })}</button>
               )}
-              {!split && (
-                <div style={{ background: C.surface, borderRadius: 14, padding: 14, marginBottom: 16, border: `1px solid ${C.border}` }}>
-                  <div style={{ fontSize: 13, color: C.muted, marginBottom: 10, lineHeight: 1.6 }}>
-                    {t("split.noSplitHint")}
-                  </div>
-                  <button onClick={() => setView("log")} style={{ ...btn(C.yellow, C.bg), width: "100%", padding: 14, fontSize: 15 }}>{t("split.logNow")}</button>
-                </div>
-              )}
-              <p style={{ color: C.muted, fontSize: 13, margin: "0 0 10px" }}>{split ? t("split.pickPattern") : t("split.orConfigure")}</p>
+              {/* 初回は「週に何回?」を主役にして、型を選んだら定番の種目で今日のメニューまで組む(UI レビュー 2026-11 の1・4)。
+                  以前の主役は「今すぐ記録する」で、白紙の記録タブ(部位から種目を探す、いちばん迷う道)へ送っていた */}
+              {!split ? (
+                <>
+                  <div style={{ fontSize: 20, fontWeight: 900, margin: "2px 0 6px", lineHeight: 1.4 }}>{t("split.freqQuestion")}</div>
+                  <p style={{ color: C.muted, fontSize: 13, margin: "0 0 12px", lineHeight: 1.6 }}>{t("split.freqHint")}</p>
+                </>
+              ) : <p style={{ color: C.muted, fontSize: 13, margin: "0 0 10px" }}>{t("split.pickPattern")}</p>}
               {SPLIT_PRESETS.map(p => (
                 <button key={p.name} onClick={() => applyPreset(p)} style={{ ...btn(C.surface, C.text), width: "100%", textAlign: "left", padding: 14, marginBottom: 8, border: `1px solid ${C.border}` }}>
-                  <div style={{ fontWeight: 900, fontSize: 15, marginBottom: 4 }}>{splitName(p.name)}</div>
-                  <div style={{ color: C.muted, fontSize: 13, fontWeight: 400 }}>{p.days.map(d => dayName(d.name)).join(" → ")}</div>
+                  <div style={{ display: "flex", alignItems: "baseline", flexWrap: "wrap", columnGap: 10, rowGap: 2, marginBottom: 4 }}>
+                    <span style={{ fontWeight: 900, fontSize: 16 }}>{t(`preset.${p.id}.freq`)}</span>
+                    <span style={{ color: C.muted, fontSize: 13, fontWeight: 700 }}>{splitName(p.name)}</span>
+                  </div>
+                  <div style={{ color: C.muted, fontSize: 13, fontWeight: 400, lineHeight: 1.5 }}>{t(`preset.${p.id}.desc`)}</div>
                 </button>
               ))}
               <button onClick={newCustomSplit} style={{ ...btn(C.surface2, C.text), width: "100%", padding: 14, border: `1px dashed ${C.border}` }}>{t("split.createCustom")}</button>
+              {!split && <button onClick={() => setView("log")} style={{ ...btn("transparent", C.muted), width: "100%", fontSize: 14, padding: "16px 0 4px" }}>{t("split.logWithoutSplit")}</button>}
               {/* 削除は「変更 / 作り直す」の中に置く。以前は分割名のすぐ下にあり、選んだ直後の人の目に最初に入っていた(UI レビュー C1) */}
               {split && <button onClick={deleteSplit} style={{ ...btn("transparent", C.muted), fontSize: 13, padding: "14px 0 0" }}>{t("split.deleteSplit")}</button>}
             </>
@@ -5568,8 +5603,26 @@ function App() {
                         部位から付けた「胸・肩・腕」が切れて見えた。編集中は1行使う */}
                     {editing && <input value={d.name} onChange={e => updDay(i, { name: e.target.value })} onFocus={selectOnFocus} aria-label={t("split.dayNameAria")} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: "6px 10px", fontSize: 16, fontFamily: "inherit", width: "100%", marginTop: 10 }} />}
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 10 }}>
-                      {editing ? MUSCLES.map(m => <button key={m} onClick={() => toggleDayMuscle(i, m)} style={chip(d.muscles.includes(m))}>{muscleName(m)}</button>)
-                        : d.muscles.length ? <span style={{ color: C.text, fontSize: 13, lineHeight: 1.7 }}>{d.muscles.map(muscleName).join(t("common.listSep"))}</span>
+                      {/* 部位は、まとまり(胸・背中・肩…)を押して選ぶ。肩・腕など中が分かれるまとまりは、選ぶと下に細かい部位が出て
+                          外したり足したりできる(UI レビュー 2026-11 の3)。以前は解剖学名の17部位を最初から全部並べていた */}
+                      {editing ? (
+                        <>
+                          {MUSCLE_GROUPS.map(g => {
+                            const n = g.muscles.filter(m => d.muscles.includes(m)).length;
+                            const all = n === g.muscles.length, some = n > 0 && !all;
+                            return <button key={g.id} onClick={() => setDayMuscles(i, toggleMuscleGroup(d.muscles, g))} aria-pressed={all ? "true" : some ? "mixed" : "false"}
+                              style={{ ...chip(all), padding: "7px 14px", fontSize: 14, ...(some ? { border: `1px solid ${C.text}`, color: C.text, fontWeight: 700 } : null) }}>{t(`mgroup.${g.id}`)}</button>;
+                          })}
+                          {MUSCLE_GROUPS.filter(g => g.muscles.length > 1 && g.muscles.some(m => d.muscles.includes(m))).map(g => (
+                            <div key={`sub-${g.id}`} style={{ flexBasis: "100%", display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6, background: C.bg, borderRadius: 10, padding: "8px 10px" }}>
+                              <span style={{ fontSize: 12, color: C.muted, minWidth: 34 }}>{t(`mgroup.${g.id}`)}</span>
+                              {g.muscles.map(m => <button key={m} onClick={() => toggleDayMuscle(i, m)} style={{ ...chip(d.muscles.includes(m)), padding: "4px 10px", fontSize: 12 }}>{muscleName(m)}</button>)}
+                            </div>
+                          ))}
+                          {/* MUSCLES に無い部位(改名前の名前など)が付いていても外せるように */}
+                          {d.muscles.filter(m => !groupOfMuscle(m)).map(m => <button key={m} onClick={() => toggleDayMuscle(i, m)} style={chip(true)}>{muscleName(m)} ✕</button>)}
+                        </>
+                      ) : d.muscles.length ? <span style={{ color: C.text, fontSize: 13, lineHeight: 1.7 }}>{d.muscles.map(muscleName).join(t("common.listSep"))}</span>
                           : <span style={{ color: C.muted, fontSize: 13 }}>{t("split.muscleUnset")}</span>}
                       {/* 最後にやってから何日か(2026-10-11、北村さん)。見出しの行は ▲▼・今日はこれ・編集で 320px 幅だと余白が無いので、チップの並びの末尾に置く */}
                       {!editing && (() => {
@@ -5668,7 +5721,7 @@ function App() {
                             <div style={{ fontSize: 13, color: C.muted, marginBottom: 8 }}>{t("picker.addCustom", { name: daySearch.trim() })}</div>
                             <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
                               <select value={dayDraft.muscle} onChange={e => setDayDraft({ ...dayDraft, muscle: e.target.value })} style={{ flex: 1, minWidth: 0, background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: "6px 8px", fontSize: 16, fontFamily: "inherit" }}>
-                                <option value="">{t("picker.selectMuscle")}</option>{MUSCLES.map(m => <option key={m} value={m}>{muscleName(m)}</option>)}
+                                <option value="">{t("picker.selectMuscle")}</option>{muscleOptions()}
                               </select>
                               <select value={dayDraft.eq} onChange={e => setDayDraft({ ...dayDraft, eq: e.target.value })} style={{ flex: 1, minWidth: 0, background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: "6px 8px", fontSize: 16, fontFamily: "inherit" }}>
                                 <option value="">{t("settings.other")}</option>{EQUIPMENT.map(q => <option key={q} value={q}>{eqName(q)}</option>)}
@@ -6446,7 +6499,7 @@ function App() {
                         <select value={e.m || ""} onChange={ev => updateCustomExercise(e.n, { m: ev.target.value })}
                           style={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: "5px 6px", fontSize: 16, fontFamily: "inherit" }}>
                           <option value="">{t("common.notSet")}</option>
-                          {MUSCLES.map(m => <option key={m} value={m}>{muscleName(m)}</option>)}
+                          {muscleOptions()}
                         </select>
                       </label>
                       <label style={{ fontSize: 13, color: C.muted }}>
