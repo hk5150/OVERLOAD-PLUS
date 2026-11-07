@@ -56,6 +56,33 @@ const DAY_GROUP_OF = {
   "全身": "全身",
 };
 const DAY_GROUP_ORDER = ["全身", "胸", "背中", "肩", "腕", "脚", "腹"];
+
+// 部位を選ぶ画面で見せる「まとまり」(UI レビュー 2026-11 の3、docs/UIレビュー_2026-11.md)。
+// 解剖学名の17部位を1段に並べていたのを、初めての人が考える単位(胸・背中・肩…)にまとめて見せる。
+// **表示のまとめ方だけ**で、保存する部位名(index.html の MUSCLES)は変えない。
+// Day 名の DAY_GROUP_OF とほぼ同じだが、お尻(臀部)だけ脚から分けて見せる(お尻を目的に来る人が多いため)。
+// Day 名は今までどおり DAY_GROUP_OF で付ける(臀部は「脚」)。
+// tests/dayPlan.test.js が、全部の部位がちょうど1回ずつ入っていることを縛っている。
+const MUSCLE_GROUPS = [
+  { id: "chest",     muscles: ["大胸筋"] },
+  { id: "back",      muscles: ["広背筋", "僧帽筋", "脊柱起立筋"] },
+  { id: "shoulders", muscles: ["三角筋前部", "三角筋中部", "三角筋後部"] },
+  { id: "arms",      muscles: ["上腕二頭筋", "上腕三頭筋", "前腕"] },
+  { id: "legs",      muscles: ["大腿四頭筋", "ハムストリングス", "内転筋", "ふくらはぎ"] },
+  { id: "glutes",    muscles: ["臀部"] },
+  { id: "abs",       muscles: ["腹筋"] },
+  { id: "full",      muscles: ["全身"] },
+];
+// その部位が入っているまとまり。MUSCLES に無い部位(改名前の「胸」のまま残ったカスタム種目など)は null
+function groupOfMuscle(muscle) {
+  return MUSCLE_GROUPS.find(g => g.muscles.includes(muscle)) || null;
+}
+// まとまりを押したときの Day の部位。全部入っていれば外し、そうでなければ足りない分を足す
+function toggleMuscleGroup(muscles, group) {
+  const cur = muscles || [];
+  const all = group.muscles.every(m => cur.includes(m));
+  return all ? cur.filter(m => !group.muscles.includes(m)) : [...cur, ...group.muscles.filter(m => !cur.includes(m))];
+}
 function autoDayName(muscles) {
   const groups = [...new Set((muscles || []).map(m => DAY_GROUP_OF[m]).filter(Boolean))];
   if (groups.includes("全身")) return "全身";
@@ -172,6 +199,9 @@ globalThis.STARTER_FULL_BODY = STARTER_FULL_BODY;
 globalThis.STARTER_MAX = STARTER_MAX;
 globalThis.starterPicks = starterPicks;
 globalThis.DAY_GROUP_OF = DAY_GROUP_OF;
+globalThis.MUSCLE_GROUPS = MUSCLE_GROUPS;
+globalThis.groupOfMuscle = groupOfMuscle;
+globalThis.toggleMuscleGroup = toggleMuscleGroup;
 globalThis.autoDayName = autoDayName;
 globalThis.nextDayName = nextDayName;
 globalThis.uniqueDayName = uniqueDayName;

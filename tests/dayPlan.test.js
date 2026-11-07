@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { loadDomainModule } from "./helpers/loadDomain.js";
 
-const { STARTER_PICKS, STARTER_FULL_BODY, starterPicks, DAY_GROUP_OF, autoDayName, nextDayName, uniqueDayName, stalestDayIndex, addAdductorDays } = loadDomainModule("src/domain/dayPlan.js");
+const { STARTER_PICKS, STARTER_FULL_BODY, starterPicks, DAY_GROUP_OF, autoDayName, nextDayName, uniqueDayName, stalestDayIndex, addAdductorDays, MUSCLE_GROUPS, groupOfMuscle, toggleMuscleGroup } = loadDomainModule("src/domain/dayPlan.js");
 
 // EXERCISE_DB は index.html の #appsrc の中にあるので、文字列から名前と部位を拾う
 const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
@@ -417,5 +417,26 @@ describe("dayMenuNames(今日のメニューの種目)", () => {
   it("どちらも無ければ null(呼び出し側で部位一致の履歴から組む)", () => {
     expect(dayMenuNames([], [])).toBeNull();
     expect(dayMenuNames(undefined, undefined)).toBeNull();
+  });
+});
+
+describe("MUSCLE_GROUPS(部位を選ぶ画面のまとまり)", () => {
+  it("MUSCLES の部位がちょうど1回ずつ入っている(抜けると画面で選べない部位ができる)", () => {
+    const flat = MUSCLE_GROUPS.flatMap(g => g.muscles);
+    expect([...flat].sort()).toEqual([...MUSCLES].sort());
+    expect(new Set(flat).size).toBe(flat.length);
+  });
+
+  it("groupOfMuscle は部位からまとまりを引き、MUSCLES に無い部位は null", () => {
+    expect(groupOfMuscle("三角筋中部").id).toBe("shoulders");
+    expect(groupOfMuscle("臀部").id).toBe("glutes");
+    expect(groupOfMuscle("胸")).toBe(null);
+  });
+
+  it("toggleMuscleGroup: 一部だけ入っていれば足りない分を足し、全部入っていれば外す。ほかの部位は残す", () => {
+    const sh = MUSCLE_GROUPS.find(g => g.id === "shoulders");
+    expect(toggleMuscleGroup(["大胸筋", "三角筋中部"], sh)).toEqual(["大胸筋", "三角筋中部", "三角筋前部", "三角筋後部"]);
+    expect(toggleMuscleGroup(["大胸筋", "三角筋前部", "三角筋中部", "三角筋後部"], sh)).toEqual(["大胸筋"]);
+    expect(toggleMuscleGroup(undefined, sh)).toEqual(sh.muscles);
   });
 });
