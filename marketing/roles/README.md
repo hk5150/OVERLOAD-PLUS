@@ -64,7 +64,8 @@
 
 - 読むのは Read、書くのは Write / Edit。Bash の `cat`・`echo >`・`sed -i` は使わない。Grep・Glob は使わない
 - コマンドは手順に書いた形のまま、**絶対パスで1つずつ**。`cd … &&`・パイプ・`;`・`for`・`$(…)`・ヒアドキュメント・`~` は使わない
-- 確かめのコマンドは `/Users/hajimekitamura/OVERLOAD-PLUS/marketing/tools/reel.sh`(`durations` / `inspect` / `check` / `queue` / `files`)と、朝の4役用の `/Users/hajimekitamura/OVERLOAD-PLUS/marketing/tools/morning.sh`(`grid` / `gain` / `unlock`)だけ
+- 確かめのコマンドは `/Users/hajimekitamura/OVERLOAD-PLUS/marketing/tools/reel.sh`(`durations` / `inspect` / `check` / `queue` / `files`)。朝の4役用の `/Users/hajimekitamura/OVERLOAD-PLUS/marketing/tools/morning.sh`(`grid` / `gain`)と `/Users/hajimekitamura/OVERLOAD-PLUS/marketing/tools/shoot-carousel.sh` は、
+  **使う前に `/Users/hajimekitamura/OVERLOAD-PLUS/.claude/settings.local.json` を Read で開き、その行(`marketing/tools/morning.sh *` / `marketing/tools/shoot-carousel.sh *`)が許可の一覧にあるときだけ使う**。無ければ使わず、各役の md の「無いとき」の手順に従う
 - Web は WebSearch と、WebFetch の `pubmed.ncbi.nlm.nih.gov`・`eutils.ncbi.nlm.nih.gov` だけ。抄録は
   `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=<PMID>&rettype=abstract&retmode=text` を WebFetch で読む。`curl` は使わない
 - git は使わない。リポジトリのファイルは読むだけ(例外は `reports/routines/morning-sns.md` への追記)。`.claude/` の下には何も書かない
@@ -74,8 +75,7 @@
 ## 他のセッションとの連携
 
 - 始める前に `ls /Users/hajimekitamura/OVERLOAD-PLUS/.locks/` を見る。`marketing-pdca.md`(13時のルーティン)の印があれば、予約フォルダには触らない
-- 自分が動いている間は `/Users/hajimekitamura/OVERLOAD-PLUS/.locks/morning-sns.md` を3行(`- セッション: 朝の4役 <役名>(ルーティン)` / `- 作業: …` / `- 開始: YYYY-MM-DD HH:MM`)で書き、
-  終わったら成功・失敗にかかわらず `/Users/hajimekitamura/OVERLOAD-PLUS/marketing/tools/morning.sh unlock` で消す(`rm` は許可の一覧に無いので使わない)
+- 朝の4役は自分の印を作らない(印を消す `rm` が許可の一覧に無く、無人の回が最後で止まるため)。予約フォルダに書くのは品質チェック役だけで、13時の印が無いことを確かめてから入れる
 - 13時のルーティンとの分担: リール・カルーセルを**作るのは朝の4役だけ**。13時は数字の振り返り(成績表の2日後の判定・仮説の更新)、施策ボード、YouTube、フォロー候補、プロモーションテキストを続ける。
   予約中の投稿の中身(キャプション・カバー)を変えたいときは、13時は自分で書き換えず、施策ボードに行を起こし、翌朝の企画が拾う
 - TikTok・YouTube ショートの動画は対象外(`docs/動画の自動化.md` の担当)

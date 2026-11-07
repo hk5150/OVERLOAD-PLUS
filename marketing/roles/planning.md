@@ -51,7 +51,7 @@
 
 `2-plan.md`(Write)。1行目は `状態: 完了`。続けて、上の1〜10を見出しごとに。
 最後に「制作への注意」(言い換えてはいけない数値・言葉、画面素材のファイル名)を箇条書きで。
-`reports/routines/morning-sns.md` に結果を足し、印を消す。
+`reports/routines/morning-sns.md` に結果を足す。
 
 ## しないこと
 

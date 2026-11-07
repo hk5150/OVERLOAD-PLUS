@@ -10,7 +10,6 @@
    - `状態: 作らない日` → `3-production.md` に `状態: 作らない日` と書いて終わる
    - `状態: 完了(修正日)` → 下の「修正日」
    - `状態: 完了` 以外 → `3-production.md` に `状態: 見送り(前の役が未完了)` と書いて終わる
-2. 印を書く(作業: 「制作: <題> の JP・EN を作る」)
 
 作る前に Obsidian `Projects/kurabell-morning-lessons.md` の「必ず守ること」を読み、制作で守るものを `3-production.md` に書き写してから始める。
 
@@ -28,7 +27,7 @@
 5. 長さ: `/Users/hajimekitamura/OVERLOAD-PLUS/marketing/tools/reel.sh durations <フォルダ>/audio` で合計を見る。台本の幅を外れたら、ナレーションの文を**削る/足す**のは台本の言い回しの範囲で(数値は変えない)。変えた文は `3-production.md` に書く
 6. 合成: `bash /Users/hajimekitamura/Desktop/KURABELL-reels/build-reel.sh <フォルダ> <フォルダ>/narr.mp4` → `/Users/hajimekitamura/OVERLOAD-PLUS/marketing/tools/add-theme.sh <フォルダ>/narr.mp4 <フォルダ>/final.mp4`
 7. `/Users/hajimekitamura/OVERLOAD-PLUS/marketing/tools/reel.sh inspect <フォルダ>/final.mp4` で長さと平均音量を控える。
-   平均音量が -18〜-19dB を外れたら `/Users/hajimekitamura/OVERLOAD-PLUS/marketing/tools/morning.sh gain <final.mp4> <フォルダ>/final-gain.mp4 <足すdB>` で直し、以後はそちらを使う
+   平均音量が -18〜-19dB を外れたら `/Users/hajimekitamura/OVERLOAD-PLUS/marketing/tools/morning.sh gain <final.mp4> <フォルダ>/final-gain.mp4 <足すdB>` で直し、以後はそちらを使う(許可の一覧に morning.sh が無いときは直さず、`3-production.md` に平均音量を書く)
 8. カバー: `/Users/hajimekitamura/Desktop/KURABELL-reels/covers/covers.json` に1件足し(`line1`・`line2` は1場面目の問いと同じ文)、
    `python3 /Users/hajimekitamura/OVERLOAD-PLUS/marketing/tools/build-covers.py /Users/hajimekitamura/Desktop/KURABELL-reels/covers/covers.json <名前>` →
    `sips -s format jpeg -s formatOptions 92 /Users/hajimekitamura/Desktop/KURABELL-reels/covers/out/<名前>.png --out <フォルダ>/cover.jpg`
@@ -41,7 +40,8 @@
 ## カルーセル(日曜)
 
 `/Users/hajimekitamura/Desktop/KURABELL-reels/carousel/<名前>/` に `carousel.html`(1080×1350、`<section class="scene">` を ?s=N で1枚ずつ、手本は `c1-basics/`)と `caption.txt` を書き、
-`/Users/hajimekitamura/OVERLOAD-PLUS/marketing/tools/shoot-carousel.sh <そのフォルダ>` で `out/1.jpg〜` と `sheet.png` を作る。sheet.png を Read で見て、はみ出しを直す
+`/Users/hajimekitamura/OVERLOAD-PLUS/marketing/tools/shoot-carousel.sh <そのフォルダ>` で `out/1.jpg〜` と `sheet.png` を作る。sheet.png を Read で見て、はみ出しを直す。
+許可の一覧に `shoot-carousel.sh` が無いときは、カルーセルは作らず `3-production.md` に「カルーセル: 見送り(shoot-carousel.sh が許可の一覧に無い)」と書く(リールは作る)
 
 ## 修正日
 
@@ -57,7 +57,7 @@
 - 台本から変えた文(あれば、前 → 後)
 - 作れなかったもの・道具で困ったこと
 
-`reports/routines/morning-sns.md` に結果を足し、印を消す。
+`reports/routines/morning-sns.md` に結果を足す。
 
 ## しないこと
 
