@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>KURABELL story 15s 3D: 回数+1も前進</title>
+<!-- ストーリーズ用 1080x1920 / 15秒。window.seek(t) が t 秒目を描くだけ(three.js の描画も seek の中だけ)。タイマー・CSSトランジションなし -->
+<!-- 安全域: 上 260px・下 280px。締めの 1390-1610 はリンクのスタンプ用に空ける -->
+<script src="../../tools/vendor/three.min.js"></script>
+<style>
+@font-face { font-family: "Barlow C"; font-weight: 800; src: url("../../../../fonts/barlow-condensed-800-latin.woff2") format("woff2"); }
+:root { --bg:#141517; --text:#F2F0EB; --muted:#A3A8B0; --line:#2E3237; --yellow:#E8B33C; --green:#4CAF6E; --red:#E2453C; }
+* { margin:0; padding:0; box-sizing:border-box; }
+html,body { width:1080px; height:1920px; background:var(--bg); overflow:hidden; }
+body { color:var(--text); font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Noto Sans CJK JP",sans-serif; }
+canvas#gl { position:absolute; left:0; top:0; width:1080px; height:1920px; }
+.el { position:absolute; will-change:transform,opacity; opacity:0; z-index:2; }
+.num { font-family:"Barlow C"; font-weight:800; }
+h1 { font-weight:900; font-size:104px; line-height:1.24; letter-spacing:-.01em; text-shadow:0 6px 30px rgba(0,0,0,.6); }
+h1 em, .y { font-style:normal; color:var(--yellow); }
+.g { color:var(--green); }
+.lead { font-size:46px; font-weight:700; color:var(--muted); line-height:1.5; }
+.src { font-size:32px; font-weight:700; color:var(--muted); line-height:1.5; }
+.tag { text-align:center; transform-origin:50% 100%; text-shadow:0 4px 20px rgba(0,0,0,.8); }
+.tag .v { font-family:"Barlow C"; font-weight:800; font-size:84px; line-height:1; }
+#sc0 .v, #sc1 .v, #sc2 .v { font-size:72px; }
+.tag .k { font-size:36px; font-weight:900; line-height:1.3; }
+.card { border-radius:30px; overflow:hidden; box-shadow:0 40px 100px rgba(0,0,0,.7); border:3px solid var(--line); background:#1A1B1E; }
+.card img { display:block; width:100%; }
+#logo { display:flex; align-items:center; gap:16px; background:rgba(20,21,23,.78); padding:12px 18px 12px 12px; border-radius:20px; }
+#logo img { width:64px; height:64px; border-radius:15px; }
+#logo .t1 { font-family:"Barlow C"; font-weight:800; font-size:40px; letter-spacing:.04em; line-height:1; }
+#logo .t2 { font-family:"Barlow C"; font-weight:800; font-size:26px; letter-spacing:.06em; color:var(--muted); margin-top:4px; }
+</style>
+</head>
+<body>
+<canvas id="gl" width="1080" height="1920"></canvas>
+
+<!-- S1 掴み 0-3.0(0秒目がカバー=問いかけ) -->
+<p class="el lead" id="s1l" style="left:84px; top:300px;">ベンチプレス 70kg</p>
+<h1 class="el" id="s1h" style="left:84px; top:370px;">同じ重さで、<br>回数が<span class="num" style="font-size:140px;"> 1 </span>回増えた。</h1>
+<h1 class="el" id="s1q" style="left:84px; top:640px;"><em>それも、前進？</em></h1>
+
+<!-- S2 答え 3.0-7.0 -->
+<h1 class="el" id="s2h" style="left:84px; top:290px; font-size:150px; line-height:1;"><em>はい。</em></h1>
+<h1 class="el" id="s2t" style="left:84px; top:470px; font-size:76px;">筋肥大・筋力の伸びは、<br><span class="g">ほぼ同じ</span>だった</h1>
+<p class="el src" id="s2s" style="left:84px; top:665px;">鍛えている人・8週間の研究(数字はスクワット1RMの伸び)<br>Plotkin et al. PeerJ 2022</p>
+<div class="el tag" id="tw0"><div class="v y">+21.8<span style="font-size:52px;">kg</span></div><div class="k">重さを上げる</div></div>
+<div class="el tag" id="tw1"><div class="v g">+19.3<span style="font-size:52px;">kg</span></div><div class="k">回数を増やす</div></div>
+
+<!-- S3 つまり 7.0-10.4 -->
+<p class="el lead" id="s3l" style="left:84px; top:300px;">つまり</p>
+<h1 class="el" id="s3h" style="left:84px; top:370px; font-size:96px;">回数が1回<br>増えたのも、<br><em>立派な前進。</em></h1>
+<div class="el tag" id="sc0"><div class="v">70×8</div></div>
+<div class="el tag" id="sc1"><div class="k g">+1回</div><div class="v">70×9</div></div>
+<div class="el tag" id="sc2"><div class="k g">+1回</div><div class="v y">70×10</div></div>
+
+<!-- S4 KURABELLなら 10.4-12.85 -->
+<p class="el lead" id="s4l" style="left:84px; top:300px; color:var(--yellow);">KURABELL なら</p>
+<h1 class="el" id="s4h" style="left:84px; top:370px; font-size:96px;">前回の記録が、<br>セットごとに並ぶ</h1>
+<div class="el card" id="s4card" style="left:123px; top:760px; width:834px;"><img src="rows.png" alt=""></div>
+
+<!-- S5 締め 12.85-15 -->
+<img class="el" id="s5icon" src="../../../../icon-512.png" style="left:84px; top:390px; width:170px; height:170px; border-radius:40px;">
+<div class="el num" id="s5name" style="left:84px; top:600px; font-size:160px; letter-spacing:.03em; line-height:1;">KURABELL</div>
+<div class="el" id="s5line" style="left:84px; top:770px; width:790px; height:16px; border-radius:8px; background:var(--red); transform-origin:0 50%;"></div>
+<div class="el num" id="s5sub" style="left:90px; top:800px; font-size:56px; letter-spacing:.08em; color:var(--muted); line-height:1;">WORKOUT LOG</div>
+<h1 class="el" id="s5h" style="left:84px; top:930px; font-size:88px;">前回が見えるから、<br><em>超えられる。</em></h1>
+<p class="el lead" id="s5c" style="left:84px; top:1230px; color:var(--text);">アプリはこのリンクから<span class="y" style="font-family:'Barlow C'; font-weight:800; font-size:64px;"> ↓</span></p>
+
+<!-- 右下ロゴ(締めの場面では消す) -->
+<div class="el" id="logo" style="right:60px; top:1548px;">
+  <img src="../../../../icon-512.png" alt=""><div><div class="t1">KURABELL</div><div class="t2">WORKOUT LOG</div></div>
+</div>
+
+<script>
+const clamp=(x,a=0,b=1)=>Math.min(b,Math.max(a,x));
+const lerp=(a,b,k)=>a+(b-a)*k;
+const spring=(u,w=13,z=0.55)=>{ if(u<=0) return 0; const wd=w*Math.sqrt(1-z*z); return 1-Math.exp(-z*w*u)*(Math.cos(wd*u)+(z*w/wd)*Math.sin(wd*u)); };
+const soft=(u,w=10)=>spring(u,w,0.85);
+const $=id=>document.getElementById(id);
+function show(id,t,tin,tout,{dy=60,w=11,outDur=0.28,scale=false}={}){
+  const e=$(id); const k=tin<=0?1:soft(t-tin,w); let op=tin<=0?1:clamp((t-tin)/0.18); let y=(1-k)*dy;
+  if(tout!=null && t>tout){ const o=clamp((t-tout)/outDur); op*=1-o; y-=o*o*80; }
+  e.style.opacity=t<tin?0:op;
+  e.style.transform= scale ? `translateY(${y}px) scale(${0.7+0.3*spring(t-tin,14,0.5)})` : `translateY(${y}px)`;
+  return op;
+}
+// 種を固定した乱数(Math.random は使わない)
+function mulberry32(a){ return function(){ a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
+const R=mulberry32(20261108);
+
+// ---------- 立方体の並び(フォーメーション) ----------
+const N=1100;
+const C={ yellow:0xE8B33C, green:0x4CAF6E, red:0xE2453C, steel:0xA3A8B0, white:0xF2F0EB, dark:0x3A3E44 };
+function disc(cx,r,cy,color,out){ for(let y=-Math.ceil(r);y<=Math.ceil(r);y++) for(let z=-Math.ceil(r);z<=Math.ceil(r);z++) if(y*y+z*z<=r*r) out.push({p:[cx,cy+y,z],c:color}); }
+function barbell(){ const o=[]; const cy=6.5;
+  for(let x=-16;x<=16;x++) o.push({p:[x,cy,0],c:C.steel});
+  for(const s of [-1,1]){ disc(s*9,6.5,cy,C.yellow,o); disc(s*10,6.5,cy,C.yellow,o); disc(s*11,4.5,cy,C.red,o); disc(s*12,1.5,cy,C.steel,o); }
+  return o; }
+function tower(cx,h,color,top,o){ for(let y=0;y<h;y++) for(let x=0;x<5;x++) for(let z=0;z<5;z++) o.push({p:[cx-2+x,y+0.5,z-2],c:(y>=h-1)?top:color}); }
+function towers(){ const o=[]; tower(-5,20,C.yellow,C.yellow,o); tower(5,18,C.green,C.green,o); return o; }
+function stairs(){ const o=[]; const H=[8,9,10], X=[-8,0,8];
+  for(let i=0;i<3;i++) for(let y=0;y<H[i];y++) for(let x=0;x<5;x++) for(let z=0;z<5;z++){
+    const plus = i>0 && y===H[i]-1; o.push({p:[X[i]-2+x,y+0.5,z-2],c: plus?C.green:(i===2?C.yellow:C.white)}); }
+  return o; }
+const sortY=a=>a.slice().sort((p,q)=>p.p[1]-q.p[1]||p.p[0]-q.p[0]||p.p[2]-q.p[2]);
+const F_BAR=sortY(barbell()), F_TOW=sortY(towers()), F_STA=sortY(stairs());
+// 足りない分は台の下に隠す(大きさ0)
+function pad(list){ const o=list.map(v=>({p:v.p.slice(),c:v.c,s:1})); while(o.length<N){ const a=R()*Math.PI*2, r=R()*12; o.push({p:[Math.cos(a)*r,-2,Math.sin(a)*r],c:C.dark,s:0}); } return o; }
+const BAR=pad(F_BAR), TOW=pad(F_TOW), STA=pad(F_STA);
+// 1つずつの性格(遅れ・輪の角度・はじける向き)
+const V=[]; for(let i=0;i<N;i++){ const a=R()*Math.PI*2, el=(R()-0.3)*1.2;
+  V.push({ jit:R(), sky:[(R()-0.5)*4, 12+R()*10, (R()-0.5)*4], ring:R()*Math.PI*2, ringR:15+R()*5, ringY:2+R()*9, spin:(R()-0.5)*6,
+           dir:[Math.cos(a), (R()-0.5)*0.5, Math.sin(a)], spd:30+R()*30 }); }
+const MAXY=new Map([[BAR,13],[TOW,20],[STA,10]]);
+const order=(list,i)=>clamp(list[i].p[1]/MAXY.get(list))*0.75+V[i].jit*0.25; // 下から積む
+
+// 移り変わり: [開始, ばらつき, 長さ, 弧の高さ]
+function move(p0,p1,u,arc){ const e=spring(u,9,0.62); const k=Math.min(e,1.08); const h=Math.sin(Math.PI*clamp(u/0.9))*arc;
+  return [lerp(p0[0],p1[0],k), lerp(p0[1],p1[1],k)+h, lerp(p0[2],p1[2],k)]; }
+function ringPos(i,t){ const v=V[i], a=v.ring+(t-10.4)*0.55; return [Math.cos(a)*v.ringR, v.ringY+Math.sin(a*2+v.jit*6)*1.2, Math.sin(a)*v.ringR]; }
+
+// ---------- three.js ----------
+const renderer=new THREE.WebGLRenderer({canvas:$('gl'),antialias:true,preserveDrawingBuffer:true});
+renderer.setPixelRatio(1); renderer.setSize(1080,1920,false);
+renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+renderer.outputEncoding=THREE.sRGBEncoding;
+const scene=new THREE.Scene(); scene.background=new THREE.Color(0x141517); scene.fog=new THREE.Fog(0x141517,150,260);
+const cam=new THREE.PerspectiveCamera(30,1080/1920,1,500);
+cam.setViewOffset(1080,1920,0,-360,1080,1920); // 立体は画面の下寄りに(上は文字)
+scene.add(new THREE.HemisphereLight(0xfff4e0,0x202428,0.75));
+const sun=new THREE.DirectionalLight(0xffffff,1.15); sun.position.set(-30,60,40); sun.castShadow=true;
+sun.shadow.mapSize.set(2048,2048); Object.assign(sun.shadow.camera,{left:-40,right:40,top:40,bottom:-40,near:1,far:200}); sun.shadow.bias=-0.0008;
+scene.add(sun);
+const rim=new THREE.DirectionalLight(0xE8B33C,0.35); rim.position.set(40,20,-40); scene.add(rim);
+// 台(回る円盤と、縁の目盛り)
+const stage=new THREE.Group(); scene.add(stage);
+const base=new THREE.Mesh(new THREE.CylinderGeometry(19,19.6,1.6,96), new THREE.MeshStandardMaterial({color:0x1B1D20,roughness:0.9}));
+base.position.y=-0.8; base.receiveShadow=true; stage.add(base);
+const tickG=new THREE.BoxGeometry(0.35,0.25,1.1), tickM=new THREE.MeshStandardMaterial({color:0x3A3E44,roughness:0.6});
+const ticks=new THREE.InstancedMesh(tickG,tickM,120); const m4=new THREE.Matrix4(), q=new THREE.Quaternion(), s3=new THREE.Vector3(1,1,1), p3=new THREE.Vector3();
+for(let i=0;i<120;i++){ const a=i/120*Math.PI*2; q.setFromAxisAngle(new THREE.Vector3(0,1,0),-a); p3.set(Math.cos(a)*18.2,0.05,Math.sin(a)*18.2); m4.compose(p3,q,s3); ticks.setMatrixAt(i,m4); }
+stage.add(ticks);
+// 立方体
+const box=new THREE.BoxGeometry(0.9,0.9,0.9);
+const mat=new THREE.MeshStandardMaterial({roughness:0.42,metalness:0.05});
+const cubes=new THREE.InstancedMesh(box,mat,N); cubes.castShadow=true; cubes.receiveShadow=true; cubes.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+scene.add(cubes);
+const col=new THREE.Color(), ca=new THREE.Color(), cb=new THREE.Color();
+for(let i=0;i<N;i++) cubes.setColorAt(i,col.set(C.dark));
+
+function voxel(i,t){ // → [pos, color(hex lerp), scale, rotY]
+  let p, c0, c1, k, s=1, rot=0;
+  const tB=-0.9+order(BAR,i)*2.7;           // 空から落ちて、バーベルが組み上がる
+  const tT=3.0+order(TOW,i)*1.1;            // 2本の塔
+  const tS=7.0+order(STA,i)*1.1;            // 階段(1段=1回)
+  const tR=10.35+V[i].jit*0.5;              // 実物の画面のまわりを回る輪
+  const tX=12.85+V[i].jit*0.12;             // はじける
+  if(t<tT){ const sky=[BAR[i].p[0]+V[i].sky[0],BAR[i].p[1]+V[i].sky[1],BAR[i].p[2]+V[i].sky[2]];
+    const u=t-tB; p = u<=0 ? sky : move(sky,BAR[i].p,u,0); c0=BAR[i].c; c1=BAR[i].c; k=1; s=BAR[i].s; if(u<=0) s*=0;
+    else s*=clamp(u/0.12); }
+  else if(t<tS){ p=move(BAR[i].p,TOW[i].p,t-tT,9); c0=BAR[i].c; c1=TOW[i].c; k=clamp((t-tT)/0.5); s=lerp(BAR[i].s,TOW[i].s,clamp((t-tT)/0.4)); }
+  else if(t<tR){ p=move(TOW[i].p,STA[i].p,t-tS,9); c0=TOW[i].c; c1=STA[i].c; k=clamp((t-tS)/0.5); s=lerp(TOW[i].s,STA[i].s,clamp((t-tS)/0.4)); }
+  else { const rp=ringPos(i,t); p=move(STA[i].p,rp,t-tR,5); c0=STA[i].c; c1= i%3===0?C.yellow:(i%3===1?C.white:C.steel); k=clamp((t-tR)/0.6); s=lerp(STA[i].s,0.75,clamp((t-tR)/0.5)); rot=(t-tR)*V[i].spin*0.3;
+    if(t>tX){ const u=t-tX, d=V[i].dir, sp=V[i].spd; p=[p[0]+d[0]*sp*u, p[1]+d[1]*sp*u-9*u*u, p[2]+d[2]*sp*u]; s*=clamp(1-u/0.55); rot+=u*V[i].spin; } }
+  return {p,c0,c1,k,s,rot};
+}
+
+const v3=new THREE.Vector3();
+function proj(x,y,z){ v3.set(x,y,z).project(cam); return [(v3.x+1)/2*1080,(1-v3.y)/2*1920]; }
+function tag(id,t,tin,tout,x,y,z,dy=-20){ const op=show(id,t,tin,tout,{scale:true}); const e=$(id); const [px,py]=proj(x,y,z);
+  e.style.left=(px-e.offsetWidth/2)+'px'; e.style.top=(py-e.offsetHeight+dy)+'px'; return op; }
+
+window.seek=function(t){
+  // カメラ: ゆっくり回り込む
+  const a=-0.5+t*0.065, r=146, el=t<10.35?0.36:lerp(0.36,0.30,clamp((t-10.35)/1.2));
+  cam.position.set(Math.sin(a)*r*Math.cos(el), r*Math.sin(el)+6, Math.cos(a)*r*Math.cos(el)); cam.lookAt(0,7,0);
+  cam.updateMatrixWorld(); cam.updateProjectionMatrix();
+  stage.rotation.y=t*0.25;
+  for(let i=0;i<N;i++){ const v=voxel(i,t); q.setFromAxisAngle(new THREE.Vector3(0,1,0),v.rot); p3.set(v.p[0],v.p[1],v.p[2]); const sc=Math.max(0.0001,v.s); s3.set(sc,sc,sc);
+    m4.compose(p3,q,s3); cubes.setMatrixAt(i,m4); ca.set(v.c0); cb.set(v.c1); col.copy(ca).lerp(cb,v.k); cubes.setColorAt(i,col); }
+  s3.set(1,1,1);
+  cubes.instanceMatrix.needsUpdate=true; cubes.instanceColor.needsUpdate=true;
+  // 台は締めで沈む
+  const sink=clamp((t-12.85)/0.6); stage.position.y=-sink*sink*30; stage.visible=sink<1;
+  renderer.render(scene,cam);
+
+  show('s1l',t,0,2.95); show('s1h',t,0,2.95); show('s1q',t,0,2.95);
+  show('s2h',t,3.15,6.95,{scale:true}); show('s2t',t,3.5,6.95); show('s2s',t,4.6,6.95);
+  tag('tw0',t,4.7,6.95,-5,20.6,0); tag('tw1',t,4.9,6.95,5,18.6,0);
+  show('s3l',t,7.15,10.3); show('s3h',t,7.25,10.3);
+  tag('sc0',t,7.9,10.3,-8,8.6,0); tag('sc1',t,8.25,10.3,0,9.6,0); tag('sc2',t,8.6,10.3,8,10.6,0);
+  show('s4l',t,10.5,12.75); show('s4h',t,10.6,12.75);
+  { const e=$('s4card'), op=show('s4card',t,10.8,12.75,{dy:120,w:8}); const ry=-14+Math.sin((t-10.8)*1.3)*6, rx=16-soft(t-10.8,6)*6;
+    e.style.transform += ` perspective(1600px) rotateX(${rx}deg) rotateY(${ry}deg)`; }
+  show('s5icon',t,12.95,null,{dy:80}); show('s5name',t,13.05,null); show('s5sub',t,13.25,null); show('s5h',t,13.4,null); show('s5c',t,13.65,null);
+  { const e=$('s5line'); e.style.opacity=t<13.2?0:1; e.style.transform=`scaleX(${spring(t-13.2,12,0.62)})`; }
+  $('logo').style.opacity = t<12.75?1:1-clamp((t-12.75)/0.3);
+};
+window.seek(0);
+</script>
+</body>
+</html>
