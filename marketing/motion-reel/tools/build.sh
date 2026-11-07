@@ -1,5 +1,5 @@
 #!/bin/bash
-# リール1本を書き出す: 映像(seek(t)を30fpsで撮る) → 音(cues.json から合成、または track.wav) → -14 LUFS → mp4 + カバー
+# リール1本を書き出す: 映像(seek(t)を既定30fpsで撮る。FPS・SS で変えられる) → 音(cues.json から合成、または track.wav) → -14 LUFS → mp4 + カバー
 # 使い方: build.sh <リールのフォルダ> [秒数(既定は cues.json の duration)]
 # 出力: <フォルダ>/out/reel.mp4, <フォルダ>/out/cover.jpg(0秒目=問いかけの場面)
 set -euo pipefail
@@ -8,7 +8,16 @@ dir="$(cd "$1" && pwd)"
 dur="${2:-$(python3 -c "import json;print(json.load(open('$dir/cues.json'))['duration'])")}"
 mkdir -p "$dir/out"
 
-node "$here/render.cjs" "$dir/index.html" "$dir/out/video.mp4" 30 "$dur"
+# 動きを滑らかにする: FPS(出力のコマ数、既定30)× SS(1コマあたりの撮影回数、既定1)で撮り、SS 枚を平均して1コマにする(動きのぶれ)
+fps="${FPS:-30}"; ss="${SS:-1}"
+if [ "$ss" -gt 1 ]; then
+  node "$here/render.cjs" "$dir/index.html" "$dir/out/video_raw.mp4" "$((fps*ss))" "$dur"
+  ffmpeg -nostdin -loglevel error -y -i "$dir/out/video_raw.mp4" \
+    -vf "tmix=frames=$ss,select='not(mod(n+1\,$ss))',setpts=N/$fps/TB" -r "$fps" \
+    -c:v libx264 -preset slow -crf 16 -pix_fmt yuv420p "$dir/out/video.mp4"
+else
+  node "$here/render.cjs" "$dir/index.html" "$dir/out/video.mp4" "$fps" "$dur"
+fi
 
 if [ -f "$dir/track.wav" ]; then cp "$dir/track.wav" "$dir/out/sound.wav"; else python3 "$here/sound.py" "$dir"; fi
 # 2回測る(1回で済ませると短い曲は -15〜-16 LUFS に落ちる)
