@@ -17,3 +17,6 @@ v128(復元時に範囲外の値を "" にする変更)のレビューで発見(
 
 **How to apply:** 保存済み記録(workouts)に値を書き込む/整形する差分では、rir を "" や null にしていないか、
 Watch へ送る prevSets 経由で Swift の Int? に文字列が流れないかを確認する。[[kurabell-1rm-filter-divergence]]
+
+2026-10-31: 履歴編集の保存は、回数>0・非W・余力空欄のセットがあると止める(`editRirMissing`、以前は黙って捨てて種目ごと消えた)。
+保存済みでも「回数>0・非W・rirキー無し」は復元の範囲外クリア(`clearOutOfRangeSetValues`)で生じうるので、その記録は編集すると保存が止まる。
