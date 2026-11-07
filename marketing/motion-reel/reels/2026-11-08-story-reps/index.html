@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>KURABELL story 15s: 回数+1も前進</title>
+<!-- ストーリーズ用 1080x1920 / 15秒。window.seek(t) が t 秒目を描くだけ。タイマー・CSSトランジションなし -->
+<!-- ストーリーズの安全域: 上 260px(進行バー・アカウント名)、下 280px(返信欄)。締めの 1390-1610 はリンクのスタンプ用に空けておく -->
+<style>
+@font-face { font-family: "Barlow C"; font-weight: 800; src: url("../../../../fonts/barlow-condensed-800-latin.woff2") format("woff2"); }
+:root { --bg:#141517; --text:#F2F0EB; --muted:#A3A8B0; --line:#2E3237; --yellow:#E8B33C; --green:#4CAF6E; --red:#E2453C; }
+* { margin:0; padding:0; box-sizing:border-box; }
+html,body { width:1080px; height:1920px; background:var(--bg); overflow:hidden; }
+body { color:var(--text); font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Noto Sans CJK JP",sans-serif; }
+.el { position:absolute; will-change:transform,opacity; opacity:0; }
+.num { font-family:"Barlow C"; font-weight:800; }
+h1 { font-weight:900; font-size:112px; line-height:1.24; letter-spacing:-.01em; }
+h1 em, .y { font-style:normal; color:var(--yellow); }
+.g { color:var(--green); }
+.lead { font-size:46px; font-weight:700; color:var(--muted); line-height:1.5; }
+.src { font-size:34px; font-weight:700; color:var(--muted); line-height:1.5; }
+#bar { position:absolute; left:0; top:0; z-index:5; }
+.way { width:390px; height:300px; border-radius:32px; background:#1E2023; border:3px solid var(--line);
+       display:flex; flex-direction:column; justify-content:center; align-items:center; gap:18px; }
+.way .arrow { font-family:"Barlow C"; font-weight:800; font-size:110px; line-height:1; color:var(--green); }
+.way .lbl { font-size:60px; font-weight:900; line-height:1.2; text-align:center; }
+.step { font-family:"Barlow C"; font-weight:800; font-size:96px; line-height:1; }
+.plus { font-size:46px; font-weight:900; color:var(--green); }
+.card { border-radius:30px; overflow:hidden; box-shadow:0 30px 80px rgba(0,0,0,.55); border:3px solid var(--line); background:#1A1B1E; }
+.card img { display:block; width:100%; }
+#logo { display:flex; align-items:center; gap:16px; }
+#logo img { width:64px; height:64px; border-radius:15px; }
+#logo .t1 { font-family:"Barlow C"; font-weight:800; font-size:40px; letter-spacing:.04em; line-height:1; }
+#logo .t2 { font-family:"Barlow C"; font-weight:800; font-size:26px; letter-spacing:.06em; color:var(--muted); margin-top:4px; }
+</style>
+</head>
+<body>
+<div id="bar"></div>
+
+<!-- S1 掴み 0-2.8(0秒目がカバー=問いかけ) -->
+<p class="el lead" id="s1l" style="left:84px; top:470px;">ベンチプレス 70kg</p>
+<h1 class="el" id="s1h" style="left:84px; top:560px;">同じ重さで、<br>回数が<span class="num" style="font-size:150px;"> 1 </span>回増えた。</h1>
+<h1 class="el" id="s1q" style="left:84px; top:960px;"><em>それも、前進？</em></h1>
+
+<!-- S2 答え 2.8-6.6 -->
+<h1 class="el" id="s2h" style="left:84px; top:380px; font-size:190px; line-height:1;"><em>はい。</em></h1>
+<div class="el way" id="w0" style="left:84px; top:700px;"><div class="arrow">↑</div><div class="lbl">重さを<br>上げる</div></div>
+<div class="el" id="weq" style="left:474px; top:775px; width:132px; text-align:center; font-size:110px; font-weight:900; line-height:1; color:var(--text);">≒</div>
+<div class="el way" id="w1" style="left:606px; top:700px;"><div class="arrow">↑</div><div class="lbl">回数を<br>増やす</div></div>
+<h1 class="el" id="s2t" style="left:84px; top:1070px; font-size:84px;">筋肥大・筋力の伸びは、<br><span class="g">ほぼ同じ</span>だった</h1>
+<p class="el src" id="s2s" style="left:84px; top:1350px;">鍛えている人・8週間の研究<br>Plotkin et al. PeerJ 2022</p>
+
+<!-- S3 つまり 6.6-9.8 -->
+<p class="el lead" id="s3l" style="left:84px; top:380px;">つまり</p>
+<h1 class="el" id="s3h" style="left:84px; top:450px; font-size:100px;">回数が1回<br>増えたのも、<br><em>立派な前進。</em></h1>
+<div class="el step" id="st0">70×8</div><div class="el step" id="st1">70×9</div><div class="el step" id="st2">70×10</div>
+<div class="el plus" id="pl1">+1回</div><div class="el plus" id="pl2">+1回</div>
+
+<!-- S4 KURABELLなら 9.8-12.8 -->
+<p class="el lead" id="s4l" style="left:84px; top:380px; color:var(--yellow);">KURABELL なら</p>
+<h1 class="el" id="s4h" style="left:84px; top:450px; font-size:96px;">前回の記録が、<br>セットごとに並ぶ</h1>
+<div class="el card" id="s4card" style="left:72px; top:760px; width:840px;"><img src="rows.png" alt=""></div>
+<p class="el lead" id="s4c" style="left:84px; top:1490px; color:var(--text);">前回を見ながら、<br>あと1回を狙える</p>
+
+<!-- S5 締め 12.8-15 -->
+<img class="el" id="s5icon" src="../../../../icon-512.png" style="left:84px; top:390px; width:170px; height:170px; border-radius:40px;">
+<div class="el num" id="s5name" style="left:84px; top:600px; font-size:160px; letter-spacing:.03em; line-height:1;">KURABELL</div>
+<div class="el num" id="s5sub" style="left:90px; top:800px; font-size:56px; letter-spacing:.08em; color:var(--muted); line-height:1;">WORKOUT LOG</div>
+<h1 class="el" id="s5h" style="left:84px; top:930px; font-size:88px;">前回が見えるから、<br><em>超えられる。</em></h1>
+<p class="el lead" id="s5c" style="left:84px; top:1230px; color:var(--text);">アプリはこのリンクから<span class="y" style="font-family:'Barlow C'; font-weight:800; font-size:64px;"> ↓</span></p>
+
+<!-- 右下ロゴ(締めの場面では消す) -->
+<div class="el" id="logo" style="right:72px; top:1540px;">
+  <img src="../../../../icon-512.png" alt=""><div><div class="t1">KURABELL</div><div class="t2">WORKOUT LOG</div></div>
+</div>
+
+<script>
+const clamp=(x,a=0,b=1)=>Math.min(b,Math.max(a,x));
+const lerp=(a,b,k)=>a+(b-a)*k;
+// 閉形式のバネ(少し行き過ぎて止まる)。u = 経過秒
+const spring=(u,w=13,z=0.55)=>{ if(u<=0) return 0; const wd=w*Math.sqrt(1-z*z); return 1-Math.exp(-z*w*u)*(Math.cos(wd*u)+(z*w/wd)*Math.sin(wd*u)); };
+const soft=(u,w=10)=>spring(u,w,0.85);
+const $=id=>document.getElementById(id);
+// 場面の出入り: 入り=下から、出=上へ消える。tin<=0 なら0秒目から出ている(カバー用)
+function show(id,t,tin,tout,{dy=60,w=11,outDur=0.28,scale=false}={}){
+  const e=$(id); const k=tin<=0?1:soft(t-tin,w); let op=tin<=0?1:clamp((t-tin)/0.18); let y=(1-k)*dy;
+  if(tout!=null && t>tout){ const o=clamp((t-tout)/outDur); op*=1-o; y-=o*o*80; }
+  e.style.opacity=t<tin?0:op;
+  e.style.transform= scale ? `translateY(${y}px) scale(${0.7+0.3*spring(t-tin,14,0.5)})` : `translateY(${y}px)`;
+}
+// 1本の棒が全編を通して形を変える
+const HEX=c=>[parseInt(c.slice(1,3),16),parseInt(c.slice(3,5),16),parseInt(c.slice(5,7),16)];
+const BAR=[ // [時刻, x, y, w, h, r, 色, 不透明]
+  [0.3,  84, 1110, 0,   16, 8, '#E8B33C', 1],
+  [1.0,  84, 1110, 760, 16, 8, '#E8B33C', 1],   // 「それも、前進？」の下線
+  [2.9,  84, 1110, 760, 16, 8, '#E8B33C', 1],
+  [3.4,  84, 592, 520, 16, 8, '#E8B33C', 1],   // 「はい。」の下線
+  [4.3,  84, 592, 520, 16, 8, '#E8B33C', 1],
+  [4.9,  84, 1298, 336, 16, 8, '#4CAF6E', 1],   // 「ほぼ同じ」の下線
+  [6.7,  84, 1298, 336, 16, 8, '#4CAF6E', 1],
+  [7.3,  84, 1360, 912, 12, 6, '#2E3237', 1],  // 階段の床
+  [9.7,  84, 1360, 912, 12, 6, '#2E3237', 1],
+  [10.3, 84, 708, 760, 12, 6, '#E8B33C', 1],    // 「セットごとに並ぶ」の下線
+  [11.0, 84, 708, 760, 12, 6, '#E8B33C', 1],
+  [11.6, 236, 1098, 278, 12, 6, '#E8B33C', 1],   // 実物の画面の「前回 70×10」の下線
+  [12.6, 236, 1098, 278, 12, 6, '#E8B33C', 1],
+  [13.5, 84, 770, 790, 16, 8, '#E2453C', 1],    // KURABELL の下線
+  [16,   84, 770, 790, 16, 8, '#E2453C', 1],
+];
+function bar(t){
+  let i=0; while(i<BAR.length-2 && t>=BAR[i+1][0]) i++;
+  const a=BAR[i], b=BAR[i+1]; const hold=(a[1]===b[1]&&a[2]===b[2]&&a[3]===b[3]&&a[4]===b[4]);
+  const k= t<a[0]?0 : hold?1 : spring(t-a[0],12,0.62)*clamp((t-a[0])/(b[0]-a[0])*3);
+  const kk=Math.min(k,1.12);
+  const v=j=>lerp(a[j],b[j],kk); const ca=HEX(a[6]),cb=HEX(b[6]); const cc=clamp(k);
+  const col=`rgb(${ca.map((x,j)=>Math.round(lerp(x,cb[j],cc))).join(',')})`;
+  Object.assign($('bar').style,{transform:`translate(${v(1)}px,${v(2)}px)`,width:Math.max(0,v(3))+'px',height:Math.max(0,v(4))+'px',borderRadius:v(5)+'px',
+    background:col,opacity:t<0.3?0:lerp(a[7],b[7],cc)});
+}
+// 階段(70×8 → 70×9 → 70×10)。アプリの実画面の「推移」と同じ数字
+const SX=[84,384,684], SY=[1250,1150,1050], STT=[7.2,7.7,8.2];
+function steps(t){
+  const out=t>9.7?clamp((t-9.7)/0.28):0;
+  for(let i=0;i<3;i++){
+    const e=$('st'+i), k=spring(t-STT[i],15,0.5);
+    e.style.opacity=(t<STT[i]?0:clamp((t-STT[i])/0.12))*(1-out);
+    e.style.color = i===2 ? '#E8B33C' : '#F2F0EB';
+    e.style.transform=`translate(${SX[i]}px,${SY[i]+(1-k)*60-out*out*80}px)`;
+    if(i>0){ const p=$('pl'+i), tp=STT[i]+0.15, kp=spring(t-tp,16,0.45);
+      p.style.opacity=(t<tp?0:1)*(1-out);
+      p.style.transform=`translate(${SX[i]+10}px,${SY[i]-70-out*out*80}px) scale(${0.5+0.5*kp})`; p.style.transformOrigin='0 100%'; }
+  }
+}
+window.seek=function(t){
+  bar(t);
+  show('s1l',t,0,2.75); show('s1h',t,0,2.75); show('s1q',t,0,2.75);
+  show('s2h',t,2.95,6.55,{scale:true}); show('w0',t,3.3,6.55,{dy:80}); show('w1',t,3.45,6.55,{dy:80}); show('weq',t,3.75,6.55,{scale:true});
+  show('s2t',t,4.35,6.55); show('s2s',t,5.0,6.55);
+  show('s3l',t,6.75,9.7); show('s3h',t,6.85,9.7); steps(t);
+  show('s4l',t,9.95,12.55); show('s4h',t,10.05,12.55); show('s4card',t,10.35,12.55,{dy:90,w:9}); show('s4c',t,11.3,12.55);
+  show('s5icon',t,12.8,null,{dy:80}); show('s5name',t,12.85,null); show('s5sub',t,13.25,null); show('s5h',t,13.4,null); show('s5c',t,13.65,null);
+  $('logo').style.opacity = t<12.55?1:1-clamp((t-12.55)/0.3);
+};
+window.seek(0);
+</script>
+</body>
+</html>
