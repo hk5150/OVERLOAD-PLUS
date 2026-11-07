@@ -14,6 +14,7 @@
 
 ## 読むもの
 
+- Obsidian `Projects/kurabell-morning-lessons.md`(学びのノート。「必ず守ること」は全部守る)と、直近の `4-qa.md` の改善提案
 - 今日の `1-research.md` と Obsidian `Projects/kurabell-pdca-drafts/P017-topics.md`(題材と「言ってよい / 言わない」)
 - Obsidian `Projects/kurabell-reel-pdca.md` の「変えないもの」「作るたびの吟味」8項目・「試しの予定」・成績表
 - Obsidian `Projects/kurabell-pdca.md`(施策ボード。予約中の投稿への変更依頼や、リールに関わる「採用」「提案」の行があれば反映する)
@@ -38,7 +39,8 @@
 6. **カバー**: `covers.json` に足す1件の案(`line1`・`line2` は1場面目の問いと同じ文、`photo` は `hook-a.png` か `hook-b.png` のどちらか、制作が選ぶ)
 7. **キャプション**: 既存の予約の .txt と同じ形(問いかけ2行 → 「アプリ「KURABELL」はプロフィールのリンクから」→ 要点3つ → 保存・コメント・シェアの呼びかけ → アプリの一文 → 参考文献 → `@hajimek_life @hajimek_workout` → ハッシュタグ5つ)
 8. **EN**: 同じ企画の英語版の台本・キャプション。1場面目の問いは8語以内。「Link in bio」を最後の2場面に
-9. **フォルダ名**: 次の番号の `rNNn`(`/Users/hajimekitamura/Desktop/KURABELL-reels/` で一番大きい番号 + 1。`reel.sh files` で見る)
+9. **今回入れた改善**: 直近の `4-qa.md` の改善提案から1つ選び、どこにどう入れたかを書く(試しとぶつかるものは選ばない。README の「自己改善のしくみ」)
+10. **フォルダ名**: 次の番号の `rNNn`(`/Users/hajimekitamura/Desktop/KURABELL-reels/` で一番大きい番号 + 1。`reel.sh files` で見る)
 
 ## カルーセルの企画(日曜)
 
@@ -47,7 +49,7 @@
 
 ## 書くもの
 
-`2-plan.md`(Write)。1行目は `状態: 完了`。続けて、上の1〜9を見出しごとに。
+`2-plan.md`(Write)。1行目は `状態: 完了`。続けて、上の1〜10を見出しごとに。
 最後に「制作への注意」(言い換えてはいけない数値・言葉、画面素材のファイル名)を箇条書きで。
 `reports/routines/morning-sns.md` に結果を足し、印を消す。
 

@@ -10,7 +10,8 @@
    = `/Users/hajimekitamura/Library/Mobile Documents/com~apple~CloudDocs/Obsidian AI連携/Projects/kurabell-reel-pdca.md`
 3. Obsidian `Projects/kurabell-pdca-drafts/P017-topics.md`(題材ストック。「使った」の印が付いていないものが残り)
 4. Obsidian `Projects/kurabell-instagram-metrics.md` の直近
-5. 前日の `4-qa.md`(あれば。事実の誤りで落ちた題材は、そこで指摘された点を確かめ直す)
+5. Obsidian `Projects/kurabell-morning-lessons.md`(学びのノート。事実・言葉の決まりは調査でも守る)
+6. 前日の `4-qa.md`(あれば。事実の誤りで落ちた題材は、そこで指摘された点を確かめ直す)
 
 ## 手順
 

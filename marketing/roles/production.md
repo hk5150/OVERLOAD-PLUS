@@ -12,6 +12,8 @@
    - `状態: 完了` 以外 → `3-production.md` に `状態: 見送り(前の役が未完了)` と書いて終わる
 2. 印を書く(作業: 「制作: <題> の JP・EN を作る」)
 
+作る前に Obsidian `Projects/kurabell-morning-lessons.md` の「必ず守ること」を読み、制作で守るものを `3-production.md` に書き写してから始める。
+
 ## リールの作り方(道具は13時のルーティンと同じ。すべて絶対パス・1回に1コマンド)
 
 フォルダ: `/Users/hajimekitamura/Desktop/KURABELL-reels/<rNNn>/`(EN は `.../en/<rNNn>/`、アイコンは `../assets/icon.png`、画面は `../../screens/en-*.png`)。
