@@ -51,6 +51,14 @@ const fromU = (v) => (UNIT === "lb" ? lbToKg(v) : n(v));
 //     入れている既存ユーザーの記録を表示するだけで書き換えてしまう。
 const wU = (kg) => (UNIT === "lb" ? Math.round(kgToLb(kg) * 2) / 2 : n(kg));
 
+// 保存値(kg)を、いまの表示単位で入力できる刻みに揃えた kg。自己ベストの比較で、過去の記録の側に通す。
+// kg で記録した 77.5kg は lb の入力欄に 171lb と出て、そのまま保存すると 171lb = 77.56kg になる。
+// 保存値どうしを比べると「前回と同じ重量なのに自己ベスト」になる(UIレビュー 2026-10 で見つかった)。
+// 過去の側を「画面に出ている数字を打ち直したらこう保存される値」に揃えれば、同じ数字は同じ値になる。
+// 今日の側は入力欄の文字列を fromU した値なので、刻み上の数字ならここを通しても変わらない。
+// kg では何もしない(62.3kg のような端数をそのまま比べる。wU と同じ理由)。
+const snapKg = (kg) => (UNIT === "lb" ? lbToKg(wU(kg)) : n(kg));
+
 // 入力欄に入れる文字列。0.5刻みなので "60" や "132.5" のように短く出る。
 const wStr = (kg) => String(wU(kg));
 
@@ -86,5 +94,6 @@ globalThis.toU = toU;
 globalThis.fromU = fromU;
 globalThis.wU = wU;
 globalThis.wStr = wStr;
+globalThis.snapKg = snapKg;
 globalThis.convWeightStr = convWeightStr;
 globalThis.incU = incU;

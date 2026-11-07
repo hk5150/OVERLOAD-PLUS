@@ -193,7 +193,7 @@
     { key:'i18n',       urls:['src/domain/i18n.js'],
       globals:['SUPPORTED_LANGS','resolveLang','getLang','setLang','STRINGS','I18N','t','EX_NAMES_EN','MUSCLE_NAMES_EN','EQ_NAMES_EN','SPLIT_NAMES_EN','DAY_NAMES_EN','WEEKDAYS','exName','muscleName','eqName','splitName','dayName','weekdayLabel','exSearchText','exMatches'] },
     { key:'units',      urls:['src/domain/units.js'],
-      globals:['LB_PER_KG','SUPPORTED_UNITS','resolveUnit','getUnit','setUnit','uLabel','kgToLb','lbToKg','toU','fromU','wU','wStr','convWeightStr','incU'] },
+      globals:['LB_PER_KG','SUPPORTED_UNITS','resolveUnit','getUnit','setUnit','uLabel','kgToLb','lbToKg','toU','fromU','wU','wStr','snapKg','convWeightStr','incU'] },
     { key:'oneRm',      urls:['src/domain/oneRm.js'],
       globals:['est1RM','effWeight','dayBest1RM','SET_1RM_MAX_REPS','uncapped1RM','showsSet1RM','isNew1RMBest'] },
     { key:'storage',    urls:['src/domain/storage.js'],
@@ -1860,7 +1860,9 @@ function App() {
 
   // ---- PR(自己ベスト)と推定1RM ----
   // 実効重量(ダンベルは両手・自重は体重換算)ベースで比較する
-  const setEff = (ex, s) => effWeight(s.weight, resolveIsDb(ex.name, ex.isDb), ex.bwFactor ?? 0, ex.bwAtLog ?? profile.bodyweight);
+  // 重量は snapKg で表示単位の刻みに揃える(src/domain/units.js)。kg で記録した 77.5kg を lb で 171 と打ち直すと
+  // 77.56kg で保存され、保存値どうしでは「同じ重量なのに自己ベスト」になっていた。今日のセット(fromU した入力値)と比べる経路は全部これを通す
+  const setEff = (ex, s) => effWeight(snapKg(s.weight), resolveIsDb(ex.name, ex.isDb), ex.bwFactor ?? 0, ex.bwAtLog ?? profile.bodyweight);
   // 腹筋の種目は推定1RMの回数上限(12回)を外す(src/domain/oneRm.js の uncapped1RM)。部位で決めるので、
   // 部位を腹筋にしたカスタム種目も入る。findExercise はこれより後で作られるので、同じ順(内蔵 → カスタム → 別名)をここで書いている。
   // 種目マスターで引けない名前(消したカスタム種目の過去の記録)だけ、記録に残る部位(ex.muscle)を使う。
@@ -1890,7 +1892,9 @@ function App() {
       });
     }));
     return m;
-  }, [workouts, profile.bodyweight, exerciseOverrides, customExercises]);
+    // unit も入れる: setEff の snapKg は表示単位(units.js の UNIT)で値が変わる。入れないと、開いたまま kg → lb に
+    // 切り替えた直後は生の kg のままの自己ベストと比べて、同じ 171lb でも自己ベストが出る(reviewer 指摘)
+  }, [workouts, profile.bodyweight, exerciseOverrides, customExercises, unit]);
 
   // 記録中の種目の現在の最高推定1RM(PR更新判定に使う。補助ありは除外)
   const liveBest1RM = (ex) => {
@@ -5221,8 +5225,9 @@ function App() {
                 const over1RM = pastBest1RM > 0 && row1RM > pastBest1RM + 0.01;
                 // 前回の同じ番手のワーキングセット。同じ重量×回数なら余力の伸びを差分で出す
                 const prevSet = s.warmup ? null : (ins?.sets?.[wsIndex - 1] || null);
+                // 同じ重量かは表示単位の刻みで見る(kg で記録した前回を lb で打ち直すと、保存値は少しずれるため)
                 const rirDiff = (prevSet && prevSet.rir != null && s.rir !== "" && s.rir != null
-                  && num(prevSet.weight) === setW && Math.round(num(prevSet.reps)) === setR)
+                  && snapKg(prevSet.weight) === snapKg(setW) && Math.round(num(prevSet.reps)) === setR)
                   ? num(s.rir) - prevSet.rir : null;
                 return (
                 <div key={i} data-setrow={`${ex.id}:${i}`} style={{ marginBottom: 8, opacity: done ? 1 : 0.55 }}>

@@ -148,3 +148,48 @@ describe("増加幅", () => {
     expect(u.incU(0)).toBe(2.5);
   });
 });
+
+// kg で記録した 77.5kg を lb で使うと、入力欄に 171lb と出て、そのまま保存すると 77.56kg になる。
+// 保存値どうしで比べると「前回と同じ重量なのに自己ベスト」になっていた(docs/UIレビュー_2026-10.md)。
+// 自己ベストの比較では、過去の記録の側を snapKg で「画面の数字を打ち直したら保存される値」に揃える。
+describe("自己ベストの比較で使う、刻みに揃えた kg(snapKg)", () => {
+  const oneRm = loadDomainModule("src/domain/oneRm.js");
+
+  it("kg のときは何もしない(端数のある既存の記録をそのまま比べる)", () => {
+    expect(u.snapKg(77.5)).toBe(77.5);
+    expect(u.snapKg(62.3)).toBe(62.3);
+    expect(u.snapKg("")).toBe(0);
+  });
+
+  it("lb のとき、kg の記録は画面に出る lb を打ち直した値になる", () => {
+    u.setUnit("lb");
+    expect(u.wU(77.5)).toBe(171);
+    expect(u.snapKg(77.5)).toBe(u.fromU("171"));
+  });
+
+  it("lb で打った刻み上の値は変わらない(今日の側に通しても同じ)", () => {
+    u.setUnit("lb");
+    for (let lb = 2.5; lb <= 700; lb += 2.5) {
+      const kg = u.fromU(String(lb));
+      expect(u.snapKg(kg)).toBe(kg);
+    }
+  });
+
+  it("kg の記録を lb で同じ数字・同じ回数で挙げても、推定1RM も重量も自己ベストを超えない", () => {
+    u.setUnit("lb");
+    for (let kg = 2.5; kg <= 300; kg += 2.5) {
+      const today = u.fromU(String(u.wU(kg)));   // 入力欄に出た数字をそのまま保存した値
+      const past = u.snapKg(kg);
+      expect(today).toBe(past);
+      expect(oneRm.est1RM(today, 8)).toBe(oneRm.est1RM(past, 8));
+    }
+  });
+
+  it("1lb でも重ければ自己ベストを超える(刻みに揃えても本当の更新は消えない)", () => {
+    u.setUnit("lb");
+    const past = u.snapKg(77.5);          // 171lb
+    const today = u.fromU("173.5");       // 2.5lb 重い
+    expect(today).toBeGreaterThan(past + 0.01);
+    expect(oneRm.est1RM(today, 8)).toBeGreaterThan(oneRm.est1RM(past, 8) + 0.01);
+  });
+});
