@@ -1,0 +1,3 @@
+• First time here? Just pick how many days a week you train, and today's menu is built with standard exercises.
+• Muscle filters are now simple groups: Chest, Back, Shoulders, Arms, Legs, Glutes and Abs. Shoulders, for example, lists exercises under Front, Side and Rear Delts.
+• Each split template now says who it's for.

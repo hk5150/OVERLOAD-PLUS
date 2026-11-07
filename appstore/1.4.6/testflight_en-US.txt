@@ -1,0 +1,5 @@
+What to check in 1.4.6 (49):
+1. On a fresh install, the Split tab should ask "How many days a week do you train?". Tapping "3–6 days a week" should switch to the Log tab with five exercises in today's menu.
+2. Above the exercise list in the Log tab, the muscle filters should show Chest, Back, Shoulders, Arms, Legs, Glutes and Abs on two rows. Tapping Shoulders should group exercises under Front, Side and Rear Delts.
+3. In the Split tab, tap Edit on a day and then Shoulders. Small chips for Front, Side and Rear Delts should appear and each can be turned off. The day name should become something like "Chest & Shoulders".
+4. With existing workouts, picking a template again via "Change / rebuild" should keep today's menu on the exercises you have been doing.
