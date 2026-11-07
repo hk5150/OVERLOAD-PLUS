@@ -20,14 +20,14 @@
 - [UISceneライフサイクル](kurabell-uiscene-lifecycle.md) — 1.1.1(12)でscene化。AppDelegateのdidBecomeActive/windowは死ぬ。Capacitor 6.2.1コアはkeyWindow不使用(確認済)
 - [spanのaria-label](kurabell-aria-label-on-span.md) — role無しspanのaria-labelは無視されうる。分割+aria-hiddenで読み上げが欠ける(v1.3改善要望9)
 - [種目削除の元に戻す](kurabell-remove-undo.md) — notice 1枠・Day名で照合。連打で前の削除のDay登録が戻らない。保存/破棄でclearNoticeされる(1.4)
-- [Day名は履歴のキー](kurabell-day-name-is-history-key.md) — sessionで履歴を引く。自動改名・同名Dayで前回が切れる/混ざる。プリセットDayは登録0件。v1.3でautoMenu登録優先(0→1の崖)
+- [Day名は履歴のキー](kurabell-day-name-is-history-key.md) — sessionで履歴を引く。自動改名・同名Dayで前回が切れる/混ざる。11-07からプリセットDayにstarterPicks登録(部位一致の履歴より優先)
 - [Watch完了画面のsheet](kurabell-watch-finished-sheet.md) — v1.3改善12: 子sheet表示中に親sheetを出す経路が未確認。shown idを閉じた時に書くので固着/再表示の窓
 - [差し替えでex.idは変わらない](kurabell-exid-survives-swap.md) — swapExerciseはid保持。ex.idキーのキャッシュ(1.4次の一手のAI文)が別種目・別単位に持ち越される
 - [AIコーチの取り込みとundo](kurabell-coach-merge-undo.md) — 1.4: mergeCoachPlanはid/行番号保持。undoはtoday丸ごとで5秒内の入力を消す。案は表示単位で保持
 - [YOU WIN!の判定経路](kurabell-you-win-trigger.md) — 1.4: RirSelectのonChangeだけで判定、⚡/緑は描画時。基準は10-09→10-10→10-11で2回反転、コメント/テスト/docs取り残し注意
 - [画像共有と写真の権限](kurabell-image-share-photo-permission.md) — UIImage共有はNSPhotoLibraryAddUsageDescription必須(1.4(19))。休憩のblur抑止とWU、SS正規化とundo
 - [「今日」の自動選択effect](kurabell-auto-cursor-effect.md) — stalestDayIndex includeFrom+split.manual。未来時刻で保存直後に戻る/改名・追加で即ジャンプ/並走persist
-- [内蔵種目と同名カスタム](kurabell-builtin-vs-custom-name-collision.md) — EXERCISE_DB追加で既存の同名カスタムが2行化・内蔵の係数が勝つ・設定編集が効かない(2026-10-11)
+- [内蔵種目と同名カスタム](kurabell-builtin-vs-custom-name-collision.md) — EXERCISE_DB追加で同名カスタム2行化・内蔵の係数が勝つ(10-11)。repsUncappedはカスタム優先で逆(10-19)
 - [ドメイン名とApp内ローカルの影](kurabell-domain-global-shadowing.md) — 新グローバルがApp内の同名ローカルに隠れ起動後に落ちる(trainedMuscles, 2026-10-11)。grepで宣言を全部見る
 - [Watch心拍の古さと行の跳ね](kurabell-watch-hr-freshness.md) — 1.4.1(31): 途切れても最後の値が残る(iPhoneは15秒で隠す)。心拍の有無でヘッダ行の高さが変わる
 - [Watchの引き取り直しとforceEnd](kurabell-watch-recover-adopt.md) — 1.4.1(35): start冒頭adoptが新記録の開始を消費/forceEnd使い捨ては成否不明でボタン固着
@@ -38,3 +38,5 @@
 - [Watch休憩の自前振動](kurabell-watch-rest-self-haptic.md) — 2026-10-15: play()後に予備通知を消す/willPresentで抑止。play無効・タイマー遅延で無音に。(23)の1分16秒
 - [window.openとネイティブ](kurabell-window-open-native.md) — Capacitor 6.2.1でwindow.openはcreateWebViewWith→UIApplication.open(確認済)。iOSのmailtoは既定メールアプリ
 - [下書きkeepと保存時刻](kurabell-draft-keep-stale-times.md) — 下書きの寿命を延ばすと、保存時に date/duration/kcal が保存時刻基準で壊れる(d5c1d38 B3)
+- [片脚bwのbackfillと保存値0](kurabell-bw-backfill-zero-ambiguity.md) — 2026-10-26: 保存値0=変更前/OFFの日の両義。上書きが後で変わると過去に係数。器具selectがbw:0を書く
+- [UNITグローバルとmemo依存](kurabell-unit-global-memo-deps.md) — toU/wU/snapKgはモジュール変数UNITを読む。prMapのdepsにunit無しで単位切替後に古いまま(2026-11-08)
