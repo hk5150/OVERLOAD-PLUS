@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>KURABELL story 15s 3D(器具と光の粒): 回数+1も前進</title>
+<!-- ストーリーズ用 1080x1920 / 15秒。window.seek(t) が t 秒目を描くだけ(three.js の描画も seek の中だけ)。タイマー・CSSトランジションなし -->
+<!-- 安全域: 上 260px・下 280px。締めの 1390-1610 はリンクのスタンプ用に空ける -->
+<script src="../../tools/vendor/three.min.js"></script>
+<style>
+@font-face { font-family: "Barlow C"; font-weight: 800; src: url("../../../../fonts/barlow-condensed-800-latin.woff2") format("woff2"); }
+:root { --bg:#141517; --text:#F2F0EB; --muted:#A3A8B0; --line:#2E3237; --yellow:#E8B33C; --green:#4CAF6E; --red:#E2453C; }
+* { margin:0; padding:0; box-sizing:border-box; }
+html,body { width:1080px; height:1920px; background:var(--bg); overflow:hidden; }
+body { color:var(--text); font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Noto Sans CJK JP",sans-serif; }
+canvas#gl { position:absolute; left:0; top:0; width:1080px; height:1920px; }
+.el { position:absolute; will-change:transform,opacity; opacity:0; z-index:2; }
+.num { font-family:"Barlow C"; font-weight:800; }
+h1 { font-weight:900; font-size:104px; line-height:1.24; letter-spacing:-.01em; text-shadow:0 6px 30px rgba(0,0,0,.6); }
+h1 em, .y { font-style:normal; color:var(--yellow); }
+.g { color:var(--green); }
+.lead { font-size:46px; font-weight:700; color:var(--muted); line-height:1.5; }
+.src { font-size:32px; font-weight:700; color:var(--muted); line-height:1.5; }
+.tag { text-align:center; transform-origin:50% 100%; text-shadow:0 4px 20px rgba(0,0,0,.8); }
+.tag .v { font-family:"Barlow C"; font-weight:800; font-size:84px; line-height:1; }
+#sc0 .v, #sc1 .v, #sc2 .v { font-size:72px; }
+.tag .k { font-size:36px; font-weight:900; line-height:1.3; }
+.card { border-radius:30px; overflow:hidden; box-shadow:0 40px 100px rgba(0,0,0,.7); border:3px solid var(--line); background:#1A1B1E; }
+.card img { display:block; width:100%; }
+#logo { display:flex; align-items:center; gap:16px; background:rgba(20,21,23,.78); padding:12px 18px 12px 12px; border-radius:20px; }
+#logo img { width:64px; height:64px; border-radius:15px; }
+#logo .t1 { font-family:"Barlow C"; font-weight:800; font-size:40px; letter-spacing:.04em; line-height:1; }
+#logo .t2 { font-family:"Barlow C"; font-weight:800; font-size:26px; letter-spacing:.06em; color:var(--muted); margin-top:4px; }
+</style>
+</head>
+<body>
+<canvas id="gl" width="1080" height="1920"></canvas>
+
+<!-- S1 掴み 0-3.0(0秒目がカバー=問いかけ) -->
+<p class="el lead" id="s1l" style="left:84px; top:300px;">ベンチプレス 70kg</p>
+<h1 class="el" id="s1h" style="left:84px; top:370px;">同じ重さで、<br>回数が<span class="num" style="font-size:140px;"> 1 </span>回増えた。</h1>
+<h1 class="el" id="s1q" style="left:84px; top:640px;"><em>それも、前進？</em></h1>
+
+<!-- S2 答え 3.0-7.0 -->
+<h1 class="el" id="s2h" style="left:84px; top:290px; font-size:150px; line-height:1;"><em>はい。</em></h1>
+<h1 class="el" id="s2t" style="left:84px; top:470px; font-size:76px;">筋肥大・筋力の伸びは、<br><span class="g">ほぼ同じ</span>だった</h1>
+<p class="el src" id="s2s" style="left:84px; top:665px;">鍛えている人・8週間の研究(数字はスクワット1RMの伸び)<br>Plotkin et al. PeerJ 2022</p>
+<div class="el tag" id="tw0"><div class="v y">+21.8<span style="font-size:52px;">kg</span></div><div class="k">重さを上げる</div></div>
+<div class="el tag" id="tw1"><div class="v g">+19.3<span style="font-size:52px;">kg</span></div><div class="k">回数を増やす</div></div>
+
+<!-- S3 つまり 7.0-10.4 -->
+<p class="el lead" id="s3l" style="left:84px; top:300px;">つまり</p>
+<h1 class="el" id="s3h" style="left:84px; top:370px; font-size:96px;">回数が1回<br>増えたのも、<br><em>立派な前進。</em></h1>
+<div class="el tag" id="sc0"><div class="v">70×8</div></div>
+<div class="el tag" id="sc1"><div class="k g">+1回</div><div class="v">70×9</div></div>
+<div class="el tag" id="sc2"><div class="k g">+1回</div><div class="v y">70×10</div></div>
+
+<!-- S4 KURABELLなら 10.4-12.85 -->
+<p class="el lead" id="s4l" style="left:84px; top:300px; color:var(--yellow);">KURABELL なら</p>
+<h1 class="el" id="s4h" style="left:84px; top:370px; font-size:96px;">前回の記録が、<br>セットごとに並ぶ</h1>
+<div class="el card" id="s4card" style="left:123px; top:760px; width:834px;"><img src="rows.png" alt=""></div>
+
+<!-- S5 締め 12.85-15 -->
+<img class="el" id="s5icon" src="../../../../icon-512.png" style="left:84px; top:390px; width:170px; height:170px; border-radius:40px;">
+<div class="el num" id="s5name" style="left:84px; top:600px; font-size:160px; letter-spacing:.03em; line-height:1;">KURABELL</div>
+<div class="el" id="s5line" style="left:84px; top:770px; width:790px; height:16px; border-radius:8px; background:var(--red); transform-origin:0 50%;"></div>
+<div class="el num" id="s5sub" style="left:90px; top:800px; font-size:56px; letter-spacing:.08em; color:var(--muted); line-height:1;">WORKOUT LOG</div>
+<h1 class="el" id="s5h" style="left:84px; top:930px; font-size:88px;">前回が見えるから、<br><em>超えられる。</em></h1>
+<p class="el lead" id="s5c" style="left:84px; top:1230px; color:var(--text);">アプリはこのリンクから<span class="y" style="font-family:'Barlow C'; font-weight:800; font-size:64px;"> ↓</span></p>
+
+<!-- 右下ロゴ(締めの場面では消す) -->
+<div class="el" id="logo" style="right:60px; top:1548px;">
+  <img src="../../../../icon-512.png" alt=""><div><div class="t1">KURABELL</div><div class="t2">WORKOUT LOG</div></div>
+</div>
+
+<script>
+// ブロックを使わない版: 立体(バーベル・棒グラフ・階段)を光の粒がつなぐ。
+// 粒は前の立体の上から順にほどけ、次の立体の下から順に降り立つ。立体は粒が届いた高さまでだけ見せる(切断面)。
+THREE.ColorManagement.legacyMode=false; // 色の16進数を sRGB として扱う(淡くならないように)
+const clamp=(x,a=0,b=1)=>Math.min(b,Math.max(a,x));
+const lerp=(a,b,k)=>a+(b-a)*k;
+const spring=(u,w=13,z=0.55)=>{ if(u<=0) return 0; const wd=w*Math.sqrt(1-z*z); return 1-Math.exp(-z*w*u)*(Math.cos(wd*u)+(z*w/wd)*Math.sin(wd*u)); };
+const soft=(u,w=10)=>spring(u,w,0.85);
+const ease=u=>{ u=clamp(u); return u<.5?4*u*u*u:1-Math.pow(-2*u+2,3)/2; };
+const $=id=>document.getElementById(id);
+function show(id,t,tin,tout,{dy=60,w=11,outDur=0.28,scale=false}={}){
+  const e=$(id); const k=tin<=0?1:soft(t-tin,w); let op=tin<=0?1:clamp((t-tin)/0.18); let y=(1-k)*dy;
+  if(tout!=null && t>tout){ const o=clamp((t-tout)/outDur); op*=1-o; y-=o*o*80; }
+  e.style.opacity=t<tin?0:op;
+  e.style.transform= scale ? `translateY(${y}px) scale(${0.7+0.3*spring(t-tin,14,0.5)})` : `translateY(${y}px)`;
+  return op;
+}
+function mulberry32(a){ return function(){ a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
+const R=mulberry32(20261108);
+const C={ yellow:0xE8B33C, green:0x4CAF6E, red:0xE2453C, steel:0xC9CDD2, white:0xF2F0EB };
+
+// ---------- three.js の土台 ----------
+const renderer=new THREE.WebGLRenderer({canvas:$('gl'),antialias:true,preserveDrawingBuffer:true});
+renderer.setPixelRatio(1); renderer.setSize(1080,1920,false);
+renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+renderer.outputEncoding=THREE.sRGBEncoding; renderer.toneMapping=THREE.NoToneMapping;
+renderer.localClippingEnabled=true;
+const scene=new THREE.Scene(); scene.background=new THREE.Color(0x141517); scene.fog=new THREE.Fog(0x141517,160,280);
+// 金属の映り込み用の環境(暗い部屋に、やわらかい照明の板を数枚)
+{ const env=new THREE.Scene(); env.background=new THREE.Color(0x0c0d0f);
+  const panel=(w,h,x,y,z,ry,rx,c,i)=>{ const m=new THREE.Mesh(new THREE.PlaneGeometry(w,h),new THREE.MeshBasicMaterial({color:new THREE.Color(c).multiplyScalar(i),side:THREE.DoubleSide})); m.position.set(x,y,z); m.rotation.set(rx,ry,0); env.add(m); };
+  panel(30,12,0,22,-18,0,0.5,0xffffff,3.0); panel(10,30,-24,8,6,Math.PI/2,0,0xfff1d6,1.6); panel(10,30,24,6,-4,-Math.PI/2,0,0xd6e6ff,0.9); panel(40,40,0,-14,0,0,-Math.PI/2,0x2a2c30,1);
+  const pm=new THREE.PMREMGenerator(renderer); scene.environment=pm.fromScene(env,0.02).texture; }
+const cam=new THREE.PerspectiveCamera(30,1080/1920,1,500);
+cam.setViewOffset(1080,1920,0,-360,1080,1920);
+scene.add(new THREE.HemisphereLight(0xfff4e0,0x202428,0.35));
+const sun=new THREE.DirectionalLight(0xffffff,1.35); sun.position.set(-30,60,40); sun.castShadow=true;
+sun.shadow.mapSize.set(2048,2048); Object.assign(sun.shadow.camera,{left:-40,right:40,top:40,bottom:-40,near:1,far:200}); sun.shadow.bias=-0.0006; sun.shadow.radius=4;
+scene.add(sun);
+const rim=new THREE.DirectionalLight(0xE8B33C,0.6); rim.position.set(40,20,-40); scene.add(rim);
+// 台
+const stage=new THREE.Group(); scene.add(stage);
+const base=new THREE.Mesh(new THREE.CylinderGeometry(19,19.6,1.6,128), new THREE.MeshStandardMaterial({color:0x0F1012,roughness:0.85,metalness:0,envMapIntensity:0.3}));
+base.position.y=-0.8; base.receiveShadow=true; stage.add(base);
+const ring=new THREE.Mesh(new THREE.TorusGeometry(18.6,0.12,8,160),new THREE.MeshBasicMaterial({color:0xE8B33C})); ring.rotation.x=Math.PI/2; ring.position.y=0.02; stage.add(ring);
+
+// ---------- 立体 ----------
+// 切断面: plane.constant = 見せる高さの上限(y <= h だけ描く)
+function solidGroup(){ const g=new THREE.Group(); g.userData.plane=new THREE.Plane(new THREE.Vector3(0,-1,0),-999); scene.add(g); return g; }
+function mat(g,opts){ return new THREE.MeshStandardMaterial(Object.assign({clippingPlanes:[g.userData.plane],clipShadows:true,side:THREE.DoubleSide},opts)); }
+function add(g,geo,m,x,y,z,rz=0){ const o=new THREE.Mesh(geo,m); o.position.set(x,y,z); o.rotation.z=rz; o.castShadow=true; o.receiveShadow=true; g.add(o); return o; }
+// プレートの断面(縁を少し丸めた平らな円盤)を回して作る。軸は y → 置くときに z 回りに90度
+function plateGeo(Rr,th){ const h=th/2, c=Math.min(0.32,h*0.6), pts=[];
+  pts.push(new THREE.Vector2(1.45,-h)); pts.push(new THREE.Vector2(Rr-c,-h));
+  for(let k=1;k<=6;k++){ const a=-Math.PI/2+k/6*Math.PI/2; pts.push(new THREE.Vector2(Rr-c+Math.cos(a)*c,-h+c+Math.sin(a)*c)); }
+  pts.push(new THREE.Vector2(Rr,h-c));
+  for(let k=1;k<=6;k++){ const a=k/6*Math.PI/2; pts.push(new THREE.Vector2(Rr-c+Math.cos(a)*c,h-c+Math.sin(a)*c)); }
+  pts.push(new THREE.Vector2(Rr-c*1.2,h)); pts.push(new THREE.Vector2(Rr-0.9,h)); pts.push(new THREE.Vector2(Rr-1.05,h-0.12)); pts.push(new THREE.Vector2(1.6,h-0.12)); pts.push(new THREE.Vector2(1.45,h));
+  return new THREE.LatheGeometry(pts,128); }
+// バーベル(中心の高さ 6.5)
+const BB=solidGroup(); const CY=6.5;
+{ const chrome=mat(BB,{color:0xd8dde3,metalness:1,roughness:0.22}), knurl=mat(BB,{color:0xb9bec5,metalness:1,roughness:0.42});
+  const bumper=mat(BB,{color:C.yellow,metalness:0,roughness:0.4,envMapIntensity:0.6}), red=mat(BB,{color:C.red,metalness:0,roughness:0.4,envMapIntensity:0.6}), hub=mat(BB,{color:0xcfd3d8,metalness:1,roughness:0.25});
+  add(BB,new THREE.CylinderGeometry(0.45,0.45,17,48),knurl,0,CY,0,Math.PI/2);
+  for(const s of [-1,1]){
+    add(BB,new THREE.CylinderGeometry(0.85,0.85,7.2,48),chrome,s*12.1,CY,0,Math.PI/2);          // スリーブ
+    add(BB,new THREE.CylinderGeometry(1.25,1.25,0.7,48),chrome,s*8.3,CY,0,Math.PI/2);           // つば
+    for(const [cx,Rr,th,m] of [[9.4,6.5,1.5,bumper],[11.0,6.5,1.5,bumper],[12.45,4.6,1.1,red]]){
+      add(BB,plateGeo(Rr,th),m,s*cx,CY,0,Math.PI/2);
+      add(BB,new THREE.CylinderGeometry(1.5,1.5,th+0.12,48),hub,s*cx,CY,0,Math.PI/2);
+    }
+    add(BB,new THREE.CylinderGeometry(1.35,1.35,0.8,48),chrome,s*13.6,CY,0,Math.PI/2);         // カラー
+  }
+}
+// 角の丸い柱(下端 y=0、高さ h)
+function rbox(w,d,h,r=0.9,b=0.35){ const s=new THREE.Shape(); const x=-w/2+b, y=-d/2+b, W=w-2*b, D=d-2*b, rr=Math.min(r,W/2,D/2);
+  s.moveTo(x+rr,y); s.lineTo(x+W-rr,y); s.quadraticCurveTo(x+W,y,x+W,y+rr); s.lineTo(x+W,y+D-rr); s.quadraticCurveTo(x+W,y+D,x+W-rr,y+D);
+  s.lineTo(x+rr,y+D); s.quadraticCurveTo(x,y+D,x,y+D-rr); s.lineTo(x,y+rr); s.quadraticCurveTo(x,y,x+rr,y);
+  const g=new THREE.ExtrudeGeometry(s,{depth:Math.max(0.01,h-2*b),bevelEnabled:true,bevelThickness:b,bevelSize:b,bevelSegments:5,curveSegments:10});
+  g.rotateX(-Math.PI/2); g.translate(0,b,0); return g; }
+const glossy=(g,c)=>mat(g,{color:c,metalness:0,roughness:0.32,envMapIntensity:0.6});
+const TW=solidGroup(); add(TW,rbox(5,5,20),glossy(TW,C.yellow),-5.5,0,0); add(TW,rbox(5,5,18),glossy(TW,C.green),5.5,0,0);
+const ST=solidGroup(); { const w=glossy(ST,C.white), y=glossy(ST,C.yellow), gr=glossy(ST,C.green);
+  add(ST,rbox(5,5,8),w,-8,0,0); add(ST,rbox(5,5,8),w,0,0,0); add(ST,rbox(5,5,1,0.9,0.25),gr,0,8.08,0);
+  add(ST,rbox(5,5,9),y,8,0,0); add(ST,rbox(5,5,1,0.9,0.25),gr,8,9.08,0); }
+
+// ---------- 光の粒が乗る場所(各立体の表面から種固定で選ぶ) ----------
+const N=4200;
+function sampleBarbell(){ const o=[];
+  const plates=[]; for(const s of [-1,1]) for(const [cx,Rr,th,c] of [[9.4,6.5,1.5,C.yellow],[11.0,6.5,1.5,C.yellow],[12.45,4.6,1.1,C.red]]) plates.push({x:s*cx,Rr,th,c,w:Rr*Rr});
+  const tot=plates.reduce((a,p)=>a+p.w,0);
+  while(o.length<N){ const u=R();
+    if(u<0.1){ const x=(R()-0.5)*30, a=R()*Math.PI*2, r=Math.abs(x)>8?0.85:0.45; o.push({p:[x,CY+Math.cos(a)*r,Math.sin(a)*r],c:C.steel}); continue; }
+    let k=R()*tot, p=plates[0]; for(const q of plates){ if((k-=q.w)<=0){p=q;break;} }
+    const a=R()*Math.PI*2, r=p.Rr*Math.sqrt(0.08+0.92*R()), face=R()<0.75;
+    const x= face ? p.x+(R()<0.5?-1:1)*p.th/2 : p.x+(R()-0.5)*p.th, rr= face? r : p.Rr;
+    o.push({p:[x,CY+Math.cos(a)*rr,Math.sin(a)*rr],c:p.c}); }
+  return o; }
+function sampleBoxes(boxes){ // boxes: [cx, y0, h, color]  幅5×奥行5
+  const o=[]; const areas=boxes.map(b=>4*5*b[2]+25); const tot=areas.reduce((a,b)=>a+b,0);
+  while(o.length<N){ let k=R()*tot, i=0; while((k-=areas[i])>0) i++; const [cx,y0,h,c]=boxes[i];
+    const side=R()*(4*5*h+25);
+    if(side<25){ o.push({p:[cx+(R()-0.5)*5,y0+h,(R()-0.5)*5],c}); continue; }
+    const f=Math.floor(R()*4), s=(R()-0.5)*5, y=y0+R()*h;
+    const p= f===0?[cx+2.5,y,s]: f===1?[cx-2.5,y,s]: f===2?[cx+s,y,2.5]:[cx+s,y,-2.5]; o.push({p,c}); }
+  return o; }
+const P_BAR=sampleBarbell();
+const P_TOW=sampleBoxes([[-5.5,0,20,C.yellow],[5.5,0,18,C.green]]);
+const P_STA=sampleBoxes([[-8,0,8,C.white],[0,0,8,C.white],[0,8,1,C.green],[8,0,9,C.yellow],[8,9,1,C.green]]);
+
+// 粒ごとの性格
+const V=[]; for(let i=0;i<N;i++){ const a=R()*Math.PI*2;
+  V.push({ jit:R(), lift:5+R()*9, side:(R()-0.5)*14, ring:R()*Math.PI*2, ringR:14+R()*7, ringY:1+R()*11, wob:R()*6,
+           dir:[Math.cos(a),(R()-0.4)*0.7,Math.sin(a)], spd:26+R()*34, size:0.7+R()*0.6,
+           sky:[(R()-0.5)*26, 14+R()*10, (R()-0.5)*20] }); }
+
+// 移り変わり(粒の組み合わせを、前の位置の高い順 → 次の場所の低い順でつなぐ)
+// [開始, ほどける時間の幅, 飛ぶ時間]
+const PH=[ {T:-1.0,spread:2.0,fly:1.1}, {T:2.9,spread:1.0,fly:0.95}, {T:7.0,spread:1.0,fly:0.95}, {T:10.3,spread:0.5,fly:1.0} ];
+const FROM=[], TO=[], ORD=[];
+{ let cur=V.map(v=>v.sky);
+  const targets=[P_BAR,P_TOW,P_STA,null];
+  for(let k=0;k<PH.length;k++){
+    const idx=[...Array(N).keys()];
+    if(k===0) idx.sort((a,b)=>cur[a][1]-cur[b][1]); else idx.sort((a,b)=>cur[b][1]-cur[a][1]);
+    const tg=targets[k]; let sorted=null; if(tg) sorted=tg.slice().sort((a,b)=>a.p[1]-b.p[1]);
+    const to=new Array(N), ord=new Array(N);
+    for(let j=0;j<N;j++){ const i=idx[j]; ord[i]=j/(N-1)*0.85+V[i].jit*0.15; to[i]= tg? sorted[j] : null; }
+    FROM.push(cur.slice()); TO.push(to); ORD.push(ord);
+    if(tg) cur=to.map(x=>x.p);
+  } }
+function ringPos(i,t){ const v=V[i], a=v.ring+(t-10.3)*0.5; return [Math.cos(a)*v.ringR, v.ringY+Math.sin(a*2+v.wob)*1.0, Math.sin(a)*v.ringR]; }
+
+// 粒
+const dotG=new THREE.IcosahedronGeometry(0.17,1);
+const dotM=new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:0.95,blending:THREE.AdditiveBlending,depthWrite:false});
+const dots=new THREE.InstancedMesh(dotG,dotM,N); dots.instanceMatrix.setUsage(THREE.DynamicDrawUsage); dots.frustumCulled=false; scene.add(dots);
+const m4=new THREE.Matrix4(), q=new THREE.Quaternion(), p3=new THREE.Vector3(), s3=new THREE.Vector3(), col=new THREE.Color(), white=new THREE.Color(0xffffff);
+for(let i=0;i<N;i++) dots.setColorAt(i,col.set(0xffffff));
+
+function bez(a,b,c,u){ const v=1-u; return [v*v*a[0]+2*v*u*b[0]+u*u*c[0], v*v*a[1]+2*v*u*b[1]+u*u*c[1], v*v*a[2]+2*v*u*b[2]+u*u*c[2]]; }
+function particle(i,t){ // → {p, s, c}
+  let k=-1; for(let j=0;j<PH.length;j++) if(t>=PH[j].T) k=j;
+  if(k<0) return {p:V[i].sky,s:0,c:C.white};
+  const ph=PH[k], d=ph.T+ORD[k][i]*ph.spread, a0=FROM[k][i], tgt=TO[k][i];
+  const b= tgt? tgt.p : ringPos(i,t), c= tgt? tgt.c : (i%4===0?C.yellow:C.white);
+  if(t<d){ // まだほどけていない: 前の立体の表面にいて見えない
+    return {p:a0,s:0,c}; }
+  const u=clamp((t-d)/ph.fly), e=ease(u);
+  const mid=[(a0[0]+b[0])/2+V[i].side*0.5, Math.max(a0[1],b[1])+V[i].lift, (a0[2]+b[2])/2+V[i].side*0.35];
+  let p=bez(a0,mid,b,e), s=V[i].size;
+  if(k===0) s*=clamp((t-d)/0.25);                       // 空から現れる
+  if(tgt){ const after=t-(d+ph.fly); if(after>0) s*=1-clamp(after/0.35); } // 降り立ったら立体に溶ける
+  else if(t>12.85){ const w=t-12.85-V[i].jit*0.12; if(w>0){ const dd=V[i].dir, sp=V[i].spd; p=[p[0]+dd[0]*sp*w, p[1]+dd[1]*sp*w-6*w*w, p[2]+dd[2]*sp*w]; s*=clamp(1-w/0.6); } }
+  return {p,s,c};
+}
+// 立体の見せる高さ: 降り立った粒の高さに合わせて下から伸び、ほどけるときは上から消える
+const RANGE={BB:[0,13.1],TW:[0,20.4],ST:[0,10.4]};
+function front(t,k,rng,dir){ const ph=PH[k]; const u= dir>0 ? clamp((t-ph.T-ph.fly*0.92)/(ph.spread*0.85)) : clamp((t-ph.T)/(ph.spread*0.85));
+  return dir>0 ? lerp(rng[0]-0.3,rng[1]+0.3,u) : lerp(rng[1]+0.3,rng[0]-0.3,u); }
+function clipSolids(t){
+  let hB=-5, hT=-5, hS=-5;
+  if(t<PH[1].T) hB=front(t,0,RANGE.BB,1); else if(t<PH[2].T) { hB=front(t,1,RANGE.BB,-1); hT=front(t,1,RANGE.TW,1); }
+  else if(t<PH[3].T) { hT=front(t,2,RANGE.TW,-1); hS=front(t,2,RANGE.ST,1); }
+  else hS=front(t,3,RANGE.ST,-1);
+  BB.userData.plane.constant=hB; TW.userData.plane.constant=hT; ST.userData.plane.constant=hS;
+  BB.visible=hB>-1; TW.visible=hT>-1; ST.visible=hS>-1;
+}
+
+const v3=new THREE.Vector3();
+function proj(x,y,z){ v3.set(x,y,z).project(cam); return [(v3.x+1)/2*1080,(1-v3.y)/2*1920]; }
+function tag(id,t,tin,tout,x,y,z,dy=-20){ const op=show(id,t,tin,tout,{scale:true}); const e=$(id); const [px,py]=proj(x,y,z);
+  e.style.left=(px-e.offsetWidth/2)+'px'; e.style.top=(py-e.offsetHeight+dy)+'px'; return op; }
+
+window.seek=function(t){
+  const a=-0.5+t*0.065, r=146, el=t<10.3?0.36:lerp(0.36,0.30,clamp((t-10.3)/1.2));
+  cam.position.set(Math.sin(a)*r*Math.cos(el), r*Math.sin(el)+6, Math.cos(a)*r*Math.cos(el)); cam.lookAt(0,7,0);
+  cam.updateMatrixWorld(); cam.updateProjectionMatrix();
+  // バーベルはゆっくり回る
+
+  clipSolids(t);
+  for(let i=0;i<N;i++){ const v=particle(i,t); p3.set(v.p[0],v.p[1],v.p[2]); const sc=Math.max(0.0001,v.s); s3.set(sc,sc,sc);
+    m4.compose(p3,q,s3); dots.setMatrixAt(i,m4); col.set(v.c).lerp(white,0.12); dots.setColorAt(i,col); }
+  dots.instanceMatrix.needsUpdate=true; dots.instanceColor.needsUpdate=true;
+  const sink=clamp((t-12.85)/0.6); stage.position.y=-sink*sink*30; stage.visible=sink<1;
+  renderer.render(scene,cam);
+
+  show('s1l',t,0,2.95); show('s1h',t,0,2.95); show('s1q',t,0,2.95);
+  show('s2h',t,3.15,6.95,{scale:true}); show('s2t',t,3.5,6.95); show('s2s',t,4.6,6.95);
+  tag('tw0',t,4.75,6.95,-5.5,20.6,0); tag('tw1',t,4.95,6.95,5.5,18.6,0);
+  show('s3l',t,7.15,10.2); show('s3h',t,7.25,10.2);
+  tag('sc0',t,8.3,10.2,-8,8.6,0); tag('sc1',t,8.55,10.2,0,9.6,0); tag('sc2',t,8.8,10.2,8,10.6,0);
+  show('s4l',t,10.5,12.75); show('s4h',t,10.6,12.75);
+  { const e=$('s4card'); show('s4card',t,10.8,12.75,{dy:120,w:8}); const ry=-14+Math.sin((t-10.8)*1.3)*6, rx=16-soft(t-10.8,6)*6;
+    e.style.transform += ` perspective(1600px) rotateX(${rx}deg) rotateY(${ry}deg)`; }
+  show('s5icon',t,12.95,null,{dy:80}); show('s5name',t,13.05,null); show('s5sub',t,13.25,null); show('s5h',t,13.4,null); show('s5c',t,13.65,null);
+  { const e=$('s5line'); e.style.opacity=t<13.2?0:1; e.style.transform=`scaleX(${spring(t-13.2,12,0.62)})`; }
+  $('logo').style.opacity = t<12.75?1:1-clamp((t-12.75)/0.3);
+};
+window.seek(0);
+</script>
+</body>
+</html>
