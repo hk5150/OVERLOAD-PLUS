@@ -69,6 +69,7 @@
   **使う前に `/Users/hajimekitamura/OVERLOAD-PLUS/.claude/settings.local.json` を Read で開き、その行(`marketing/tools/morning.sh *` / `marketing/tools/shoot-carousel.sh *`)が許可の一覧にあるときだけ使う**。無ければ使わず、各役の md の「無いとき」の手順に従う
 - Web は WebSearch と、抄録を読む `/Users/hajimekitamura/OVERLOAD-PLUS/marketing/tools/morning.sh abstract <PMID>` だけ。WebFetch・`curl`・全文(`db=pmc`)は使わない。抄録に無い数値は使わない
 - キャプションの確かめは `/Users/hajimekitamura/OVERLOAD-PLUS/marketing/tools/morning.sh caption <caption.txtの絶対パス>…` だけ。`python -c` を自分で書かない(`print()` で包むだけで許可の形から外れ、2026-11-09 の品質チェックが2回とも止まった)
+- コマンドの頭は手順の形のまま。`ls` を `/bin/ls` と書くだけで許可の形から外れる(2026-11-08 の制作はこれで最初の Bash で止まった)。フォルダの中身は `reel.sh files`
 - **Agent(サブエージェント)を使わない。** `tail`・`head`・`cat` も使わず Read を使う。確認待ちになるおそれのある呼び出しは Read などと同じメッセージに並べない(1つ止まると全部止まる)
 - git は使わない。リポジトリのファイルは読むだけ(例外は `reports/routines/morning-sns.md` への追記)。`.claude/` の下には何も書かない
 - Chrome(`mcp__claude-in-chrome__*`)は使わない
