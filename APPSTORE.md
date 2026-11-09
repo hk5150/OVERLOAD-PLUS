@@ -680,6 +680,17 @@ English:
   Playwright MCP のブラウザが使用中だったので、scratchpad の `playwright-core@1.63.0` から `~/Library/Caches/ms-playwright/chromium-1234` を直接起動した。
   シートが画面の下まで届くよう、`compose.html` の `shift`(ja 112 / en 154)で表示を上にずらしている
 
+### 1.4.7 (ビルド50) — 2026-11-10 8:39 に審査へ提出
+
+北村さんの「全て対応して」「はい」(11-10、このスレッドで直接)で `push 1.4.7 --apply` → `build 1.4.7 50 --apply` → `check`(提出できる状態)→ `submit 1.4.7 --apply --yes-submit`。WAITING_FOR_REVIEW。承認後に自動公開。
+
+- 中身: 無料の記録を10回→30回(`TRIAL_WORKOUT_LIMIT`)、lb の偽自己ベストの修正(`ba4ba96`)、ガイド2枚目の画像(`44ab6ba`)
+- **日本語名を「KURABELL｜前回比較・伸びが見える筋トレ記録」に**(25字。`appstore/1.4.7/ja/name.txt`)。10/16 に「前回比較」を名前から外した後、検索からの閲覧が 2.7→0.8/日に減ったため戻した(`docs/ダウンロード改善提案_2026-11.md` の A1)
+- 日本語キーワードは `appstore/1.4.7/ja/keywords.txt`(79字。競合の強い4語を外し、名前と重なる「前回比較」を外してデッドリフトを足した。`docs/ストア流入.md` の施策4)
+- 説明文・プロモーションテキスト・審査メモの「10回/11回目」を「30回/31回目」に。スクリーンショットは 1.4.6 の分を引き継ぎ
+- 印は自分の `release-1.4.7.md` だけ(10/29 の iPhone Duo の印は北村さんの「はい」で消した)。`--ignore-locks` はスレッドで本人が書いた「はい」の後で通った
+- 同じ日に、編集部への推薦(Featuring Nominations、APP_ENHANCEMENTS、公開予定 11/13)を API で提出した(ID `654f1c4a-…`)。App 内イベントは下書き(ID 6832765386、`scripts/asc/app-event.mjs`)。審査に出すには deepLink が必須で、アプリに URL スキームが無いので止まっている
+
 ### 1.4.6 (ビルド49) — 2026-11-07 18:16 に審査へ提出
 
 北村さんの「お願いします」(11-07、このスレッドで直接)で `push 1.4.6 --apply` → `build 1.4.6 49 --apply` → `check`(提出できる状態)→ `submit 1.4.6 --apply --yes-submit`。WAITING_FOR_REVIEW(`status.mjs` で読み戻した)。承認後に自動公開。
