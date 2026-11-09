@@ -20,3 +20,10 @@ else
   /usr/bin/osascript -e 'display notification "API の読み取りに失敗。reports/downloads/run.log を見てください" with title "ダウンロード報告 失敗"'
   echo "failed" >> "$LOG"
 fi
+# 継続の数字(セッション・削除)。12時のルーティンが毎週月曜にこのファイルを読む(ルーティンからは node を直接呼ばない。許可の一覧に無く、無人の回が止まるため)
+if /usr/local/bin/node scripts/asc/usage.mjs > "$REPO/reports/downloads/usage.txt.tmp" 2>> "$LOG"; then
+  mv "$REPO/reports/downloads/usage.txt.tmp" "$REPO/reports/downloads/usage.txt"
+  echo "usage ok" >> "$LOG"
+else
+  echo "usage failed" >> "$LOG"
+fi
