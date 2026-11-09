@@ -12,6 +12,10 @@
 2. `ls /Users/hajimekitamura/OVERLOAD-PLUS/.locks/` に `marketing-pdca.md` があれば、判定までは行い、予約に入れるのは見送る(`4-qa.md` に `予約: 未(13時の作業中)` と書く)。
    逆に、前日の `4-qa.md` が `判定: 合格` で `予約: 未` のままなら、今日の判定より先にそれを予約に入れる(下の「合格」の手順)
 
+## 途中で止まっても判定が残るように
+
+項目を1つ見るたびに、結果を `<作業フォルダ>/4-qa-wip.md` に Write / Edit で足す。始めるときに `4-qa-wip.md` があれば読み、済んだ項目は見直さず続きから見る。
+
 ## 見るもの(必ず全部、自分の目で)
 
 - 制作物: `3-production.md` に書かれた `final.mp4`・`cover.jpg`・`caption.txt`(JP・EN)。カルーセルは `out/*.jpg`・`sheet.png`・`caption.txt`
@@ -21,7 +25,9 @@
 - カバーの並び: `/Users/hajimekitamura/OVERLOAD-PLUS/marketing/tools/morning.sh grid <作業フォルダ>/qa-covers.png <新しい cover.jpg> <投稿済みの直近5本の jpg>…`
   (投稿済みは `/Users/hajimekitamura/Insta/kurabell/reels/投稿済み/JP/`。`reel.sh files` で新しい順に5本選ぶ)を Read で見る。
   許可の一覧に morning.sh が無いときは、新しいカバーと直近5本を1枚ずつ Read で見て比べる
-- 原典: 台本に出てくる数値ごとに、その PMID の抄録を WebFetch(eutils の efetch)で**自分で読み直す**。調査役のメモ(P017-topics)を信用して写さない
+- 原典: 台本に出てくる数値ごとに、その PMID の抄録を `/Users/hajimekitamura/OVERLOAD-PLUS/marketing/tools/morning.sh abstract <PMID>` で**自分で読み直す**。調査役のメモ(P017-topics)を信用して写さない。
+  **抄録に無い数値は、全文を探しに行かず項目1を ✗ にする**(決まりは「抄録で確かめたものだけ」。全文は開かない)
+- キャプションの確かめ: `/Users/hajimekitamura/OVERLOAD-PLUS/marketing/tools/morning.sh caption <JPのcaption.txt> <ENのcaption.txt>` で `OK` を見る
 - アプリの機能の言い方: `index.html` と `src/domain/` を Read で読み、言っている動きが本当にあるか
 - 学びのノート Obsidian `Projects/kurabell-morning-lessons.md` の「必ず守ること」(これも全部、必須の項目と同じ重さで見る。破っていれば該当する項目を ✗ にする)
 - 企画の「今回入れた改善」が本当に入っているか
@@ -42,7 +48,7 @@
 | 7 | カバー | 問いかけ(結論にしない)・上に「エビデンスで筋トレ」・右下に KURABELL Workout Log のロゴ・字幕の帯なし・番号なし。直近2本と写真の種類(A/B/C)が違う。誰もいないジムの引きでない |
 | 8 | 長さ・音 | 40〜60秒(試しの幅があればその中)。平均音量が -17〜-20dB(目安は -18〜-19dB。外れていれば改善提案に書く)。字幕とナレーションがずれていない |
 | 9 | 画面 | 文字のはみ出し・重なり・2行を超える字幕・読みにくい改行が無い(コマの秒を挙げて書く)。アプリの画面は `screens/` の素材で、作り話の画面が無い |
-| 10 | キャプション | 決まった形の順(問いかけ2行の直後にアプリの1行、参考文献、`@hajimek_life @hajimek_workout`、ハッシュタグ5つ)。validate_caption が通る |
+| 10 | キャプション | 決まった形の順(問いかけ2行の直後にアプリの1行、参考文献、`@hajimek_life @hajimek_workout`、ハッシュタグ5つ)。`morning.sh caption` が `OK` |
 | 11 | EN | 1〜10 を英語で。1場面目の問いが8語以内(数えた語数)。「Link in bio」が最後の2場面にある |
 
 **改善提案**(合否には入れないが、**毎回3つ以上**書く): 再生と流入を増やす観点で、次の回に直すとよい点。

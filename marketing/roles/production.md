@@ -9,6 +9,7 @@
 1. 今日の `2-plan.md` を読む。
    - `状態: 作らない日` → `3-production.md` に `状態: 作らない日` と書いて終わる
    - `状態: 完了(修正日)` → 下の「修正日」
+   - `状態: 完了(前日分のチェック)` → 何も作らない。前日の `3-production.md` を Read で読み、同じ中身を今日の `3-production.md` に Write して終わる(チェックが今日それを見る)
    - `状態: 完了` 以外 → `3-production.md` に `状態: 見送り(前の役が未完了)` と書いて終わる
 
 作る前に Obsidian `Projects/kurabell-morning-lessons.md` の「必ず守ること」を読み、制作で守るものを `3-production.md` に書き写してから始める。
@@ -32,7 +33,7 @@
    `python3 /Users/hajimekitamura/OVERLOAD-PLUS/marketing/tools/build-covers.py /Users/hajimekitamura/Desktop/KURABELL-reels/covers/covers.json <名前>` →
    `sips -s format jpeg -s formatOptions 92 /Users/hajimekitamura/Desktop/KURABELL-reels/covers/out/<名前>.png --out <フォルダ>/cover.jpg`
 9. キャプション: 台本のキャプションを `<フォルダ>/caption.txt` に書き、
-   `/Users/hajimekitamura/Insta/.venv/bin/python -c "import sys; sys.path.insert(0,'/Users/hajimekitamura/Insta/scripts'); import ig_client; ig_client.validate_caption(open('<caption.txtの絶対パス>',encoding='utf-8').read())"` を通す
+   `/Users/hajimekitamura/OVERLOAD-PLUS/marketing/tools/morning.sh caption <caption.txtの絶対パス>` で `OK` が出ることを確かめる
 10. EN も 1〜9 を同じように(写真は JP と同じものを使い、文字とナレーションだけ差し替える)
 
 自分で見直すのは**作れているか**(ファイルがある・はみ出していない・音が出る)まで。中身の良し悪しの判断はチェック役に任せ、「自分で吟味して合格」とは書かない。

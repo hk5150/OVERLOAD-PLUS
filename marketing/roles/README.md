@@ -29,6 +29,7 @@
 - **リールを作る日**: JP の予約の残りが **1本以下**(`reel.sh queue` で見る)。1組 = 同じ企画の JP と EN を1本ずつ。2日に1本なので、おおむね2日に1回
 - **カルーセルを作る日**: 日曜。予約にカルーセルのフォルダが無ければ JP を1本(EN は作らない)
 - どちらでもない日: 調査だけ動き(題材ストックを1〜2件ふやす)、企画は `状態: 作らない日` で終わる。制作・チェックも続けて `作らない日` で終わる
+- **前日の制作が終わっているのにチェックが終わっていない日**(前日の `3-production.md` が `状態: 完了` で、`4-qa.md` が無いか `状態: 完了` でない): 新しいものを作らない。企画は `状態: 完了(前日分のチェック)`、制作は前日の制作物のパスをそのまま写した `3-production.md` を書き、チェックがそれを見る(2026-11-09 に r22n が残った。放っておくと同じ題材を作り直してしまう)
 - **前日のチェックが不合格だった日**: 企画は新しい企画を出さず `状態: 完了(修正日)` と書き、制作は前日の指摘を直した版を作り、チェックがもう一度見る。
   同じものが2回不合格なら、その企画は見送り(予約に入れない)、`morning-sns.md` に「北村さんの判断が要る」と書く
 
@@ -64,10 +65,11 @@
 
 - 読むのは Read、書くのは Write / Edit。Bash の `cat`・`echo >`・`sed -i` は使わない。Grep・Glob は使わない
 - コマンドは手順に書いた形のまま、**絶対パスで1つずつ**。`cd … &&`・パイプ・`;`・`for`・`$(…)`・ヒアドキュメント・`~` は使わない
-- 確かめのコマンドは `/Users/hajimekitamura/OVERLOAD-PLUS/marketing/tools/reel.sh`(`durations` / `inspect` / `check` / `queue` / `files`)。朝の4役用の `/Users/hajimekitamura/OVERLOAD-PLUS/marketing/tools/morning.sh`(`grid` / `gain`)と `/Users/hajimekitamura/OVERLOAD-PLUS/marketing/tools/shoot-carousel.sh` は、
+- 確かめのコマンドは `/Users/hajimekitamura/OVERLOAD-PLUS/marketing/tools/reel.sh`(`durations` / `inspect` / `check` / `queue` / `files`)。朝の4役用の `/Users/hajimekitamura/OVERLOAD-PLUS/marketing/tools/morning.sh`(`grid` / `gain` / `caption` / `abstract`)と `/Users/hajimekitamura/OVERLOAD-PLUS/marketing/tools/shoot-carousel.sh` は、
   **使う前に `/Users/hajimekitamura/OVERLOAD-PLUS/.claude/settings.local.json` を Read で開き、その行(`marketing/tools/morning.sh *` / `marketing/tools/shoot-carousel.sh *`)が許可の一覧にあるときだけ使う**。無ければ使わず、各役の md の「無いとき」の手順に従う
-- Web は WebSearch と、WebFetch の `pubmed.ncbi.nlm.nih.gov`・`eutils.ncbi.nlm.nih.gov` だけ。抄録は
-  `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=<PMID>&rettype=abstract&retmode=text` を WebFetch で読む。`curl` は使わない
+- Web は WebSearch と、抄録を読む `/Users/hajimekitamura/OVERLOAD-PLUS/marketing/tools/morning.sh abstract <PMID>` だけ。WebFetch・`curl`・全文(`db=pmc`)は使わない。抄録に無い数値は使わない
+- キャプションの確かめは `/Users/hajimekitamura/OVERLOAD-PLUS/marketing/tools/morning.sh caption <caption.txtの絶対パス>…` だけ。`python -c` を自分で書かない(`print()` で包むだけで許可の形から外れ、2026-11-09 の品質チェックが2回とも止まった)
+- **Agent(サブエージェント)を使わない。** `tail`・`head`・`cat` も使わず Read を使う。確認待ちになるおそれのある呼び出しは Read などと同じメッセージに並べない(1つ止まると全部止まる)
 - git は使わない。リポジトリのファイルは読むだけ(例外は `reports/routines/morning-sns.md` への追記)。`.claude/` の下には何も書かない
 - Chrome(`mcp__claude-in-chrome__*`)は使わない
 - 手順に無いコマンドが要りそうなら、打たずに見送り、`morning-sns.md` に「足してほしいこと」として書く
