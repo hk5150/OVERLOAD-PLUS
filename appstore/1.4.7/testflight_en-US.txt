@@ -1,0 +1,4 @@
+What to check in 1.4.7 (50):
+1. Without the full unlock, the "Free workouts left" notice on the Split tab should not appear until 7 are left (no notice with 23 or fewer saved workouts).
+2. For an exercise logged in kg before, switch to lb: a set with the same weight and reps as last time should not light up green as a personal best.
+3. Page 2 of the guide should show the new "How many days a week?" screen.

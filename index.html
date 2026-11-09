@@ -338,7 +338,7 @@ const LEG_BW_SINCE_KEY = "leg-bw-since-v1";
 const PRE_IMPORT_BACKUP_KEY = "workout-log-v1-pre-import"; // バックアップ復元前のデータ退避(復元に失敗した場合の保険)
 // ヘッダーのバージョンバッジとバックアップのappVersionで共有する単一の定数。
 // sw.js の CACHE 定数とは tests/version.test.js が数字の一致を機械的に縛っている(CLAUDE.md参照)。
-const APP_VERSION = "v171";
+const APP_VERSION = "v172";
 // store(保存レイヤ)は src/domain/storage.js へ移設(テストのため)。
 // LIBSで<script src>読み込み済みなのでグローバルの store をそのまま参照できる。
 const uid = () => Math.random().toString(36).slice(2, 8);
@@ -3080,7 +3080,7 @@ function App() {
     // 前回押したときの「実施したセットがありません」を消す。persistより前に消すこと
     // (後で消すと、書き込み失敗時にpersistが出したエラーまで消してしまう)。
     clearErrorIf("log.noValidSets");
-    // 試用上限(10回)。空の記録を弾いた後に判定する — 何も入力していない状態で
+    // 試用上限(TRIAL_WORKOUT_LIMIT 回)。空の記録を弾いた後に判定する — 何も入力していない状態で
     // ペイウォールを出すと「何も記録していないのに課金を迫られた」という誤解を生む。
     // Web版はpurchasedが常にtrueなのでここには来ない。
     if (isTrialLimitReached(workouts.length, purchased, iapAvailable())) {
@@ -4452,7 +4452,7 @@ function App() {
         );
       })()}
 
-      {/* ===== ペイウォール(試用10回を超えたときのsaveWorkoutから) =====
+      {/* ===== ペイウォール(試用の上限を超えたときのsaveWorkoutから) =====
           記録・比較・グラフ・バックアップの閲覧は制限しない。保存の直前だけで判定する
           (saveWorkout参照)ので、このモーダルもshowPaywallの単発フラグで出すだけでよい。
           購入成功時も自動保存はしない。todayはそのまま残るので、ユーザーが改めて
@@ -4460,10 +4460,10 @@ function App() {
           絡む自動保存より、ユーザー操作を挟む方が事故が少ない)。 */}
       {showPaywall && (
         <div onClick={closePaywall} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.6)", zIndex: 90, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
-          <div ref={paywallModalRef} onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-label={t("paywall.title")} tabIndex={-1}
+          <div ref={paywallModalRef} onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-label={t("paywall.title", { n: TRIAL_WORKOUT_LIMIT })} tabIndex={-1}
             style={{ background: C.surface, borderRadius: "18px 18px 0 0", padding: "20px 20px calc(20px + env(safe-area-inset-bottom))", maxWidth: 520, width: "100%" }}>
-            <h2 style={{ fontSize: 18, fontWeight: 900, margin: "0 0 10px" }}>{t("paywall.title")}</h2>
-            {/* 試用の間にできたこと(UI レビュー B3)。以前は「試用は10回までです」と止めるだけで、何が得られていたかを見せていなかった */}
+            <h2 style={{ fontSize: 18, fontWeight: 900, margin: "0 0 10px" }}>{t("paywall.title", { n: TRIAL_WORKOUT_LIMIT })}</h2>
+            {/* 試用の間にできたこと(UI レビュー B3)。以前は「試用はN回までです」と止めるだけで、何が得られていたかを見せていなかった */}
             {(() => {
               const pg = trialProgress(workouts, ex => workingSets(ex).reduce((m, s) => (s.assisted || !s.reps) ? m : Math.max(m, est1RM(setEff(ex, s), s.reps, repsUncapped(ex))), 0), exVolume);
               return (

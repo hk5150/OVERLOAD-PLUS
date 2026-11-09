@@ -1,0 +1,3 @@
+• Your free trial now covers your first 30 workouts instead of 10 — about two months with every feature.
+• Fixed: in lb, lifting the same weight as last time could be marked as a new personal best.
+• The guide now shows the new "How many days a week?" screen.

@@ -508,10 +508,10 @@ const STRINGS = {
   "history.prCount":  { ja: "自己ベスト {n}",          en: "PR ×{n}" },
   "pr.weightByReps":   { ja: "{w}{unit}×{reps}回",     en: "{w}{unit} × {reps}" },
 
-  // ---- ペイウォール(記録タブ、試用10回を超えたとき) ----
+  // ---- ペイウォール(記録タブ、試用の上限 TRIAL_WORKOUT_LIMIT を超えたとき) ----
   "trial.left":        { ja: "無料で保存できる記録は、あと{n}回です", en: "Free workouts left: {n}" },
   "trial.buy":         { ja: "購入", en: "Unlock" },
-  "paywall.title":     { ja: "無料の10回を使い切りました", en: "You've used your 10 free workouts" },
+  "paywall.title":     { ja: "無料の{n}回を使い切りました", en: "You've used your {n} free workouts" },
   "paywall.body":      { ja: "今日の記録は消えずに残っています。購入すると、そのまま保存できます。ここまでの記録・比較・グラフ・バックアップは、購入しなくてもこのまま見られます。", en: "Today's workout is kept — unlock to save it as is. Everything you've logged (comparisons, charts, backups) stays available either way." },
   // 試用の間にできたこと(UI レビュー B3)
   "paywall.statPr":    { ja: "自己ベストの更新",       en: "PRs set" },
