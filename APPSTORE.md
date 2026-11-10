@@ -680,6 +680,16 @@ English:
   Playwright MCP のブラウザが使用中だったので、scratchpad の `playwright-core@1.63.0` から `~/Library/Caches/ms-playwright/chromium-1234` を直接起動した。
   シートが画面の下まで届くよう、`compose.html` の `shift`(ja 112 / en 154)で表示を上にずらしている
 
+### 1.4.7 (ビルド51) — 2026-11-10 9:50 に審査へ出し直し(App 内イベントと一緒に)
+
+(50) を出した後、App 内イベントは deepLink が必須と分かった(アプリに URL スキームが無かった)。北村さん「出し直してください」で
+`cancel 1.4.7 --apply --yes-cancel` → Info.plist に `kurabell://` を足したビルド 51(`993964d`、シミュレータで `simctl openurl` が KURABELL に解決されるのを確認)→
+TestFlight(VALID)→ `build 1.4.7 51 --apply` → 同じ提出に版と App 内イベント(ID 6832765386、deepLink `kurabell://open`)を入れて提出。WAITING_FOR_REVIEW。
+
+- App 内イベント: 大型アップデート(MAJOR_UPDATE)「「週に何回?」で今日のメニュー」/ EN「Pick your days, get a plan」。宣伝 11/10 12:00〜、イベント 11/13〜12/12。全地域。文面・画像は `appstore/events/1.4.6-weekly-menu/`、作り方は `scripts/asc/app-event.mjs`
+- 踏んだこと: deepLink は `kurabell://` だけだと「URL ではない」と弾かれる(`kurabell://open` にした)。画像を入れ直した直後は「処理中」で提出に入れられない。en-US の画像が UPLOAD_COMPLETE のまま15分以上進まず、入れ直したら通った
+- 取り下げた (50) の提出の後に作った空の提出(READY_FOR_REVIEW)を、この提出に使った(`metadata.mjs submit` は残っている提出を使うようにした)
+
 ### 1.4.7 (ビルド50) — 2026-11-10 8:39 に審査へ提出
 
 北村さんの「全て対応して」「はい」(11-10、このスレッドで直接)で `push 1.4.7 --apply` → `build 1.4.7 50 --apply` → `check`(提出できる状態)→ `submit 1.4.7 --apply --yes-submit`。WAITING_FOR_REVIEW。承認後に自動公開。
@@ -689,7 +699,7 @@ English:
 - 日本語キーワードは `appstore/1.4.7/ja/keywords.txt`(79字。競合の強い4語を外し、名前と重なる「前回比較」を外してデッドリフトを足した。`docs/ストア流入.md` の施策4)
 - 説明文・プロモーションテキスト・審査メモの「10回/11回目」を「30回/31回目」に。スクリーンショットは 1.4.6 の分を引き継ぎ
 - 印は自分の `release-1.4.7.md` だけ(10/29 の iPhone Duo の印は北村さんの「はい」で消した)。`--ignore-locks` はスレッドで本人が書いた「はい」の後で通った
-- 同じ日に、編集部への推薦(Featuring Nominations、APP_ENHANCEMENTS、公開予定 11/13)を API で提出した(ID `654f1c4a-…`)。App 内イベントは下書き(ID 6832765386、`scripts/asc/app-event.mjs`)。審査に出すには deepLink が必須で、アプリに URL スキームが無いので止まっている
+- 同じ日に、編集部への推薦(Featuring Nominations、APP_ENHANCEMENTS、公開予定 11/13)を API で提出した(ID `654f1c4a-…`)。App 内イベントはこの時点では下書き(deepLink 必須で止まった → 上の (51) で出し直した)
 
 ### 1.4.6 (ビルド49) — 2026-11-07 18:16 に審査へ提出
 

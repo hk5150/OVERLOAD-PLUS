@@ -62,12 +62,18 @@ for (const [l, t] of Object.entries(locs)) {
     : (await api("/v1/appEventLocalizations", { method: "POST", body: { data: { type: "appEventLocalizations", attributes: { locale: l, ...text },
         relationships: { appEvent: { data: { type: "appEvents", id: ev.id } } } } } })).data;
   console.log(`  ${l}: 文面を入れた`);
-  // 画像は入れ直す(同じ種類の古いものを消してから)
+  // 画像: 同じファイルが処理済み(COMPLETE)で入っていれば触らない。それ以外は古いものを消して入れ直す
+  // (2026-11-10、入れ直した en-US が UPLOAD_COMPLETE のまま15分以上進まなかったことがある。そのときは入れ直す)
   const old = await all(`/v1/appEventLocalizations/${loc.id}/appEventScreenshots`);
   for (const [type, f] of ASSETS) {
-    for (const o of old.filter((o) => o.attributes.appEventAssetType === type)) await api(`/v1/appEventScreenshots/${o.id}`, { method: "DELETE" });
     const file = path.join(DIR, f);
     const buf = readFileSync(file);
+    const same = old.filter((o) => o.attributes.appEventAssetType === type);
+    if (same.length === 1 && same[0].attributes.fileSize === buf.length && same[0].attributes.assetDeliveryState?.state === "COMPLETE") {
+      console.log(`  ${l}: ${type} は処理済みのまま`);
+      continue;
+    }
+    for (const o of same) await api(`/v1/appEventScreenshots/${o.id}`, { method: "DELETE" });
     const shot = (await api("/v1/appEventScreenshots", { method: "POST", body: { data: { type: "appEventScreenshots",
       attributes: { fileName: f, fileSize: statSync(file).size, appEventAssetType: type },
       relationships: { appEventLocalization: { data: { type: "appEventLocalizations", id: loc.id } } } } } })).data;
@@ -77,7 +83,7 @@ for (const [l, t] of Object.entries(locs)) {
       if (!res.ok) throw new Error(`${f} のアップロードに失敗(${res.status})`);
     }
     await api(`/v1/appEventScreenshots/${shot.id}`, { method: "PATCH", body: { data: { type: "appEventScreenshots", id: shot.id,
-      attributes: { uploaded: true } } } });
+      attributes: { uploaded: true } } } }); // appEventScreenshots には sourceFileChecksum が無い
     console.log(`  ${l}: ${type} に ${f} を上げた`);
   }
 }
