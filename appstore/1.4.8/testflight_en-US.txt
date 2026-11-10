@@ -2,5 +2,5 @@ What to check in 1.4.8 (52):
 1. While logging, the difference from last time to the right of each set (+2.5kg, reps +1, RIR+1, same, −2.5kg) and its color should look exactly as before.
 2. After saving a workout with exercises you've done before, the finish screen should show "Sets vs last time" (beat / same / below) and your biggest gain. The counts should match the green, grey and yellow differences on the set rows.
 3. On a day below your last-3 average, the finish screen should no longer show "short of". The bar at the top while logging still shows it.
-4. The Split tab should show "Set a weekly goal" once. After setting it, it turns into a "This week n / goal" line. Dismissing it with ✕ should hide it for good.
+4. The Split tab should show "Set a weekly goal" once. After setting it, it turns into a "This week n / goal" line. Dismissing it with the close button should hide it for good.
 5. In Settings, under Bodyweight, "Weekly goal" can be set to Off or 1–7 a week.
