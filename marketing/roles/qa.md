@@ -58,6 +58,7 @@
 
 ## 判定のあと
 
+- **JP と EN は別々に判定し、合格した方だけを予約に入れる。** 4-qa.md の判定は `判定: JP 合格 / EN 不合格` のように言語ごとに書く。前の回で合格して予約に入れた言語は、修正日のチェックでは見ない(二重に入れない)
 - **合格**: 予約の列の最後(次の番号。`reel.sh queue` で見る)に JP・EN それぞれ mp4・txt・jpg の3つを `cp` で入れる
   (`cp <final.mp4> /Users/hajimekitamura/Insta/kurabell/reels/予約/JP/00NN.mp4` のように1つずつ)。カルーセルは `mkdir -p` で次の番号のフォルダを作り、`out/*.jpg` と `caption.txt` を入れる。
   入れたら `/Users/hajimekitamura/Insta/.venv/bin/python /Users/hajimekitamura/Insta/kurabell/autopost.py --account jp --dry-run`(EN は `--account en`)でエラーが無いことを確かめる。
@@ -77,7 +78,7 @@
 `4-qa.md`(Write):
 ```
 状態: 完了
-判定: 合格 / 不合格
+判定: JP 合格|不合格 / EN 合格|不合格
 # 品質チェック YYYY-MM-DD <題>(<何回目のチェックか>)
 ## 項目ごとの結果
 | # | 項目 | JP | EN | 見たもの・根拠 |
