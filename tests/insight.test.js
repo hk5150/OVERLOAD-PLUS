@@ -689,6 +689,15 @@ describe("compareWithPrevious の数え方(セット行の色と1件も食い違
     expect(compareWithPrevious(exercises, prev)).toMatchObject({ up: 0, same: 2, down: 0 });
   });
 
+  it("回数が空(0)の行は保存されないので、RIR が入っていても数えない(番号は取る)", () => {
+    const exercises = [sampleExercise({ sets: [
+      sampleCurSet({ weight: 100, reps: "" }),
+      sampleCurSet({ weight: 50 }),
+    ] })];
+    const prev = prevSetsFrom({ [NAME]: [samplePrevSet({ weight: 100 }), samplePrevSet({ weight: 50 })] });
+    expect(compareWithPrevious(exercises, prev)).toMatchObject({ up: 0, same: 1, down: 0 });
+  });
+
   it("未実施(RIR未入力)の行は数えないが番号は取るので、後ろの行は前回の同じ番手と比べる", () => {
     const exercises = [sampleExercise({ sets: [
       sampleCurSet({ weight: 100, rir: "" }),

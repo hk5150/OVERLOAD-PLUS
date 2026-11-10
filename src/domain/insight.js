@@ -200,6 +200,8 @@ function compareWithPrevious(exercises, prevSetsOf, conv) {
       if (s.warmup) continue;
       ws++;
       const prev = prevSets[ws - 1];
+      // 回数が0の行は保存されない(saveWorkout)ので数えない。セット行には差が出るが、記録に残らないセットを「下回り」にしない
+      if (Math.round(insightNum(s.reps)) <= 0) continue;
       const d = setDelta(s, prev, c);
       if (!d) continue;
       if (d.kind === "up") up++; else if (d.kind === "down") down++; else same++;

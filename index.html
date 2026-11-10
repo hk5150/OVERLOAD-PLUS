@@ -1398,6 +1398,8 @@ function App() {
   // オンの表示になり、書き込みが黙って失敗し続ける(逆に、オンの端末に古いバックアップを戻すと黙ってオフになる)。
   const keepDeviceHealth = (restored) => ({
     ...restored, healthOn: profileRef.current.healthOn === true, healthBwAt: profileRef.current.healthBwAt ?? 0,
+    // 「週の目標を決めましょう」を閉じた(決めた)後に 1.4.8 より前のバックアップを読み込んでも、カードを出し直さない
+    weeklyGoalAsked: restored.weeklyGoalAsked || profileRef.current.weeklyGoalAsked === true,
   });
 
   // ヘルスケアの最新の体重が、最後に同期したときより新しければ設定の体重に反映する。
@@ -3273,7 +3275,8 @@ function App() {
     // メニューが組まれる(autoMenu)ので、定番を入れるとそれが定番に置き換わってしまう(reviewer 指摘。型を選び直す既存ユーザー)
     const hasHistoryFor = (d) => workouts.some(w => (w.exercises || []).some(e => muscleMatchesDay(normMuscle(e.muscle), d)));
     // 初めて分割を作るときだけ、週の目標が未設定なら型に合わせて入れる(「週に何回?」の答えを捨てない。1.4.8)
-    const goal = !split && normalizeWeeklyGoal(profile.weeklyGoal) == null ? PRESET_WEEKLY_GOAL[preset.id] : null;
+    // 設定で「なし」にした人・カードを ✕ で閉じた人(weeklyGoalAsked)には入れない(分割を削除して選び直したとき)
+    const goal = !split && !profile.weeklyGoalAsked && normalizeWeeklyGoal(profile.weeklyGoal) == null ? PRESET_WEEKLY_GOAL[preset.id] : null;
     persist({ split: { name: preset.name, days: preset.days.map(d => ({ name: d.name, muscles: [...d.muscles], ...(hasHistoryFor(d) ? {} : { exercises: starterPicks(d.muscles) }) })), cursor: 0, adductorV1: true },
       ...(goal ? { profile: { ...profile, weeklyGoal: goal, weeklyGoalAsked: true } } : {}) });
     setEditDay(null); setPickingSplit(false);
@@ -4325,7 +4328,7 @@ function App() {
                     );
                   })()}
                   {finishScreen.firstOfDay && (
-                    <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.6, marginTop: finishScreen.nextDayName ? 2 : 0 }}>
+                    <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.6, marginTop: finishScreen.nextDayName || finishScreen.week ? 2 : 0 }}>
                       {finishScreen.dayName ? t("finish.firstOfDay", { day: dayName(finishScreen.dayName) }) : t("finish.firstNoSplit")}
                     </div>
                   )}
