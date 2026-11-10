@@ -442,6 +442,10 @@ const defaultProfile = (p) => ({
   restLiveActivity: p?.restLiveActivity === true,
   // トレーニング日のお知らせ(UI レビュー A3)。{ on, days: 0=日〜6=土, time: "HH:MM" }。既定はオフ
   workoutReminder: normalizeWorkoutReminder(p?.workoutReminder),
+  // 週の目標(1.4.8)。1〜7 の整数か null(出さない)。バックアップから入る値もここで正す(src/domain/insight.js の normalizeWeeklyGoal)。
+  // weeklyGoalAsked は「週の目標を決めましょう」を1回出したか(決めても ✕ で閉じても true。2度と出さない)
+  weeklyGoal: normalizeWeeklyGoal(p?.weeklyGoal),
+  weeklyGoalAsked: p?.weeklyGoalAsked === true,
 });
 
 // extractWorkoutsArray・validateWorkoutsShapeは src/domain/backupValidation.js へ移設(テストのため)。
@@ -666,6 +670,8 @@ const resolveRom = (name, storedRom) => {
 // LIBSで<script src>読み込み済みなのでグローバル関数としてそのまま参照できる。
 
 // ================= 分割プリセット =================
+// 初めて分割を作るときに入れる週の目標(1.4.8)。型の「週○〜○回」に合わせる。目標を決めてある人には入れない
+const PRESET_WEEKLY_GOAL = { full: 2, ul: 3, ppl: 3, five: 5 };
 const SPLIT_PRESETS = [
   { id: "full", name: "全身法", days: [{ name: "全身", muscles: ["全身"] }] },
   { id: "ul", name: "上半身 / 下半身", days: [
@@ -960,7 +966,7 @@ class ErrorBoundary extends React.Component {
 // 新規インストール時、および全データ削除後の既定値(clearAllで再利用し、削除直後に古いprofileが復活しないようにする)
 // defaultProfile() と同じフィールドを持たせる。ここに書き忘れると、初回起動と
 // 「全データ削除」直後だけ値がundefinedになり、設定タブの選択状態が消える。
-const DEFAULT_PROFILE = { bodyweight: 70, soundOn: true, defTargetReps: 10, defIncrement: 2.5, lang: null, unit: null, aiService: DEFAULT_AI_SERVICE, healthOn: false, healthBwAt: 0, restNotifyMinutes: [1, 2, 3], restLiveActivity: false, workoutReminder: { on: false, days: [1, 3, 5], time: "19:00" } };
+const DEFAULT_PROFILE = { bodyweight: 70, soundOn: true, defTargetReps: 10, defIncrement: 2.5, lang: null, unit: null, aiService: DEFAULT_AI_SERVICE, healthOn: false, healthBwAt: 0, restNotifyMinutes: [1, 2, 3], restLiveActivity: false, workoutReminder: { on: false, days: [1, 3, 5], time: "19:00" }, weeklyGoal: null, weeklyGoalAsked: false };
 
 // ================= アプリ本体 =================
 // 文言中の「|」の位置だけで折り返す(日本語は語の途中でも折り返されるため、意味の切れ目を指定する)。
@@ -982,6 +988,8 @@ function App() {
   const legBwSinceRef = useRef(null); // LEG_BW_SINCE_KEY の値(読み込みで入る。復元でも同じ線で揃える)
   const [split, setSplit] = useState(null);
   const [profile, setProfile] = useState(DEFAULT_PROFILE);
+  // 「週の目標を決めましょう」のカードで選んでいる数(null の間は直近の平均 = suggestWeeklyGoal を選んだ状態で出す)
+  const [weekGoalPick, setWeekGoalPick] = useState(null);
   // 表示言語。LANGはi18n.jsのモジュール変数なので、Reactの状態と手で同期させる必要がある。
   // 子のレンダリングより先に確定していないと1フレーム古い言語で描画されるため、
   // useEffectではなくレンダリング中(useMemo)に反映する。
@@ -3123,6 +3131,15 @@ function App() {
         // Instagram 用の画像で ★ を付けるための内部名(prs は Watch に見せる表示名なので照合には使わない)
         prKeys: today.filter(ex => { const best = prMap[ex.name]?.best1RM || 0; return best > 0 && liveBest1RM(ex) > best + 0.01; }).map(ex => ex.name),
         hrLabel: t("watch.avgHr"),
+        // 前回と比べたセットの数(1.4.8)。セット行の差分と同じ規則・同じ相手(保存前の履歴の exerciseInsight)で数える。
+        // Watch の Finished(Codable)は知らないキーを読み飛ばすので、足しても Watch の表示は変わらない
+        compare: (() => {
+          const c = compareWithPrevious(today, name => exerciseInsight(name)?.sets, UNIT_CONV);
+          const b = c.best;
+          const best = b ? t("finish.best", { name: exName(b.name),
+            delta: b.by === "weight" ? setDeltaText(b) : t("finish.repsUp", { v: b.value }) }) : null;
+          return { up: c.up, same: c.same, down: c.down, best };
+        })(),
       };
     })();
     const entry = {
@@ -3209,8 +3226,17 @@ function App() {
     // 次に戻ってくる理由(UI レビュー A3)。次の Day と、この Day が初めてだったら「次にやると今日の記録が横に並ぶ」
     const nextDayName = nextSplit && nextSplit.days.length ? nextSplit.days[nextSplit.cursor % nextSplit.days.length].name : null;
     const firstOfDay = todayDay ? !dayHasRecords(todayDay.name) : workouts.length === 0;
+    // 週の目標(1.4.8)。この記録が今週に入ったときだけ出す(購入の前で止めた先週の記録を今週保存したとき等は出さない)
+    const week = (() => {
+      const goal = normalizeWeeklyGoal(profile.weeklyGoal);
+      if (goal == null) return null;
+      const now = Date.now();
+      const before = weekProgress(workouts, goal, now), after = weekProgress([...workouts, entry], goal, now);
+      if (after.thisWeek <= before.thisWeek) return null;
+      return { n: after.thisWeek, goal, streak: after.streak, justReached: after.reached && !before.reached };
+    })();
     setFinishScreen({ summary: finishedSummary, entry, beatPrevious, workoutsCount: workouts.length + 1,
-      nextDayName, firstOfDay, dayName: todayDay ? todayDay.name : null });
+      nextDayName, firstOfDay, dayName: todayDay ? todayDay.name : null, week });
     // レビューの依頼は、お疲れ様の画面を閉じた後に頼む(closeFinish。画面の上に重ねて出さない)
   };
 
@@ -3246,7 +3272,10 @@ function App() {
     // ただし、その Day の部位に合う種目を記録したことがある人には入れない。登録0件の Day は、部位が合う自分の過去の種目で
     // メニューが組まれる(autoMenu)ので、定番を入れるとそれが定番に置き換わってしまう(reviewer 指摘。型を選び直す既存ユーザー)
     const hasHistoryFor = (d) => workouts.some(w => (w.exercises || []).some(e => muscleMatchesDay(normMuscle(e.muscle), d)));
-    persist({ split: { name: preset.name, days: preset.days.map(d => ({ name: d.name, muscles: [...d.muscles], ...(hasHistoryFor(d) ? {} : { exercises: starterPicks(d.muscles) }) })), cursor: 0, adductorV1: true } });
+    // 初めて分割を作るときだけ、週の目標が未設定なら型に合わせて入れる(「週に何回?」の答えを捨てない。1.4.8)
+    const goal = !split && normalizeWeeklyGoal(profile.weeklyGoal) == null ? PRESET_WEEKLY_GOAL[preset.id] : null;
+    persist({ split: { name: preset.name, days: preset.days.map(d => ({ name: d.name, muscles: [...d.muscles], ...(hasHistoryFor(d) ? {} : { exercises: starterPicks(d.muscles) }) })), cursor: 0, adductorV1: true },
+      ...(goal ? { profile: { ...profile, weeklyGoal: goal, weeklyGoalAsked: true } } : {}) });
     setEditDay(null); setPickingSplit(false);
     // 初めて分割を作ったときは、組んだメニューが見える記録タブへ(UI レビュー 2026-11 の1)
     if (!split) { forgetTabScroll("log"); setView("log"); }
@@ -4239,8 +4268,31 @@ function App() {
               <h2 style={{ fontSize: 28, fontWeight: 900, margin: "6px 0 18px" }}>{s.title}</h2>
               <div style={{ fontSize: 12, fontWeight: 800, color: C.muted, letterSpacing: 1 }}>{t("finish.volume")}</div>
               <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 64, fontWeight: 800, lineHeight: 1 }}>{s.volume}</div>
-              {s.lines.length > 0 && (
-                <div style={{ fontSize: 13, color: s.over ? C.green : C.muted, marginTop: 6, lineHeight: 1.6 }}>{s.lines.join(" ")}</div>
+              {/* 前回と比べたセットの数(1.4.8)。色はセット行の差分と同じ(▲緑 / =灰 / ▼黄)。比べられるセットが無い日は出さない */}
+              {(() => {
+                const c = s.compare;
+                if (!c || c.up + c.same + c.down === 0) return null;
+                const cols = [["▲", c.up, C.green, "finish.cmpUp"], ["=", c.same, C.muted, "finish.cmpSame"], ["▼", c.down, C.yellow, "finish.cmpDown"]];
+                return (
+                  <div role="group" aria-label={t("finish.cmpAria", { up: c.up, same: c.same, down: c.down })} style={{ marginTop: 16 }}>
+                    <div aria-hidden="true" style={{ fontSize: 12, fontWeight: 800, color: C.muted, letterSpacing: 1 }}>{t("finish.cmpTitle")}</div>
+                    <div aria-hidden="true" style={{ display: "flex", gap: 8, marginTop: 4 }}>
+                      {cols.map(([mark, n, color, key]) => (
+                        <div key={key} style={{ flex: 1 }}>
+                          <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 34, fontWeight: 800, lineHeight: 1.05, color: n > 0 ? color : C.muted }}>
+                            <span style={{ fontSize: 20, marginRight: 4 }}>{mark}</span>{n}</div>
+                          <div style={{ fontSize: 12, color: C.muted }}>{t(key)}</div>
+                        </div>
+                      ))}
+                    </div>
+                    {c.best && <div style={{ fontSize: 13, fontWeight: 700, color: C.green, marginTop: 8 }}>{c.best}</div>}
+                  </div>
+                );
+              })()}
+              {/* 総ボリュームの基準との差。届いた日だけ小さく出す。届かなかった日の「あと○kg」は、
+                  足りない量で締めくくることになるので、お疲れ様の画面では出さない(記録中の上部バーと Watch には残す。2026-11-11 北村さん) */}
+              {s.over && s.lines.length > 0 && (
+                <div style={{ fontSize: 12, color: C.green, marginTop: 6, lineHeight: 1.6 }}>{s.lines.join(" ")}</div>
               )}
               {/* 今日鍛えた部位の人体図(北村さん、2026-10-11) */}
               {(() => {
@@ -4258,11 +4310,20 @@ function App() {
                 </div>
               )}
               {/* 次に戻ってくる理由(UI レビュー A3)。このアプリの価値(前回の記録が横に並ぶ)は、同じ Day の2回目で初めて見える */}
-              {(finishScreen.nextDayName || finishScreen.firstOfDay) && (
+              {(finishScreen.nextDayName || finishScreen.firstOfDay || finishScreen.week) && (
                 <div style={{ marginTop: 18, padding: "10px 12px", borderRadius: 10, background: C.surface, border: `1px solid ${C.border}` }}>
                   {finishScreen.nextDayName && (
                     <div style={{ fontSize: 14, fontWeight: 800 }}>{t("finish.next", { day: dayName(finishScreen.nextDayName) })}</div>
                   )}
+                  {/* 週の目標(1.4.8)。この保存で届いたら緑で「達成」。連続は2週目から出す */}
+                  {finishScreen.week && (() => {
+                    const w = finishScreen.week;
+                    return (
+                      <div style={{ fontSize: 13, fontWeight: w.justReached ? 800 : 600, color: w.justReached ? C.green : C.text, marginTop: finishScreen.nextDayName ? 2 : 0 }}>
+                        {w.justReached ? (w.streak >= 2 ? t("finish.weekDone", { streak: w.streak }) : t("finish.weekDone1")) : t("finish.week", { n: w.n, goal: w.goal })}
+                      </div>
+                    );
+                  })()}
                   {finishScreen.firstOfDay && (
                     <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.6, marginTop: finishScreen.nextDayName ? 2 : 0 }}>
                       {finishScreen.dayName ? t("finish.firstOfDay", { day: dayName(finishScreen.dayName) }) : t("finish.firstNoSplit")}
@@ -5521,6 +5582,46 @@ function App() {
       {view === "split" && (
         <div style={{ padding: "0 16px" }}>
           {/* 見出し(タブ名)は上の header に出るので、ここでは繰り返さない */}
+          {/* 週の目標(1.4.8)。目標があれば「今週 1 / 3回 ●○○ 3週連続」。週は月曜から(src/domain/insight.js の weekProgress)。
+              目標が無く、分割で記録したことがあり、まだ聞いていない人には1回だけ「週の目標を決めましょう」 */}
+          {!pickingSplit && (() => {
+            const goal = normalizeWeeklyGoal(profile.weeklyGoal);
+            if (goal != null) {
+              const wp = weekProgress(workouts, goal, Date.now());
+              return (
+                <div role="group" aria-label={t("week.aria", { n: wp.thisWeek, goal })}
+                  style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 10, background: C.surface, border: `1px solid ${C.border}`, marginBottom: 12 }}>
+                  <span aria-hidden="true" style={{ fontSize: 14, fontWeight: 800, whiteSpace: "nowrap" }}>{t("week.line", { n: wp.thisWeek, goal })}</span>
+                  <span aria-hidden="true" style={{ display: "inline-flex", gap: 4 }}>
+                    {Array.from({ length: goal }, (_, i) => (
+                      <span key={i} style={{ width: 10, height: 10, borderRadius: "50%", boxSizing: "border-box",
+                        background: i < wp.thisWeek ? (wp.reached ? C.green : C.yellow) : "transparent", border: `1.5px solid ${i < wp.thisWeek ? (wp.reached ? C.green : C.yellow) : C.grey}` }} />
+                    ))}
+                  </span>
+                  {wp.streak >= 2 && <span style={{ marginLeft: "auto", fontSize: 13, fontWeight: 800, color: C.green, whiteSpace: "nowrap" }}>{t("week.streak", { n: wp.streak })}</span>}
+                </div>
+              );
+            }
+            if (!split || workouts.length === 0 || profile.weeklyGoalAsked) return null;
+            const pick = weekGoalPick ?? suggestWeeklyGoal(workouts, Date.now());
+            const done = (g) => { setWeekGoalPick(null); persist({ profile: { ...profile, weeklyGoal: g, weeklyGoalAsked: true } }); };
+            return (
+              <div style={{ position: "relative", padding: "12px 12px 12px", borderRadius: 10, background: C.surface, border: `1px solid ${C.border}`, marginBottom: 12 }}>
+                <button onClick={() => done(null)} aria-label={t("common.close")} className="tapArea"
+                  style={{ position: "absolute", top: 8, right: 8, width: 26, height: 26, borderRadius: 8, border: `1px solid ${C.border}`, background: C.surface2, color: C.muted, fontSize: 13, cursor: "pointer" }}>✕</button>
+                <div style={{ fontSize: 15, fontWeight: 900, paddingRight: 32 }}>{t("week.askTitle")}</div>
+                <p style={{ color: C.muted, fontSize: 13, margin: "4px 0 10px", lineHeight: 1.6 }}>{t("week.askBody")}</p>
+                <div role="radiogroup" aria-label={t("cfg.weeklyGoal")} style={{ display: "flex", gap: 6, marginBottom: 10 }}>
+                  {[1, 2, 3, 4, 5, 6, 7].map(n => (
+                    <button key={n} role="radio" aria-checked={pick === n} onClick={() => setWeekGoalPick(n)}
+                      style={{ flex: 1, height: 36, borderRadius: 8, fontSize: 15, fontWeight: 800, cursor: "pointer", fontFamily: "'Barlow Condensed', sans-serif",
+                        border: `1px solid ${pick === n ? C.yellow : C.border}`, background: pick === n ? "rgba(232,179,60,0.15)" : C.surface2, color: pick === n ? C.yellow : C.text }}>{n}</button>
+                  ))}
+                </div>
+                <button onClick={() => done(pick)} style={{ ...btn(C.yellow, C.bg), width: "100%", padding: 12, fontSize: 14 }}>{t("week.askSet", { n: pick })}</button>
+              </div>
+            );
+          })()}
           {/* 無料の残りが少なくなったら、保存時のペイウォールより先にここで知らせる(購入の入口は設定の下にある) */}
           {iapAvailable() && !purchased && workouts.length < TRIAL_WORKOUT_LIMIT && TRIAL_WORKOUT_LIMIT - workouts.length <= TRIAL_NOTICE_FROM && (
             <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 8px 8px 12px", borderRadius: 10, background: C.surface, border: `1px solid ${C.border}`, marginBottom: 12 }}>
@@ -6380,6 +6481,16 @@ function App() {
                 onFocus={() => { bwBeforeEditRef.current = profile.bodyweight; }} onBlur={pushHealthWeight}
                 style={{ ...cfgInput, width: 70, fontSize: 16 }} /> {uLabel()}</span>
             </label>
+            {/* 週の目標(1.4.8)。分割タブの上の「今週 1 / 3回」と、お疲れ様の画面の1行 */}
+            <label style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 14, marginTop: 14 }}>
+              {t("cfg.weeklyGoal")}
+              <select value={profile.weeklyGoal ?? ""} onChange={e => persist({ profile: { ...profile, weeklyGoal: normalizeWeeklyGoal(e.target.value === "" ? null : e.target.value), weeklyGoalAsked: true } })}
+                style={{ ...cfgInput, width: 96, fontSize: 16 }}>
+                <option value="">{t("cfg.weeklyGoalNone")}</option>
+                {[1, 2, 3, 4, 5, 6, 7].map(n => <option key={n} value={n}>{t("week.perWeek", { n })}</option>)}
+              </select>
+            </label>
+            <p style={{ color: C.muted, fontSize: 12, margin: "6px 0 0", lineHeight: 1.6 }}>{t("cfg.weeklyGoalHelp")}</p>
           </div>
 
           {/* ヘルスケア連携(iOSでヘルスケアが使える端末だけ) */}
