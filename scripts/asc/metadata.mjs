@@ -6,7 +6,7 @@
 //   node scripts/asc/metadata.mjs push 1.4 --apply          # 版が無ければ作り、差分を書き込み、読み戻して確かめる
 //   node scripts/asc/metadata.mjs build 1.4 17 [--apply]    # 版にビルドを付ける
 //   node scripts/asc/metadata.mjs check 1.4                 # 提出できる状態か(ビルド・文面・スクリーンショット)を確かめる
-//   node scripts/asc/metadata.mjs submit 1.4 --apply --yes-submit   # 審査へ提出(北村さんの確認を取ってから)
+//   node scripts/asc/metadata.mjs submit 1.4 --apply --yes-submit   # 審査へ提出(北村さんの確認を取ってから)。--with-event <ID> で App 内イベントも同じ提出に入れる
 //   node scripts/asc/metadata.mjs cancel 1.4.1 --apply --yes-cancel # 審査待ち・審査中の提出を取り下げる(北村さんの確認を取ってから)
 //
 // ファイルの置き方(appstore/<版>/):
@@ -16,7 +16,7 @@
 // 無いファイルの項目は触らない。
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import path from "node:path";
-import { api, all, APP_ID, REPO, APPLY, has, positional, checkLocks, findVersion, findBuild, dryNote } from "./client.mjs";
+import { api, all, APP_ID, REPO, APPLY, has, opt, positional, checkLocks, findVersion, findBuild, dryNote } from "./client.mjs";
 
 const FIELDS = { description: "description.txt", keywords: "keywords.txt", promotionalText: "promotional_text.txt", whatsNew: "whats_new.txt" };
 const INFO_FIELDS = { name: "name.txt", subtitle: "subtitle.txt" };
@@ -217,10 +217,19 @@ else if (cmd === "check" || cmd === "submit") {
     if (problems.length) process.exit(1);
     if (!APPLY || !has("--yes-submit")) { console.log("\n審査へ出すには --apply --yes-submit の両方を付ける(北村さんの確認を取ってから)"); process.exit(0); }
     checkLocks();
-    const sub = (await api("/v1/reviewSubmissions", { method: "POST", body: { data: { type: "reviewSubmissions", attributes: { platform: "IOS" },
+    // 出す前の提出(READY_FOR_REVIEW)が残っていれば使う。新しく作ると、残っている方とぶつかることがある(2026-11-10)
+    const open = (await api(`/v1/reviewSubmissions?filter[app]=${APP_ID}&filter[state]=READY_FOR_REVIEW&filter[platform]=IOS&limit=5`)).data;
+    const sub = open[0] || (await api("/v1/reviewSubmissions", { method: "POST", body: { data: { type: "reviewSubmissions", attributes: { platform: "IOS" },
       relationships: { app: { data: { type: "apps", id: APP_ID } } } } } })).data;
     await api("/v1/reviewSubmissionItems", { method: "POST", body: { data: { type: "reviewSubmissionItems",
       relationships: { reviewSubmission: { data: { type: "reviewSubmissions", id: sub.id } }, appStoreVersion: { data: { type: "appStoreVersions", id: v.id } } } } } });
+    // --with-event <ID>: App 内イベントを同じ提出に入れる(scripts/asc/app-event.mjs で下書きを作ってから)
+    const eventId = opt("--with-event");
+    if (eventId) {
+      await api("/v1/reviewSubmissionItems", { method: "POST", body: { data: { type: "reviewSubmissionItems",
+        relationships: { reviewSubmission: { data: { type: "reviewSubmissions", id: sub.id } }, appEvent: { data: { type: "appEvents", id: eventId } } } } } });
+      console.log(`App 内イベント ${eventId} も同じ提出に入れた`);
+    }
     const done = (await api(`/v1/reviewSubmissions/${sub.id}`, { method: "PATCH", body: { data: { type: "reviewSubmissions", id: sub.id, attributes: { submitted: true } } } })).data;
     console.log(`審査へ提出した(${done.attributes.state}、${done.attributes.submittedDate ?? ""})`);
   }

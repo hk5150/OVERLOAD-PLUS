@@ -1,4 +1,4 @@
-// App Store の「App 内イベント」を作る(下書きまで。審査への提出は metadata.mjs submit で版と一緒に出す)。
+// App Store の「App 内イベント」を作る(下書きまで。審査への提出は metadata.mjs submit --with-event <ID> で版と一緒に出す)。
 //
 //   node scripts/asc/app-event.mjs              # 作る内容を見るだけ
 //   node scripts/asc/app-event.mjs --apply      # 無ければ作り、文面と画像を入れる(同じ referenceName があれば文面と画像だけ入れ直す)
@@ -17,6 +17,7 @@ const DIR = path.join(REPO, "appstore", "events", "1.4.6-weekly-menu");
 const EVENT = {
   referenceName: REF,
   badge: "MAJOR_UPDATE",
+  deepLink: "kurabell://open", // 審査に出すには必須(2026-11-10 に API で確かめた)。1.4.7 (51) から開ける
   purpose: "ATTRACT_NEW_USERS",
   purchaseRequirement: "NO_COST_ASSOCIATED",
   primaryLocale: "ja",
@@ -90,4 +91,4 @@ for (let i = 0; i < 30; i++) {
   if (states.length && states.every((s) => s === "COMPLETE")) { console.log(`画像 ${states.length}枚とも処理済み`); break; }
   await sleep(5000);
 }
-console.log(`イベント ${ev.id} の下書きができた。審査には版と一緒に出す(metadata.mjs submit が appEvents も足す)`);
+console.log(`イベント ${ev.id} の下書きができた。審査には版と一緒に出す(metadata.mjs submit <版> --apply --yes-submit --with-event ${ev.id})`);

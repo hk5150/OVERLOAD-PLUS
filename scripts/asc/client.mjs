@@ -67,7 +67,7 @@ export const argv = process.argv.slice(2);
 export const has = (flag) => argv.includes(flag);
 export const opt = (name, def = null) => { const i = argv.indexOf(name); return i >= 0 && argv[i + 1] != null ? argv[i + 1] : def; };
 // 値を取るオプション(この直後の語は位置引数に数えない)
-const VALUE_OPTS = ["--notes", "--dir", "--type", "--exclude", "--days", "--text", "--from"];
+const VALUE_OPTS = ["--notes", "--dir", "--type", "--exclude", "--days", "--text", "--from", "--with-event"];
 export const positional = () => argv.filter((a, i) => !a.startsWith("--") && !(i > 0 && VALUE_OPTS.includes(argv[i - 1])));
 export const APPLY = has("--apply");
 export const sleep = (ms) => new Promise(r => setTimeout(r, ms));
