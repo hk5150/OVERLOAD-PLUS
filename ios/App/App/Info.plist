@@ -29,6 +29,19 @@
 	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<!-- kurabell:// でアプリを開くだけのリンク(App 内イベントの deepLink 用、2026-11-10)。
+	     中身は見ない(どの URL でも普通に起動する)。docs/ダウンロード改善提案_2026-11.md の A2 -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.hajime5150.kurabellplus</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>kurabell</string>
+			</array>
+		</dict>
+	</array>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<!-- ヘルスケア連携の権限ダイアログの文言(英語。日本語は ja.lproj/InfoPlist.strings)。docs/ヘルスケア連携.md -->
