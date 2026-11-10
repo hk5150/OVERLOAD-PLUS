@@ -224,6 +224,8 @@ function compareWithPrevious(exercises, prevSetsOf, conv) {
 // 届いていない今週は数えず、切れたことにもしない(週の途中で「連続が途切れた」と見せない)。
 // 目標を変えたら過去の週も新しい目標で数え直す(週ごとの目標の履歴は持たない)。
 function normalizeWeeklyGoal(v) {
+  // 数と数字の文字列("3")だけを受ける。true は Number で 1 になるので弾く(バックアップに紛れた値を目標1にしない)
+  if (typeof v !== "number" && typeof v !== "string") return null;
   const x = Number(v);
   return Number.isInteger(x) && x >= 1 && x <= 7 ? x : null;
 }
