@@ -40,3 +40,4 @@
 - [下書きkeepと保存時刻](kurabell-draft-keep-stale-times.md) — 下書きの寿命を延ばすと、保存時に date/duration/kcal が保存時刻基準で壊れる(d5c1d38 B3)
 - [片脚bwのbackfillと保存値0](kurabell-bw-backfill-zero-ambiguity.md) — 2026-10-26: 保存値0=変更前/OFFの日の両義。上書きが後で変わると過去に係数。器具selectがbw:0を書く
 - [UNITグローバルとmemo依存](kurabell-unit-global-memo-deps.md) — toU/wU/snapKgはモジュール変数UNITを読む。prMapのdepsにunit無しで単位切替後に古いまま(2026-11-08)
+- [Watch ワークアウト再始動・終了の罠](watch-workout-restart-pitfall.md) — start() は走行中を捨てる。終了は syncWorkout のみ、lastSaved より recordStartAt 一致が優先
