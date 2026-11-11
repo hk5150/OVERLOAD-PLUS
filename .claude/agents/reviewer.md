@@ -1,6 +1,6 @@
 ---
 name: reviewer
-description: index.html / src/ / sw.js / scripts/ への変更を一区切り終えた直後、コミット前に使う。実装者は自分が書いたコードの前提を疑えないため、別文脈から粗探しする(実例: 英語文言の前置詞重複 "Carried over from From your split." が自己レビューをすり抜け、スクリーンショットを撮って初めて発覚した)。結果を「重大 / 改善提案 / 好みの問題」の3分類で返す。コードは絶対に修正しない。単に動作確認したいだけなら使わない(npm test は0.8秒なので自分で回す)。
+description: index.html / src/ / sw.js / scripts/ への変更を一区切り終えた直後、コミット前に使う。実装者は自分が書いたコードの前提を疑えないため、別文脈から粗探しする(実例: 英語文言の前置詞重複 "Carried over from From your split." が自己レビューをすり抜け、スクリーンショットを撮って初めて発覚した)。結果を「重大 / 改善提案 / 好みの問題」の3分類で返す。コードは絶対に修正しない。単に動作確認したいだけなら使わない(npm test は数秒なので自分で回す)。
 tools: Read, Grep, Glob, Bash
 memory: project
 ---

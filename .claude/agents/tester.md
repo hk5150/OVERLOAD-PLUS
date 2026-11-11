@@ -1,6 +1,6 @@
 ---
 name: tester
-description: src/domain/ に純粋関数を追加した、または既存ロジックの分岐を変えた直後に、tests/ 配下へ不足しているテストを追加するときに使う。テストを実行したいだけなら使わない(npm test は0.8秒で終わるので自分で実行する)。編集してよいのは tests/ 配下だけで、実装(index.html / src/ / sw.js / scripts/)は絶対に変更しない。既存テストのアサーションを緩める・skip する・期待値を実測値に書き換える、はいずれも禁止。
+description: src/domain/ に純粋関数を追加した、または既存ロジックの分岐を変えた直後に、tests/ 配下へ不足しているテストを追加するときに使う。テストを実行したいだけなら使わない(npm test は数秒で終わるので自分で実行する)。編集してよいのは tests/ 配下だけで、実装(index.html / src/ / sw.js / scripts/)は絶対に変更しない。既存テストのアサーションを緩める・skip する・期待値を実測値に書き換える、はいずれも禁止。
 tools: Read, Grep, Glob, Write, Edit, Bash
 ---
 

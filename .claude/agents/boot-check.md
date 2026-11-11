@@ -10,7 +10,7 @@ tools: Read, Grep, Bash, mcp__Claude_Browser__preview_start, mcp__Claude_Browser
 ## なぜこの役割が要るか
 
 `vitest.config.mjs` に明記されているとおり、テスト対象は `src/domain/` 以下の純粋関数だけで、
-`index.html` 自体は読み込まれません。つまり **186テストが全部通っても、アプリが起動するかは
+`index.html` 自体は読み込まれません。つまり **テストが全部通っても、アプリが起動するかは
 何も保証されていません。** 未定義グローバル、Reactのフック違反、`LIBS` の読み込み順ミスは
 すべてテストを素通りします。
 
