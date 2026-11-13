@@ -22,6 +22,9 @@
 - 場面のコマ: `/Users/hajimekitamura/OVERLOAD-PLUS/marketing/tools/reel.sh check <final.mp4> <作業フォルダ>/qa-frames 0.5 1.5 <各場面の中ほどの秒>…`
   (各場面の長さは `reel.sh durations <フォルダ>/audio`)。できた png を **全部 Read で見る**
 - 長さ・音量: `reel.sh inspect <final.mp4>`
+- 音声(耳の代わり): `/Users/hajimekitamura/OVERLOAD-PLUS/marketing/tools/morning.sh transcribe <フォルダ>/narr.mp4 <作業フォルダ>/qa-transcript-ja.txt ja`
+  (EN は `<EN のフォルダ>/narr.mp4 <作業フォルダ>/qa-transcript-en.txt en`)。書き起こしを Read で読み、制作が使ったナレーションの文(`3-production.md` に変えた文があればそれ、無ければ台本)と1文ずつ並べる。
+  **数字・研究の年・「クラベル / KURABELL」・単位・否定(〜ない)の聞き違いは項目8を ✗ にする。** 書き起こしの誤り(同音の漢字など、聞けば正しい読み)は ✗ にせず、並べた表に「書き起こしの誤り」と書く。2〜3分かかる
 - カバーの並び: `/Users/hajimekitamura/OVERLOAD-PLUS/marketing/tools/morning.sh grid <作業フォルダ>/qa-covers.png <新しい cover.jpg> <投稿済みの直近5本の jpg>…`
   (投稿済みは `/Users/hajimekitamura/Insta/kurabell/reels/投稿済み/JP/`。`reel.sh files` で新しい順に5本選ぶ)を Read で見る。
   許可の一覧に morning.sh が無いときは、新しいカバーと直近5本を1枚ずつ Read で見て比べる
@@ -46,7 +49,7 @@
 | 5 | 冒頭 | 1場面目の問いが14字以内(数えた字数を書く)・画面の上3分の1・写真が題材の場面そのもの。答えの予告が2場面目までにある |
 | 6 | 結論の向き | 答えの場面が問いと同じ向きでまっすぐ答えている(問いと答えの文を並べて書く) |
 | 7 | カバー | 問いかけ(結論にしない)・上に「エビデンスで筋トレ」・右下に KURABELL Workout Log のロゴ・字幕の帯なし・番号なし。直近2本と写真の種類(A/B/C)が違う。誰もいないジムの引きでない |
-| 8 | 長さ・音 | 40〜60秒(試しの幅があればその中)。平均音量が -17〜-20dB(目安は -18〜-19dB。外れていれば改善提案に書く)。字幕とナレーションがずれていない |
+| 8 | 長さ・音 | 40〜60秒(試しの幅があればその中)。書き起こしで、数字・年・アプリ名・否定が台本どおりに読まれている。平均音量が -17〜-20dB(目安は -18〜-19dB。外れていれば改善提案に書く)。字幕とナレーションがずれていない |
 | 9 | 画面 | 文字のはみ出し・重なり・2行を超える字幕・読みにくい改行が無い(コマの秒を挙げて書く)。アプリの画面は `screens/` の素材で、作り話の画面が無い |
 | 10 | キャプション | 決まった形の順(問いかけ2行の直後にアプリの1行、参考文献、`@hajimek_life @hajimek_workout`、ハッシュタグ5つ)。`morning.sh caption` が `OK` |
 | 11 | EN | 1〜10 を英語で。1場面目の問いが8語以内(数えた語数)。「Link in bio」が最後の2場面にある |

@@ -8,6 +8,7 @@
 #   morning.sh unlock                           朝の4役の作業中の印(.locks/morning-sns.md)を消す
 #   morning.sh caption <caption.txt>...         キャプションの長さとタグ数を確かめ、ファイルごとに OK か理由を出す
 #   morning.sh abstract <PMID>...               PubMed の抄録を eutils から読んで出す(数字の PMID だけ受ける)
+#   morning.sh transcribe <mp4> <出力.txt> <ja|en>  ナレーションを書き起こす(whisper.cpp。音声を耳で確かめる代わり)
 # 入力のファイルは消さない・上書きしない。
 set -euo pipefail
 
@@ -71,8 +72,26 @@ PY
       echo
     done
     ;;
+  transcribe)
+    # 2026-11-13 品質チェックが4回続けて「音声を誰も聞いていない」と指摘した。読み間違い(数字・英語・「クラベル」)を拾うため、
+    # 書き起こした文を台本と照らす。BGM の無い narr.mp4 を渡すと精度が上がる。
+    [ $# -eq 3 ] || { echo "使い方: morning.sh transcribe <mp4> <出力.txt> <ja|en>" >&2; exit 2; }
+    in="$1"; out="$2"; lang="$3"
+    [[ "$lang" == ja || "$lang" == en ]] || { echo "言語は ja か en" >&2; exit 2; }
+    [[ "$out" == *.txt ]] || { echo "出力は .txt" >&2; exit 2; }
+    model="/Users/hajimekitamura/.cache/whisper/ggml-large-v3-turbo-q5_0.bin"
+    [ -f "$model" ] || { echo "モデルが無い: $model" >&2; exit 2; }
+    hint="クラベル(KURABELL)は筋トレ記録アプリ。"   # 無いと固有名詞を「比べるなら」と書き起こす
+    [ "$lang" = en ] && hint="KURABELL is a workout log app."
+    tmp="$(mktemp -d)"
+    trap 'rm -rf "$tmp"' EXIT
+    ffmpeg -loglevel error -y -i "$in" -vn -ar 16000 -ac 1 -c:a pcm_s16le "$tmp/a.wav"
+    mkdir -p "$(dirname "$out")"
+    /opt/homebrew/bin/whisper-cli -m "$model" -l "$lang" -f "$tmp/a.wav" -otxt -of "${out%.txt}" -np --prompt "$hint" >/dev/null 2>&1
+    cat "$out"
+    ;;
   *)
-    sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'
     exit 2
     ;;
 esac
