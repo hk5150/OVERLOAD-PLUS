@@ -338,7 +338,7 @@ const LEG_BW_SINCE_KEY = "leg-bw-since-v1";
 const PRE_IMPORT_BACKUP_KEY = "workout-log-v1-pre-import"; // バックアップ復元前のデータ退避(復元に失敗した場合の保険)
 // ヘッダーのバージョンバッジとバックアップのappVersionで共有する単一の定数。
 // sw.js の CACHE 定数とは tests/version.test.js が数字の一致を機械的に縛っている(CLAUDE.md参照)。
-const APP_VERSION = "v173";
+const APP_VERSION = "v174";
 // store(保存レイヤ)は src/domain/storage.js へ移設(テストのため)。
 // LIBSで<script src>読み込み済みなのでグローバルの store をそのまま参照できる。
 const uid = () => Math.random().toString(36).slice(2, 8);
@@ -4850,6 +4850,8 @@ function App() {
       {/* ===== 記録タブ ===== */}
       {view === "log" && (
         <div style={{ padding: "0 16px" }}>
+          {/* 無料の残り回数(記録を始める前に目に入るよう一番上。分割タブ・お疲れ様の画面と同じ案内) */}
+          {trialNotice()}
           {/* 記録中は1行に畳む(2026-10-18、UI レビュー A2)。以前は記録中も部位・日数・AIコーチの大きなボタンが残り、
               1種目めのセット行が画面の半分より下から始まっていた。残りの組み直しは一覧の下のボタンと右下の丸いボタンにある */}
           {todayDay && today.length > 0 && (
@@ -4979,7 +4981,6 @@ function App() {
           )}
 
           <h2 style={{ fontSize: 16, fontWeight: 900, margin: "8px 0 12px" }}>{t("log.title")}</h2>
-          {trialNotice()}
 
           {today.length === 0 && (
             <div style={{ border: `1px dashed ${C.border}`, borderRadius: 14, padding: 20, color: C.muted, fontSize: 14, textAlign: "center", marginBottom: 16 }}>
