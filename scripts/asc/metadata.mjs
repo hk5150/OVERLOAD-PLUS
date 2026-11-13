@@ -257,4 +257,38 @@ else if (cmd === "cancel") {
   }
 }
 
+// 「要対応」の提出から却下された項目だけを外して出し直す(2026-11-14 に足した)。
+// 1.4.7 (51) は版が ACCEPTED なのに、同じ提出の App 内イベントが REJECTED で、提出全体が UNRESOLVED_ISSUES のまま止まった。
+// 却下された項目を外して submitted: true にすると、承認済みの版はそのまま公開に進む(イベント自体は下書きとして残る)。
+//   node scripts/asc/metadata.mjs drop-rejected 1.4.7                          # 外す項目を見るだけ
+//   node scripts/asc/metadata.mjs drop-rejected 1.4.7 --apply --yes-resubmit   # 外して出し直す(北村さんの確認を取ってから)
+else if (cmd === "drop-rejected") {
+  const v = await findVersion(ver);
+  if (!v) { console.error(`版 ${ver} が無い`); process.exit(1); }
+  // filter[state] を付けると UNRESOLVED_ISSUES の提出が返ってこなかった(2026-11-14)。新しい順に読んで手元で絞る
+  const subs = (await api(`/v1/apps/${APP_ID}/reviewSubmissions?filter[platform]=IOS&limit=10`)).data.filter(s => s.attributes.state === "UNRESOLVED_ISSUES");
+  let sub = null, items = [];
+  for (const s of subs) {
+    const its = (await api(`/v1/reviewSubmissions/${s.id}/items?include=appStoreVersion,appEvent`)).data; // include が無いと relationships の data が空
+    if (its.some(i => i.relationships?.appStoreVersion?.data?.id === v.id)) { sub = s; items = its; break; }
+  }
+  console.log(`版 ${ver}: ${v.attributes.appVersionState}`);
+  if (!sub) { console.log("この版を含む「要対応」の提出は無い"); process.exit(0); }
+  const what = (i) => i.relationships?.appStoreVersion?.data ? `版 ${ver}` : i.relationships?.appEvent?.data ? `App 内イベント ${i.relationships.appEvent.data.id}` : "その他";
+  console.log(`提出 ${sub.id}: ${sub.attributes.state}`);
+  for (const i of items) console.log(`  ${what(i)}: ${i.attributes.state}`);
+  const rejected = items.filter(i => i.attributes.state === "REJECTED");
+  if (!rejected.length) { console.log("却下された項目は無い"); process.exit(0); }
+  if (rejected.some(i => i.relationships?.appStoreVersion?.data)) { console.error("版そのものが却下されている。外さずに中身を直すこと"); process.exit(1); }
+  if (!APPLY || !has("--yes-resubmit")) { console.log("\n外して出し直すには --apply --yes-resubmit の両方を付ける(北村さんの確認を取ってから)"); process.exit(0); }
+  checkLocks();
+  for (const i of rejected) {
+    try { await api(`/v1/reviewSubmissionItems/${i.id}`, { method: "PATCH", body: { data: { type: "reviewSubmissionItems", id: i.id, attributes: { removed: true } } } }); }
+    catch (e) { console.log(`  removed で外せなかったので消す(${e.message?.slice(0, 120)})`); await api(`/v1/reviewSubmissionItems/${i.id}`, { method: "DELETE" }); }
+    console.log(`  外した: ${what(i)}`);
+  }
+  const done = (await api(`/v1/reviewSubmissions/${sub.id}`, { method: "PATCH", body: { data: { type: "reviewSubmissions", id: sub.id, attributes: { submitted: true } } } })).data;
+  console.log(`出し直した(${done.attributes.state})`);
+}
+
 else { console.error(`知らないコマンド: ${cmd}`); process.exit(1); }

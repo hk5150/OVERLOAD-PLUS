@@ -1,3 +1,7 @@
 • After you save a workout, see how many sets beat, matched or fell below last time, plus your biggest gain of the day.
 • New weekly goal: the Split tab shows this week's count and how many weeks in a row you've hit it. Change it anytime in Settings.
 • On days below your last-3 average, the finish screen no longer ends on what you were short of. The logging screen still shows it.
+• The big rest timer stays closed for the following sets once you tap Close (or turn it off in Settings).
+• The "How many days a week?" choices no longer overlap: 1–2, 3, 4, or 5+.
+• The unlock screen now says it's a one-time payment and has Restore Purchase. Free workouts left also show on the logging and finish screens.
+• After your first workout, History starts with that day instead of empty charts.

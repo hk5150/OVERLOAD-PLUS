@@ -440,6 +440,9 @@ const defaultProfile = (p) => ({
   // 休憩の Live Activity(ロック画面・Dynamic Island)。既定はオフ(北村さん、2026-10-09)。1.3 まで常にオンだった利用者も、
   // 保存していない項目なので更新後はオフになる
   restLiveActivity: p?.restLiveActivity === true,
+  // セットの余力を入れたときに、休憩の大きな表示(画面の下4割)を自動で開くか。既定は開く(今までどおり)。
+  // 開いても「閉じる」を押したら、その記録の間は自動では開かない(restCollapsedForRef)。アプリ本体の改善点 2026-11 の4
+  restAutoExpand: p?.restAutoExpand !== false,
   // トレーニング日のお知らせ(UI レビュー A3)。{ on, days: 0=日〜6=土, time: "HH:MM" }。既定はオフ
   workoutReminder: normalizeWorkoutReminder(p?.workoutReminder),
   // 週の目標(1.4.8)。1〜7 の整数か null(出さない)。バックアップから入る値もここで正す(src/domain/insight.js の normalizeWeeklyGoal)。
@@ -671,17 +674,17 @@ const resolveRom = (name, storedRom) => {
 
 // ================= 分割プリセット =================
 // 初めて分割を作るときに入れる週の目標(1.4.8)。型の「週○〜○回」に合わせる。目標を決めてある人には入れない
-const PRESET_WEEKLY_GOAL = { full: 2, ul: 3, ppl: 3, five: 5 };
+const PRESET_WEEKLY_GOAL = { full: 2, ul: 4, ppl: 3, five: 5 };
 const SPLIT_PRESETS = [
   { id: "full", name: "全身法", days: [{ name: "全身", muscles: ["全身"] }] },
-  { id: "ul", name: "上半身 / 下半身", days: [
-    { name: "上半身", muscles: ["大胸筋", "広背筋", "三角筋中部", "上腕二頭筋", "上腕三頭筋"] },
-    { name: "下半身", muscles: ["大腿四頭筋", "ハムストリングス", "臀部", "内転筋", "ふくらはぎ"] },
-  ]},
   { id: "ppl", name: "Push / Pull / Legs", days: [
     { name: "Push", muscles: ["大胸筋", "三角筋前部", "三角筋中部", "上腕三頭筋"] },
     { name: "Pull", muscles: ["広背筋", "三角筋後部", "上腕二頭筋"] },
     { name: "Legs", muscles: ["大腿四頭筋", "ハムストリングス", "臀部", "内転筋", "ふくらはぎ"] },
+  ]},
+  { id: "ul", name: "上半身 / 下半身", days: [
+    { name: "上半身", muscles: ["大胸筋", "広背筋", "三角筋中部", "上腕二頭筋", "上腕三頭筋"] },
+    { name: "下半身", muscles: ["大腿四頭筋", "ハムストリングス", "臀部", "内転筋", "ふくらはぎ"] },
   ]},
   { id: "five", name: "5分割(胸/背中/脚/肩/腕)", days: [
     { name: "胸", muscles: ["大胸筋"] },
@@ -966,7 +969,7 @@ class ErrorBoundary extends React.Component {
 // 新規インストール時、および全データ削除後の既定値(clearAllで再利用し、削除直後に古いprofileが復活しないようにする)
 // defaultProfile() と同じフィールドを持たせる。ここに書き忘れると、初回起動と
 // 「全データ削除」直後だけ値がundefinedになり、設定タブの選択状態が消える。
-const DEFAULT_PROFILE = { bodyweight: 70, soundOn: true, defTargetReps: 10, defIncrement: 2.5, lang: null, unit: null, aiService: DEFAULT_AI_SERVICE, healthOn: false, healthBwAt: 0, restNotifyMinutes: [1, 2, 3], restLiveActivity: false, workoutReminder: { on: false, days: [1, 3, 5], time: "19:00" }, weeklyGoal: null, weeklyGoalAsked: false };
+const DEFAULT_PROFILE = { bodyweight: 70, soundOn: true, defTargetReps: 10, defIncrement: 2.5, lang: null, unit: null, aiService: DEFAULT_AI_SERVICE, healthOn: false, healthBwAt: 0, restNotifyMinutes: [1, 2, 3], restLiveActivity: false, restAutoExpand: true, workoutReminder: { on: false, days: [1, 3, 5], time: "19:00" }, weeklyGoal: null, weeklyGoalAsked: false };
 
 // ================= アプリ本体 =================
 // 文言中の「|」の位置だけで折り返す(日本語は語の途中でも折り返されるため、意味の切れ目を指定する)。
@@ -1030,6 +1033,9 @@ function App() {
   // IAP(非消耗型・買い切りフル解除)。Web版はiapAvailable()が常にfalseを返すため
   // purchasedは事実上参照されず、試用制限自体が発動しない。詳細はdocs/IAP実装方針.mdを参照。
   const [purchased, setPurchased] = useState(false);
+  // 購入済みかを端末のキャッシュから読み終えたか。読む前に記録の読み込みが終わると、購入済みの人にも一瞬
+  // 「無料の30回を使い切りました」が出うる(trialNotice。reviewer 指摘)ので、それまでは案内を出さない
+  const [purchaseKnown, setPurchaseKnown] = useState(false);
   const [showPaywall, setShowPaywall] = useState(false);
   const [iapProduct, setIapProduct] = useState(null); // ペイウォール表示用の価格情報(getProductsの結果)
   const [iapBusy, setIapBusy] = useState(false); // 購入/復元の通信中(二重タップ防止)
@@ -1048,6 +1054,20 @@ function App() {
   }, []);
   const paywallModalRef = useRef(null);
   const closePaywall = () => { setShowPaywall(false); setIapError(""); };
+  // 購入の復元(設定と、保存時のペイウォールの両方から)。機種変更した人が31回目の保存で止まったとき、
+  // 以前はペイウォールに復元が無く、設定まで行く必要があった(アプリ本体の改善点 2026-11 の5)
+  const restoreIap = async () => {
+    setIapBusy(true); setIapError(""); setIapNotice(""); setIapPending(false);
+    try {
+      const ok = await restorePurchase();
+      if (ok !== null) { // null=サインインをキャンセル。何も表示しない
+        setPurchased(ok);
+        if (ok) { setIapNotice(t("settings.iap.restored")); setShowPaywall(false); }
+        else setIapError(t("settings.iap.restoreNotFound"));
+      }
+    } catch { setIapError(t("settings.iap.restoreFailed")); }
+    setIapBusy(false);
+  };
   useModalA11y(showPaywall, closePaywall, paywallModalRef);
   // ペイウォールを開いたとき、または設定タブを開いたときに価格を取り直す。
   // 起動時に先読みしない理由: 未購入者が試用上限に達するか設定を開くまでは
@@ -1077,6 +1097,9 @@ function App() {
   const [openSetKey, setOpenSetKey] = useState(null); // 展開中のセット "exId:index"
   const [openHist, setOpenHist] = useState({});       // 種目カードの履歴パネル開閉
   const [restFull, setRestFull] = useState(false);    // インターバルの全画面表示
+  // 休憩の大きな表示を「閉じる」で閉じた記録の startAt。同じ記録の間は、余力を入れても大きな表示を自動では開かない
+  // (以前は毎セット開き、1回の記録で15回ほど「閉じる」を押していた。アプリ本体の改善点 2026-11 の4)。上部バーの時計を押せば開く
+  const restCollapsedForRef = useRef(null);
   const [showSplitHistory, setShowSplitHistory] = useState(false); // 上部バーのボリュームタップ→同一分割の履歴一覧
   const splitHistoryModalRef = useRef(null);
   const closeSplitHistory = () => setShowSplitHistory(false);
@@ -1327,6 +1350,7 @@ function App() {
         if (p) { setIapPending(false); setShowPaywall(false); }
       });
       setPurchased(await readCachedPurchaseFlag());
+      setPurchaseKnown(true);
       try {
         setPurchased(await refreshPurchaseState());
       } catch { /* ネイティブ呼び出しに失敗してもキャッシュ値のまま運用を続ける */ }
@@ -4191,6 +4215,21 @@ function App() {
     }, 80);
   };
 
+  // 無料の残り回数の案内(分割タブ・記録タブ・お疲れ様の画面)。以前は分割タブだけで、記録タブで記録している人には
+  // 31回目の保存でいきなり止まったように見えた(アプリ本体の改善点 2026-11 の5)。使い切った後も、記録を始める前に分かるよう出す。
+  // 保存の直前で止める形(ペイウォール)は 10/18 の判断どおり残す
+  const trialNotice = (style) => {
+    if (!iapAvailable() || purchased || !purchaseKnown) return null;
+    const left = TRIAL_WORKOUT_LIMIT - workouts.length;
+    if (left > TRIAL_NOTICE_FROM) return null;
+    return (
+      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 8px 8px 12px", borderRadius: 10, background: C.surface, border: `1px solid ${C.border}`, marginBottom: 12, ...style }}>
+        <div style={{ flex: 1, minWidth: 0, fontSize: 13, color: C.text, lineHeight: 1.5 }}>{left > 0 ? t("trial.left", { n: left }) : t("trial.usedUp", { n: TRIAL_WORKOUT_LIMIT })}</div>
+        <button onClick={() => { if (finishScreen) closeFinish(); goToSettings("settings-iap"); }} style={{ ...btn("transparent", C.yellow), padding: "6px 6px", fontSize: 13, whiteSpace: "nowrap" }}>{t("trial.buy")} ›</button>
+      </div>
+    );
+  };
+
   // scrollIntoViewのscroll-marginではsafe-areaぶんを式で書けないので、自分で位置を計算する。
   const scrollToCurrentEx = () => {
     const el = currentEx && document.getElementById(`ex-${currentEx.id}`);
@@ -4340,6 +4379,7 @@ function App() {
                   )}
                 </div>
               )}
+              {trialNotice({ marginTop: 12, marginBottom: 0 })}
             </div>
             <div style={{ maxWidth: 460, width: "100%", margin: "20px auto 0", display: "flex", flexDirection: "column", gap: 8 }}>
               <button onClick={() => consultAi(workoutToText(finishScreen.entry), "finish")}
@@ -4438,7 +4478,7 @@ function App() {
               style={{ ...btn(C.surface2, C.text), flex: 1, padding: "11px 0", fontSize: 13, border: `1px solid ${C.border}` }}>
               {t("common.reset")}
             </button>
-            <button onClick={() => setRestFull(false)}
+            <button onClick={() => { restCollapsedForRef.current = startAt; setRestFull(false); }}
               style={{ ...btn(C.surface2, C.muted), flex: 1, padding: "11px 0", fontSize: 13, border: `1px solid ${C.border}` }}>
               {t("common.close")}
             </button>
@@ -4564,9 +4604,16 @@ function App() {
             }} style={{ ...btn(C.yellow, C.bg), width: "100%", padding: 16, fontSize: 16, opacity: iapBusy ? 0.6 : 1 }}>
               {t("paywall.unlock", { price: iapProduct?.displayPrice ?? "…" })}
             </button>
-            <button onClick={closePaywall} style={{ ...btn("transparent", C.muted), width: "100%", padding: 12, fontSize: 13, marginTop: 6 }}>
-              {t("paywall.later")}
-            </button>
+            {/* 買い切りであること(サブスクの筋トレアプリが多く、「月額では」と身構える人がいる)。アプリ本体の改善点 2026-11 の5 */}
+            <p style={{ fontSize: 12, color: C.muted, lineHeight: 1.6, margin: "8px 0 0", textAlign: "center" }}>{t("paywall.oneTime")}</p>
+            <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+              <button onClick={closePaywall} style={{ ...btn("transparent", C.muted), flex: 1, padding: 12, fontSize: 13 }}>
+                {t("paywall.later")}
+              </button>
+              <button disabled={iapBusy} onClick={restoreIap} style={{ ...btn("transparent", C.muted), flex: 1, padding: 12, fontSize: 13, opacity: iapBusy ? 0.6 : 1 }}>
+                {t("settings.iap.restore")}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -4932,6 +4979,7 @@ function App() {
           )}
 
           <h2 style={{ fontSize: 16, fontWeight: 900, margin: "8px 0 12px" }}>{t("log.title")}</h2>
+          {trialNotice()}
 
           {today.length === 0 && (
             <div style={{ border: `1px dashed ${C.border}`, borderRadius: 14, padding: 20, color: C.muted, fontSize: 14, textAlign: "center", marginBottom: 16 }}>
@@ -5261,7 +5309,13 @@ function App() {
 
               <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 4 }}>
                 <span style={{ width: 20 }} />
-                <span style={{ flex: 1.3, ...fieldLabel }}>{weightLabelOf(ex)}</span>
+                {/* 片手の種目は「重量 kg/片手」を1行で出すと 393px でも「片/手」で折り返していた(アプリ本体の改善点 2026-11 の7)。
+                    右の「あと何回できた?(RIR)」がもともと2行なので、片手は2行目に回す。Watch は weightLabelOf の1行のまま */}
+                <span style={{ flex: 1.3, ...fieldLabel }}>
+                  {resolveIsDb(ex.name, ex.isDb)
+                    ? <>{t(ex.bwFactor > 0 ? "set.weightAdded" : "set.weight", { unit: uLabel() })}<br /><span style={{ whiteSpace: "nowrap" }}>{t("menu.perHand")}</span></>
+                    : weightLabelOf(ex)}
+                </span>
                 <span style={{ flex: 1, ...fieldLabel }}>{t("set.reps")}</span>
                 <span style={{ width: 26 }} />
                 <span style={{ flex: 2.4, ...fieldLabel }}>{t("rir.question")}{" "}<span style={{ opacity: 0.7 }}>(RIR)</span></span>
@@ -5347,7 +5401,12 @@ function App() {
                             celebrateBest(ex.name, Math.max(pastBest1RM, todayBest), row1RM);
                           }
                         }
-                        if (v !== "" && isLastInGroup(exIdx)) { startRest(); setRestFull(true); revealNextSet(ex.id, i); }
+                        if (v !== "" && isLastInGroup(exIdx)) {
+                          startRest();
+                          if (profile.restAutoExpand && (startAt == null || restCollapsedForRef.current !== startAt)) setRestFull(true);
+                          // 手で開き直した後も次のセットをパネルの上に送る(パネルが閉じていれば何もしない。reviewer 指摘)
+                          revealNextSet(ex.id, i);
+                        }
                       }} />
                     </div>
                     <button onClick={() => removeSet(ex.id, i)} aria-label={t("set.removeAria", { n: i + 1 })} className="tapArea"
@@ -5626,12 +5685,7 @@ function App() {
             );
           })()}
           {/* 無料の残りが少なくなったら、保存時のペイウォールより先にここで知らせる(購入の入口は設定の下にある) */}
-          {iapAvailable() && !purchased && workouts.length < TRIAL_WORKOUT_LIMIT && TRIAL_WORKOUT_LIMIT - workouts.length <= TRIAL_NOTICE_FROM && (
-            <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 8px 8px 12px", borderRadius: 10, background: C.surface, border: `1px solid ${C.border}`, marginBottom: 12 }}>
-              <div style={{ flex: 1, minWidth: 0, fontSize: 13, color: C.text }}>{t("trial.left", { n: TRIAL_WORKOUT_LIMIT - workouts.length })}</div>
-              <button onClick={() => goToSettings("settings-iap")} style={{ ...btn("transparent", C.yellow), padding: "6px 6px", fontSize: 13, whiteSpace: "nowrap" }}>{t("trial.buy")} ›</button>
-            </div>
-          )}
+          {trialNotice()}
           {/* 「今日」の決まり方の説明は、分割で1回以上記録してから(分割を作る前の人には意味が通らない。UI レビュー C1) */}
           {split && !pickingSplit && workouts.length > 0 && <p style={{ color: C.muted, fontSize: 13, margin: "0 0 12px" }}>{t("split.rotation")}</p>}
           {(!split || pickingSplit) ? (
@@ -5920,7 +5974,12 @@ function App() {
               </div>
             </div>
           )}
-          {workouts.length > 0 && (
+          {/* 記録が1回だけのうちは、グラフ2枚(どちらも「2回以上記録すると…」の空欄)と自己ベストを出さず、
+              1行の案内の下にその日の記録を先頭に出す(1回目を保存した直後の履歴が空のグラフで始まっていた。アプリ本体の改善点 2026-11 の6) */}
+          {workouts.length === 1 && (
+            <div style={{ color: C.muted, fontSize: 13, lineHeight: 1.6, margin: "4px 0 12px" }}>{t("history.firstHint")}</div>
+          )}
+          {workouts.length >= 2 && (
             <>
               {/* ボリューム推移(トータル / 部位別) */}
               <div style={{ background: C.surface, borderRadius: 14, padding: 14, border: `1px solid ${C.border}`, marginBottom: 12 }}>
@@ -6038,7 +6097,7 @@ function App() {
 
           {/* PR(自己ベスト)一覧。以前は履歴の一番下(全部の日の後ろ)にあって、まず見られなかった。グラフのすぐ下に移し、
               最近更新した種目から並べる。全部は畳む(UI レビュー B2) */}
-          {Object.keys(prMap).length > 0 && (() => {
+          {workouts.length >= 2 && Object.keys(prMap).length > 0 && (() => {
             const rows = Object.entries(prMap).sort((a, b) => (Date.parse(b[1].date) || 0) - (Date.parse(a[1].date) || 0) || b[1].bestWeight - a[1].bestWeight);
             const shown = showAllPr ? rows : rows.slice(0, PR_ROWS_FOLDED);
             return (
@@ -6774,6 +6833,18 @@ function App() {
                 {t("settings.notifyDenied")}
               </p>
             )}
+            {/* セットの後に休憩の大きな表示を自動で開くか(アプリ本体の改善点 2026-11 の4)。閉じれば、その記録の間は開かない */}
+            <div style={{ borderTop: `1px solid ${C.border}`, marginTop: 14, paddingTop: 14 }}>
+              <label style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 14, gap: 12 }}>
+                {t("settings.restAutoExpand")}
+                <button onClick={() => persist({ profile: { ...profile, restAutoExpand: !profile.restAutoExpand } })}
+                  role="switch" aria-checked={!!profile.restAutoExpand} aria-label={t("settings.restAutoExpand")}
+                  style={{ width: 52, height: 30, borderRadius: 999, border: "none", cursor: "pointer", background: profile.restAutoExpand ? C.green : C.grey, position: "relative", flexShrink: 0 }}>
+                  <span style={{ position: "absolute", top: 3, left: profile.restAutoExpand ? 25 : 3, width: 24, height: 24, borderRadius: "50%", background: "#fff", transition: "left .15s" }} />
+                </button>
+              </label>
+              <p style={{ color: C.muted, fontSize: 13, margin: "8px 0 0", lineHeight: 1.6 }}>{t("settings.restAutoExpandDesc")}</p>
+            </div>
             {/* 休憩をロック画面・Dynamic Island に出す(Live Activity)。音・通知とは別なので、音がオフでも出す。iOS 版だけ */}
             {isNativeApp() && (
               <div style={{ borderTop: `1px solid ${C.border}`, marginTop: 14, paddingTop: 14 }}>
@@ -6860,18 +6931,9 @@ function App() {
                   {t("settings.iap.unlock", { price: iapProduct?.displayPrice ?? "…" })}
                 </button>
               )}
-              <button disabled={iapBusy} onClick={async () => {
-                setIapBusy(true); setIapError(""); setIapNotice(""); setIapPending(false);
-                try {
-                  const ok = await restorePurchase();
-                  if (ok !== null) { // null=サインインをキャンセル。何も表示しない
-                    setPurchased(ok);
-                    if (ok) setIapNotice(t("settings.iap.restored"));
-                    else setIapError(t("settings.iap.restoreNotFound"));
-                  }
-                } catch { setIapError(t("settings.iap.restoreFailed")); }
-                setIapBusy(false);
-              }} style={{ ...btn(C.surface2, C.text), width: "100%", padding: 14, fontSize: 14, border: `1px solid ${C.border}`, opacity: iapBusy ? 0.6 : 1 }}>
+              {!purchased && <p style={{ color: C.muted, fontSize: 12, lineHeight: 1.6, margin: "0 0 10px" }}>{t("paywall.oneTime")}</p>}
+              <button disabled={iapBusy} onClick={restoreIap}
+                style={{ ...btn(C.surface2, C.text), width: "100%", padding: 14, fontSize: 14, border: `1px solid ${C.border}`, opacity: iapBusy ? 0.6 : 1 }}>
                 {t("settings.iap.restore")}
               </button>
             </div>

@@ -424,10 +424,11 @@ const STRINGS = {
   "split.logWithoutSplit": { ja: "分割を作らずに、種目を選んで記録する ›", en: "Skip this and pick exercises to log ›" },
   "preset.full.freq":  { ja: "週1〜2回",  en: "1–2 days a week" },
   "preset.full.desc":  { ja: "毎回、全身を少しずつ", en: "A little of everything each time" },
-  "preset.ul.freq":    { ja: "週2〜4回",  en: "2–4 days a week" },
+  // 週の回数は重ならないように 1〜2 / 3 / 4 / 5以上 で分ける(以前の「週2〜4回」「週3〜6回」は週3回の人がどちらを選ぶか迷った。アプリ本体の改善点 2026-11 の7)
+  "preset.ul.freq":    { ja: "週4回",  en: "4 days a week" },
   "preset.ul.desc":    { ja: "上半身の日と下半身の日を交互に", en: "Alternate upper-body and lower-body days" },
-  "preset.ppl.freq":   { ja: "週3〜6回",  en: "3–6 days a week" },
-  "preset.ppl.desc":   { ja: "押す日(胸・肩・二の腕)、引く日(背中・力こぶ)、脚の日", en: "Push (chest, shoulders, triceps), pull (back, biceps), legs" },
+  "preset.ppl.freq":   { ja: "週3回",  en: "3 days a week" },
+  "preset.ppl.desc":   { ja: "押す日(胸・肩・二の腕)、引く日(背中・力こぶ)、脚の日。週6回なら2周", en: "Push (chest, shoulders, triceps), pull (back, biceps), legs. Twice through for 6 days" },
   "preset.five.freq":  { ja: "週5回以上", en: "5+ days a week" },
   "preset.five.desc":  { ja: "胸・背中・脚・肩・腕を1日1か所ずつ", en: "One area a day: chest, back, legs, shoulders, arms" },
   "mgroup.chest":      { ja: "胸",   en: "Chest" },
@@ -495,6 +496,7 @@ const STRINGS = {
   "chart.weekOf":      { ja: "{m}/{d}週",              en: "Week of {m}/{d}" },
 
   // ---- 履歴タブ ----
+  "history.firstHint": { ja: "2回目を記録すると、ここにボリュームと重量の推移、自己ベストの一覧が出ます。", en: "Log a second workout to see volume and weight trends and your PRs here." },
   "history.title":     { ja: "履歴",                   en: "History" },
   "history.count":     { ja: "履歴 {n}回",             en: "History · {n}" },
   "history.empty":     { ja: "まだ記録がありません。", en: "No records yet." },
@@ -533,6 +535,7 @@ const STRINGS = {
 
   // ---- ペイウォール(記録タブ、試用の上限 TRIAL_WORKOUT_LIMIT を超えたとき) ----
   "trial.left":        { ja: "無料で保存できる記録は、あと{n}回です", en: "Free workouts left: {n}" },
+  "trial.usedUp":      { ja: "無料の{n}回を使い切りました。これからの記録の保存には購入が必要です(ここまでの記録はそのまま見られます)", en: "You've used your {n} free workouts. Unlock to keep saving workouts (everything so far stays viewable)." },
   "trial.buy":         { ja: "購入", en: "Unlock" },
   "paywall.title":     { ja: "無料の{n}回を使い切りました", en: "You've used your {n} free workouts" },
   "paywall.body":      { ja: "今日の記録は消えずに残っています。購入すると、そのまま保存できます。ここまでの記録・比較・グラフ・バックアップは、購入しなくてもこのまま見られます。", en: "Today's workout is kept — unlock to save it as is. Everything you've logged (comparisons, charts, backups) stays available either way." },
@@ -540,6 +543,7 @@ const STRINGS = {
   "paywall.statPr":    { ja: "自己ベストの更新",       en: "PRs set" },
   "paywall.statVolume": { ja: "持ち上げた合計",        en: "Total lifted" },
   "paywall.unlock":    { ja: "{price}でフル解除",       en: "Unlock for {price}" },
+  "paywall.oneTime":   { ja: "1回だけの支払いです。サブスクリプションではなく、自動で更新・請求されることはありません。", en: "One-time payment. Not a subscription — nothing renews or bills again." },
   "paywall.later":     { ja: "あとで",                 en: "Not now" },
   "paywall.priceLoadFailed": { ja: "価格を取得できませんでした。電波の良い場所でもう一度お試しください。", en: "Couldn't load the price. Please try again with a better connection." },
   "paywall.purchaseFailed": { ja: "購入を完了できませんでした。もう一度お試しください。", en: "Couldn't complete the purchase. Please try again." },
@@ -585,6 +589,8 @@ const STRINGS = {
   "settings.equipment": { ja: "器具",                  en: "Equipment" },
   "settings.other":    { ja: "その他",                 en: "Other" },
   "settings.sound":    { ja: "インターバルの通知",     en: "Rest timer alerts" },
+  "settings.restAutoExpand":     { ja: "セットの後に大きなタイマーを出す", en: "Big timer after each set" },
+  "settings.restAutoExpandDesc": { ja: "余力を入れると、画面の下に大きな休憩タイマーが開きます。「閉じる」を押すと、それからのセットでは開かず、上の時計だけで数えます。", en: "Entering RIR opens a big rest timer at the bottom. Tap Close and it stays closed for the following sets; the clock at the top keeps counting." },
   "settings.liveActivity":     { ja: "休憩をロック画面に表示", en: "Show rest on the Lock Screen" },
   "settings.liveActivityDesc": { ja: "休憩の経過時間をロック画面と Dynamic Island に出します(ライブアクティビティ)。上の通知とは別です。", en: "Shows the rest timer on the Lock Screen and in the Dynamic Island (Live Activity). Separate from the alerts above." },
   // トレーニング日のお知らせ(UI レビュー A3)。端末内の通知
