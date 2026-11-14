@@ -3,7 +3,7 @@ Nothing to remember. Just beat last time.
 
 The name KURABELL (koo-rah-bell) comes from kuraberu, Japanese for "to compare" — plus the bell in dumbbell and barbell. Compare with your last session, then beat it.
 
-Your first 30 workouts are free, with every feature included.
+Your first 10 workouts are free, with every feature included.
 Like it? Unlock the full app with a single purchase. No subscription.
 
 ■ Beat your last session, set by set
@@ -42,7 +42,7 @@ Tap "Ask AI Coach" and your log is copied to the clipboard along with a request,
 ・JSON backup and restore, CSV export
 
 ■ Pricing
-・Your first 30 workouts are free, with every feature
+・Your first 10 workouts are free, with every feature
 ・Saving your 31st workout requires the one-time full unlock (in-app purchase)
 ・Everything you logged before that — history, charts, backups — stays available without buying
 ・No monthly or yearly fees

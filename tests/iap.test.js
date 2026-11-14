@@ -30,17 +30,17 @@ describe("isTrialLimitReached", () => {
     expect(isTrialLimitReached(999, true, true)).toBe(false);
   });
 
-  it("29件保存済みまでは制限に達しない", () => {
+  it("9件保存済みまでは制限に達しない", () => {
     const { isTrialLimitReached } = load();
-    expect(isTrialLimitReached(29, false, true)).toBe(false);
+    expect(isTrialLimitReached(9, false, true)).toBe(false);
   });
 
-  it("30件保存済み(=31回目の保存)で制限に達する", () => {
+  it("10件保存済み(=11回目の保存)で制限に達する", () => {
     const { isTrialLimitReached } = load();
-    expect(isTrialLimitReached(30, false, true)).toBe(true);
+    expect(isTrialLimitReached(10, false, true)).toBe(true);
   });
 
-  it("30件を超えても制限は変わらずtrue", () => {
+  it("10件を超えても制限は変わらずtrue", () => {
     const { isTrialLimitReached } = load();
     expect(isTrialLimitReached(50, false, true)).toBe(true);
   });
@@ -309,7 +309,7 @@ describe("restorePurchase", () => {
 describe("定数の公開", () => {
   it("TRIAL_WORKOUT_LIMITとIAP_PRODUCT_IDがglobalThisに公開されている", () => {
     const m = load();
-    expect(m.TRIAL_WORKOUT_LIMIT).toBe(30);
+    expect(m.TRIAL_WORKOUT_LIMIT).toBe(10);
     expect(typeof m.IAP_PRODUCT_ID).toBe("string");
     expect(m.IAP_PRODUCT_ID.length).toBeGreaterThan(0);
   });

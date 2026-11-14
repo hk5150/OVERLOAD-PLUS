@@ -1,3 +1,6 @@
+What to check in 1.4.8 (54):
+1. Free saves are back to 10 (the notice starts at 7 left, and the 11th save shows the unlock screen).
+
 What to check in 1.4.8 (53), on top of (52):
 1. Entering RIR opens the big rest timer. After you tap Close, the next sets should not open it again (tap the clock at the top to open it).
 2. With "Big timer after each set" off in Settings, it should not open at all.
