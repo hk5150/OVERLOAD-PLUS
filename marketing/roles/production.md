@@ -12,7 +12,7 @@
    - `状態: 完了(前日分のチェック)` → 何も作らない。前日の `3-production.md` を Read で読み、同じ中身を今日の `3-production.md` に Write して終わる(チェックが今日それを見る)
    - `状態: 完了` 以外 → `3-production.md` に `状態: 見送り(前の役が未完了)` と書いて終わる
 
-作る前に Obsidian `Projects/kurabell-morning-lessons.md` の「必ず守ること」を読み、制作で守るものを `3-production.md` に書き写してから始める。
+作る前に 学びのノート(Notion の「朝の4役 学び」(データベース。data_source_id `41c4d3c4-71e8-8136-a767-000b79d6d102`、読み方・書き方は `docs/Notion運用データ.md`)) の「必ず守ること」を読み、制作で守るものを `3-production.md` に書き写してから始める。
 
 ## リールの作り方(道具は13時のルーティンと同じ。すべて絶対パス・1回に1コマンド)
 

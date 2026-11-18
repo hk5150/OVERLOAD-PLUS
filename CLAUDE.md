@@ -182,11 +182,13 @@ Web 版の起動確認(8765)は開発中の確認手段としては引き続き�
   2026-10-16 に `.claude/locks/` から移した。表示の仕組みと `scripts/asc/client.mjs` は旧置き場もまだ読む
 - 日次ルーティンの結果は、毎回 `reports/routines/<名前>.md` の末尾に足される(gitに入れず、このMacに置くだけ)
 - **日次ルーティン「【毎日12時】KURABELL App Store実績」**(scheduled task `kurabell-appstore-metrics`、毎日12:12頃)も同じ印を使う。
-  App Store Connect API(`~/.appstoreconnect/`、分析レポートが出る前は Chrome の分析画面で補う)で読むだけで、その間 `appstore-metrics.md` の印を出す。結果は Obsidian の
-  `Projects/kurabell-metrics.md`(公開・審査提出の出来事もメモ欄に入る)。指標を知りたいときはまずそこを読む。
+  App Store Connect API(`~/.appstoreconnect/`、分析レポートが出る前は Chrome の分析画面で補う)で読むだけで、その間 `appstore-metrics.md` の印を出す。結果は Notion の
+  「App Store 実績ログ」(公開・審査提出の出来事もメモ欄に入る)。指標を知りたいときはまずそこを読む。
+  **2026-11-19 から、施策ボード・指標・台帳・毎朝のDL集計・朝の4役の学びは Notion が正**(Obsidian のノートは残してあるが更新しない)。
+  データベースの ID と書き方、Notion 以外に残した写し(`reports/appstore/`・`reports/downloads/latest.md`)の理由は `docs/Notion運用データ.md`
   ルーティンは無人で動くので `send_message` は届かない。ルーティンへの連絡は、印と `docs/Watchアプリ.md` の「いまの状態」で行う
   (ルーティンは毎回そこを読んで、配信中・審査中の版を報告に添える)
-- **マーケティングの PDCA は Obsidian の `Projects/kurabell-pdca.md`(施策ボード)で回っている**(2026-10-09〜)。12時のルーティンが判定と提案、
+- **マーケティングの PDCA は Notion の「施策ボード」で回っている**(2026-10-09〜。2026-11-18 までは Obsidian の `Projects/kurabell-pdca.md`)。12時のルーティンが判定と提案、
   **13時のルーティン「【毎日13時】KURABELL マーケティング PDCA」**(`kurabell-marketing-pdca`、印は `marketing-pdca.md`)が採用された施策を実行する。
   Instagram の予約は13時が自分で書き換えることがあり、プロモーションテキストは採用されれば API で書き換える。
   App Store の掲載文やキーワードを触るときは、先にボードを見て、同じ施策が実施中・判定待ちでないか確かめる(効果の判定が狂う)

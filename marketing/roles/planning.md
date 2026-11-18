@@ -15,10 +15,10 @@
 
 ## 読むもの
 
-- Obsidian `Projects/kurabell-morning-lessons.md`(学びのノート。「必ず守ること」は全部守る)と、直近の `4-qa.md` の改善提案
+- 学びのノート(Notion の「朝の4役 学び」(データベース。data_source_id `41c4d3c4-71e8-8136-a767-000b79d6d102`、読み方・書き方は `docs/Notion運用データ.md`))(「必ず守ること」は全部守る)と、直近の `4-qa.md` の改善提案
 - 今日の `1-research.md` と Obsidian `Projects/kurabell-pdca-drafts/P017-topics.md`(題材と「言ってよい / 言わない」)
 - Obsidian `Projects/kurabell-reel-pdca.md` の「変えないもの」「作るたびの吟味」8項目・「試しの予定」・成績表
-- Obsidian `Projects/kurabell-pdca.md`(施策ボード。予約中の投稿への変更依頼や、リールに関わる「採用」「提案」の行があれば反映する)
+- Notion の「施策ボード」(`docs/Notion運用データ.md`。予約中の投稿への変更依頼や、リールに関わる「採用」「提案」の行があれば反映する)
 - 手本の台本: `/Users/hajimekitamura/Desktop/KURABELL-reels/r21n/reel.html` と `hooks.md`(JP)、`en/` の同じ題(EN)
 - 直近5本のカバーの写真の種類(成績表の「試し」の欄と `covers.json` の `photo`)
 

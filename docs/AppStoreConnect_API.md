@@ -64,7 +64,7 @@
   DLが0件の日もレポート自体が無く 404 になるので、「-」を0と読まない。
 - 11/6 北村さんの判断で、ミューズ側の報告は残したまま、この Mac にも 06:00 の報告を作った。
   launchd の `com.kurabell.downloads`(`scripts/asc/com.kurabell.downloads.plist` → `downloads-morning.sh`)が
-  Obsidian の `Projects/app-downloads-daily.md` を書き直し、Mac に通知を出す。Claude を使わないので許可の確認で止まらない。
+  `reports/downloads/latest.md` を書き直し(2026-11-19 から Obsidian には写さない。06:10 の定時タスクが Notion の「日次ダウンロード」に写す)、Mac に通知を出す。Claude を使わないので許可の確認で止まらない。
   Mac が寝ていた日は起きたときに1回動く。ログは `reports/downloads/`(gitに入れない)。11/6 に手動で1回動かして確認済み。
 - 11/6 北村さんの判断で、ミューズにも API で確認させる。ミューズ用のキーは Mac のキーと分け、役割は「Sales」(売上とトレンドのレポートが読める最小の役割)で新しく発行する。Mac のキー(Admin)は渡さない。分けておけば、片方だけ失効できる。
 - 11/6 北村さんの依頼で、毎朝 06:10 の定時タスク「【毎朝6時】KURABELL・HEART HIIT のDLをGmailへ」(`kurabell-downloads-gmail`)が `downloads.mjs` の結果を北村さんの Gmail に送る。ミューズは Gmail で読む。宛先は本人のアドレスだけ。11/6 に同じ形の試しのメールを1通送った。定時タスクとしてはまだ一度も動いていない(初回に Gmail の許可の確認で止まるかもしれない。12時のルーティンが点検する)。

@@ -2,7 +2,7 @@
 """プロジェクトのダッシュボード(Overview の Custom view)用に、毎日の数字を1枚にまとめる。
 
 自分では App Store Connect・Instagram の API を叩かない。ほかの仕組みが毎日書いたものを読むだけ:
-  App Store   Obsidian の Projects/kurabell-metrics.md・kurabell-appstore-daily.md(12時のルーティン)
+  App Store   reports/appstore/kurabell-metrics.md・kurabell-appstore-daily.md(12時のルーティンが書く写し。正は Notion、docs/Notion運用データ.md)
   Instagram   reports/instagram/*.csv(~/Insta/kurabell/insights.py、11:55 の launchd)
   予約投稿    ~/Insta/kurabell/reels/予約/{JP,EN}(autopost.py が名前順に出す)
   TikTok      reports/tiktok/tiktok-stats.csv(tiktok-stats.py、11:50 の launchd)
@@ -29,7 +29,8 @@ import urllib.request
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 HOME = os.path.expanduser("~")
-VAULT = os.path.join(HOME, "Library/Mobile Documents/com~apple~CloudDocs/Obsidian AI連携/Projects")
+# 2026-11-19 から正は Notion。Python からは Notion を読めないので、12時の回が書く写しを読む(docs/Notion運用データ.md)
+APPSTORE = os.path.join(REPO, "reports/appstore")
 REELS = os.path.join(HOME, "Insta/kurabell/reels")
 AUTOPOST_PLIST = os.path.join(HOME, "Library/LaunchAgents/com.kurabell.autopost.{}.plist")
 YOUTUBE_SHORTS = "https://www.youtube.com/@kurabell_workout_log_jp/shorts"
@@ -78,10 +79,10 @@ def short(d):
 
 def appstore():
     L = ["## App Store(直近30日)"]
-    rows = md_rows(read(os.path.join(VAULT, "kurabell-metrics.md")), "| 取得日 |")
+    rows = md_rows(read(os.path.join(APPSTORE, "kurabell-metrics.md")), "| 取得日 |")
     rows = [r for r in rows if len(r) >= 10 and r[2].isdigit()]
     if not rows:
-        return L + ["- 実績ログ(Obsidian の kurabell-metrics.md)が読めなかった", ""]
+        return L + ["- 実績ログ(reports/appstore/kurabell-metrics.md)が読めなかった", ""]
     cur, prev = rows[-1], rows[-2] if len(rows) >= 2 else None
 
     def val(i):
@@ -97,7 +98,7 @@ def appstore():
     m = re.search(r"前回以降[::](.*?)(?:取得は|$)", memo)
     if m:
         L.append(f"- 審査・配信: {m.group(1).strip().rstrip('。')}")
-    daily = md_rows(read(os.path.join(VAULT, "kurabell-appstore-daily.md")), "| 日付 |")
+    daily = md_rows(read(os.path.join(APPSTORE, "kurabell-appstore-daily.md")), "| 日付 |")
     daily = [r for r in daily if len(r) >= 4 and r[1].isdigit()][-7:]
     if daily:
         L.append("- 日ごと(表示/閲覧/初回DL): " + "、".join(

@@ -50,7 +50,7 @@ for (let i = DAYS - 1; i >= 0; i--) { const d = addDays(end, -i); days.push({ da
 const latest = [...days].reverse().find((d) => d.apps)?.date || null;
 
 if (has("--md")) {
-  // 毎朝 06:00 の launchd(scripts/asc/downloads-morning.sh)が Obsidian に書き出す形
+  // 毎朝 06:00 の launchd(scripts/asc/downloads-morning.sh)が reports/downloads/latest.md に書き出す形(06:10 の定時タスクが Notion に写す)
   const now = new Date().toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" });
   const lines = [
     "---", `date: ${ymd(new Date())}`, "tags: [appstore, downloads, kurabell, heart-hiit]", "project: overload-plus", "related: [[kurabell-metrics]]", "---", "",

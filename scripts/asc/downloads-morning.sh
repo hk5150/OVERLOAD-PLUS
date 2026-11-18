@@ -1,16 +1,17 @@
 #!/bin/zsh
 # 毎朝 06:00 のダウンロード報告(launchd: scripts/asc/com.kurabell.downloads.plist)。
-# API で KURABELL・HEART HIIT の日次DLを読み、Obsidian の Projects/app-downloads-daily.md を書き直して、Mac に通知を出す。
+# API で KURABELL・HEART HIIT の日次DLを読み、reports/downloads/latest.md を書き直して、Mac に通知を出す。
+# 2026-11-19 から正は Notion の「日次ダウンロード」。06:10 の定時タスクが latest.md を Notion に写す(launchd は Notion に書けない。docs/Notion運用データ.md)。
+# Obsidian の Projects/app-downloads-daily.md へのコピーはやめた(ノートは残してある)。
 # ブラウザのサインインを使わないので、2段階認証では止まらない。
 set -u
 REPO="$HOME/OVERLOAD-PLUS"
-NOTE="$HOME/Library/Mobile Documents/com~apple~CloudDocs/Obsidian AI連携/Projects/app-downloads-daily.md"
 LOG="$REPO/reports/downloads/run.log"
 mkdir -p "$REPO/reports/downloads"
 cd "$REPO" || exit 1
 echo "=== $(date '+%F %T')" >> "$LOG"
 if /usr/local/bin/node scripts/asc/downloads.mjs --days 14 --md > "$REPO/reports/downloads/latest.md" 2>> "$LOG"; then
-  cp "$REPO/reports/downloads/latest.md" "$NOTE"
+  NOTE="$REPO/reports/downloads/latest.md"
   # 最新のデータがある日の行を通知に出す
   LATEST=$(grep -o '最新のデータ: \*\*[^*]*' "$NOTE" | sed 's/.*\*\*//')
   ROW=$(grep "^| $LATEST |" "$NOTE" | sed 's/^| //; s/ |$//')

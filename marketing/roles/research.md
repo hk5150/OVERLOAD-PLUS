@@ -10,7 +10,7 @@
    = `/Users/hajimekitamura/Library/Mobile Documents/com~apple~CloudDocs/Obsidian AI連携/Projects/kurabell-reel-pdca.md`
 3. Obsidian `Projects/kurabell-pdca-drafts/P017-topics.md`(題材ストック。「使った」の印が付いていないものが残り)
 4. Obsidian `Projects/kurabell-instagram-metrics.md` の直近
-5. Obsidian `Projects/kurabell-morning-lessons.md`(学びのノート。事実・言葉の決まりは調査でも守る)
+5. 学びのノート(Notion の「朝の4役 学び」(データベース。data_source_id `41c4d3c4-71e8-8136-a767-000b79d6d102`、読み方・書き方は `docs/Notion運用データ.md`))(事実・言葉の決まりは調査でも守る)
 6. 前日の `4-qa.md`(あれば。事実の誤りで落ちた題材は、そこで指摘された点を確かめ直す)
 
 ## 手順
