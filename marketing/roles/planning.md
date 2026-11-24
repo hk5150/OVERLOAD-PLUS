@@ -9,7 +9,7 @@
 2. 前日の `3-production.md` が `状態: 完了` で、前日の `4-qa.md` が無いか `状態: 完了` でなければ、新しい企画は出さない。`2-plan.md` に `状態: 完了(前日分のチェック)` と前日の日付だけを書いて終わる
 2.5 前日の作業フォルダの `4-qa.md` の判定に `不合格` があれば、新しい企画は出さない。`2-plan.md` に
    `状態: 完了(修正日)` と、直す対象(前日の `3-production.md` の制作物のパス)だけを書いて終わる
-3. `/Users/hajimekitamura/OVERLOAD-PLUS/marketing/tools/reel.sh queue` を実行する。
+3. `/Users/hajimekitamura/OVERLOAD-PLUS/marketing/tools/reel.sh queue` を実行する。失敗したら(出力なし・exit 1)`ls /Users/hajimekitamura/Insta/kurabell/reels/予約/JP/` で数え直す。それも失敗したら、予約は0本とみなして作る日にする(多めに作る方が、出す物が無くなるより害が小さい)。
    JP の予約が2本以上あり、今日が日曜でない(または日曜でもカルーセルのフォルダが予約にある)なら、`2-plan.md` に `状態: 作らない日` と書いて終わる
 4. 日曜でカルーセルが予約に無ければ、下の「カルーセルの企画」。JP の予約が1本以下なら「リールの企画」。両方なら両方書く
 
