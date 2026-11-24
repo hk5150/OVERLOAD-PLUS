@@ -34,7 +34,7 @@
    `sips -s format jpeg -s formatOptions 92 /Users/hajimekitamura/Desktop/KURABELL-reels/covers/out/<名前>.png --out <フォルダ>/cover.jpg`
 9. キャプション: 台本のキャプションを `<フォルダ>/caption.txt` に書き、
    `/Users/hajimekitamura/OVERLOAD-PLUS/marketing/tools/morning.sh caption <caption.txtの絶対パス>` で `OK` が出ることを確かめる
-10. EN も 1〜9 を同じように(写真は JP と同じものを使い、文字とナレーションだけ差し替える)
+10. EN は休止中(2026-11-24〜。README の「休止中のもの」)。作らない
 
 自分で見直すのは**作れているか**(ファイルがある・はみ出していない・音が出る)まで。中身の良し悪しの判断はチェック役に任せ、「自分で吟味して合格」とは書かない。
 
@@ -53,7 +53,7 @@
 
 `3-production.md`(Write)。1行目は `状態: 完了`。続けて:
 - 種類(リール / カルーセル / 修正版)と題
-- JP・EN それぞれの `final.mp4`(または `final-gain.mp4`)・`cover.jpg`・`caption.txt`・`sheet.png` の絶対パス
+- JP の `final.mp4`(または `final-gain.mp4`)・`cover.jpg`・`caption.txt`・`sheet.png` の絶対パス
 - 長さ(秒)・平均音量・選んだ写真(hook-a / b)と理由1行
 - 台本から変えた文(あれば、前 → 後)
 - 作れなかったもの・道具で困ったこと
