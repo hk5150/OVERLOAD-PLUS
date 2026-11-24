@@ -680,6 +680,14 @@ English:
   Playwright MCP のブラウザが使用中だったので、scratchpad の `playwright-core@1.63.0` から `~/Library/Caches/ms-playwright/chromium-1234` を直接起動した。
   シートが画面の下まで届くよう、`compose.html` の `shift`(ja 112 / en 154)で表示を上にずらしている
 
+### 1.4.8 (ビルド54) — 2026-11-24 16:33 に審査へ提出
+
+1.4.7 (51) は版が ACCEPTED になったが、同じ提出の App 内イベントが REJECTED で、提出全体が「要対応」のまま 11/10〜11/24 止まった。
+その間に北村さんが「無料は10回のままで」(11/14)と決めたので、30回の 1.4.7 (51) は公開しない。北村さん「お願いします」(11/24)で:
+`metadata.mjs cancel 1.4.7 --apply --yes-cancel`(DEVELOPER_REJECTED)→ 版の versionString を API で 1.4.8 に変更 → `build 1.4.8 54 --apply` →
+`push 1.4.8 --apply`(What's New・説明文とプロモーションテキストの10回・審査メモ)→ `submit 1.4.8 --apply --yes-submit`。WAITING_FOR_REVIEW、承認後に自動公開。
+名前・サブタイトル・キーワード・スクリーンショットは 1.4.7 で入れたものを引き継いだ。App 内イベントは入れていない(却下の理由は画面で確かめる)。経緯は `docs/アプリ改善_2026-11-14.md`
+
 ### 1.4.7 (ビルド51) — 2026-11-10 9:50 に審査へ出し直し(App 内イベントと一緒に)
 
 (50) を出した後、App 内イベントは deepLink が必須と分かった(アプリに URL スキームが無かった)。北村さん「出し直してください」で
