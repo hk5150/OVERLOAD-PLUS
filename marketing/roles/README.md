@@ -8,7 +8,7 @@
 | 時刻(JST) | 役 | 定義 | 定時タスク | 作るもの |
 |---|---|---|---|---|
 | 8:00 | 調査 | `research.md` | `kurabell-morning-1-research` | `1-research.md`、題材ストックへの追記 |
-| 8:40 | 企画 | `planning.md` | `kurabell-morning-2-planning` | `2-plan.md`(台本・写真の指示・キャプション案) |
+| 8:40(12:40 にもう一度) | 企画 | `planning.md` | `kurabell-morning-2-planning` | `2-plan.md`(台本・写真の指示・キャプション案) |
 | 9:20(13:20 にもう一度) | 制作 | `production.md` | `kurabell-morning-3-production` | 動画・カバー・キャプション、`3-production.md` |
 | 11:20(15:20 にもう一度) | 品質チェック | `qa.md` | `kurabell-morning-4-qa` | `4-qa.md`(項目ごとの合否と指摘)。合格なら予約に入れる |
 
